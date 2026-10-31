@@ -26,6 +26,7 @@ import type {
   Counter,
   Delivery,
   Detection,
+  EngineState,
   InputKind,
   InputSource,
   LiveObservation,
@@ -63,6 +64,8 @@ export interface LensState {
   detections: Record<string, Detection[]>;
   counter: Counter;
   liveObservation: LiveObservation | null;
+  /** 판정 엔진 준비 상태. 새 세션에도 유지된다(모델은 다시 받지 않는다). */
+  engine: EngineState;
   /** pluginId → 최신 결과 줄. */
   results: Record<string, ResultLine>;
   /** `${pluginId}|${reason}` → 마지막으로 받은 skip 시각. 버려진 skip은 시각을 바꾸지 않는다. */
@@ -93,6 +96,8 @@ export interface LensState {
   /** cooldownUntil을 생략하면 기존 값 유지. */
   setPluginBusy(pluginId: string, busy: boolean, cooldownUntil?: number): void;
   setLiveObservation(obs: LiveObservation | null): void;
+  /** 바꿀 필드만 넘긴다. failed면 A는 포착도 멈춘다(전달 정지). */
+  setEngine(patch: Partial<EngineState>): void;
   addSceneDecision(d: NewSceneDecision): SceneDecision;
   /** hold·skip·violation만. skip이 같은 플러그인·같은 사유로 10초 안에 또 오면 버리고 null. hold는 window60s.holds +1. */
   addLog(entry: NewLogEntry, detections?: readonly NewDetection[]): LogEntry | null;
@@ -289,6 +294,7 @@ export function createLensStore(opts: LensStoreOptions = {}) {
         detections: {},
         counter: emptyCounter(initial.id),
         liveObservation: null,
+        engine: { status: 'idle', loadedBytes: null, totalBytes: null, detail: null },
         results: {},
         lastSkipAt: {},
         usageSamples: {},
@@ -404,6 +410,8 @@ export function createLensStore(opts: LensStoreOptions = {}) {
           }),
 
         setLiveObservation: (obs) => set({ liveObservation: obs }),
+
+        setEngine: (patch) => set((s) => ({ engine: { ...s.engine, ...patch } })),
 
         addSceneDecision: (d) => {
           const decision: SceneDecision = { ...d, id: newId('scene'), sessionId: get().session.id, confirmedAt: clock() };

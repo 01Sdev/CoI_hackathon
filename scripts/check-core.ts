@@ -449,6 +449,16 @@ check('startNewSession: 새 id, 비교 모드·일시 정지 해제, 로그·Cou
   assert.deepEqual(revoked, [r.delivery.thumbnailRef]);
 });
 
+check('setEngine: 넘긴 필드만 바뀌고 새 세션에도 유지', () => {
+  const { store } = setup();
+  assert.equal(store.getState().engine.status, 'idle');
+  store.getState().setEngine({ status: 'loading', loadedBytes: 10, totalBytes: 100 });
+  store.getState().setEngine({ loadedBytes: 100 });
+  store.getState().setEngine({ status: 'ready' });
+  store.getState().startNewSession();
+  assert.deepEqual(store.getState().engine, { status: 'ready', loadedBytes: 100, totalBytes: 100, detail: null });
+});
+
 check('setResult: 보낸 전달의 첫 결과만 받고, source api일 때만 apiSends +1', () => {
   const { store, ready, send } = setup();
   ready();

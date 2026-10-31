@@ -194,6 +194,17 @@ export interface Counter {
   apiSends: number;
 }
 
+/** 판정 엔진(물체·얼굴 모델) 준비 상태(저장 엔티티 아님). A가 쓰고, C가 시작·로딩·실패 화면에 쓴다. */
+export interface EngineState {
+  /** idle = 아직 안 불러옴, loading = 모델 받는 중·첫 추론 준비, ready = 판정 중, failed = GPU·CPU 모두 실패(NFR-022, 전달 정지). */
+  status: 'idle' | 'loading' | 'ready' | 'failed';
+  /** 모델 파일을 받은 바이트와 전체 바이트. 모르면 null(화면은 경과 시간만 보인다). */
+  loadedBytes: number | null;
+  totalBytes: number | null;
+  /** 실패 사유 한 줄(예: "GPU 실패 → CPU 재시도 실패"). 화면에 그대로 보인다. */
+  detail: string | null;
+}
+
 /** HUD 실시간 표시(저장 엔티티 아님). A가 5fps로 쓴다. */
 export interface LiveObservation {
   label: SceneLabel;
