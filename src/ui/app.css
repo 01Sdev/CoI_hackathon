@@ -70,7 +70,7 @@ p {
   justify-content: center;
 }
 
-/* ── 위쪽 줄: 브랜드(왼쪽)·입력(오른쪽) ── */
+/* ── 위쪽 줄: 브랜드(왼쪽)·전송 범위 조절과 입력(오른쪽) ── */
 .fm-topbar {
   position: absolute;
   inset-inline: var(--fm-gutter);
@@ -79,6 +79,15 @@ p {
   justify-content: space-between;
   align-items: flex-start;
   z-index: 6;
+}
+.fm-topbar__end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fm-topbar__frame[aria-pressed='true'] {
+  background: var(--fm-text);
+  color: var(--fm-on-text);
 }
 .fm-brand {
   font-weight: 700;
@@ -424,36 +433,6 @@ button.fm-capsule:focus-visible,
   inset-inline: 0;
   z-index: 5;
 }
-.fm-hud__scene {
-  position: absolute;
-  inset-inline: 0;
-  inset-block-start: calc(env(safe-area-inset-top, 0px) + 66px + var(--fm-band-h, 0px));
-  display: flex;
-  justify-content: center;
-}
-.fm-hud__scenecap {
-  max-inline-size: calc(100% - 2 * var(--fm-gutter));
-}
-.fm-hud__scenecap .fm-readout {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.fm-hud__frame {
-  transition:
-    left var(--fm-dur-state) linear,
-    top var(--fm-dur-state) linear,
-    width var(--fm-dur-state) linear,
-    height var(--fm-dur-state) linear;
-}
-.fm-hud__bottom {
-  position: absolute;
-  inset-inline: 0;
-  inset-block-end: var(--fm-bottom-gap, 48px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
 .fm-hud__flash {
   position: absolute;
   inset: 0;
@@ -461,137 +440,80 @@ button.fm-capsule:focus-visible,
   pointer-events: none;
   z-index: 6;
 }
-.fm-badge {
+
+/* ── 사람 아이콘·숫자(카운터 M, FR-035). 작은 글자 한 줄(숫자 16px·아이콘 14px, /hud는 48px). 흰 틀 오른쪽 위 가장자리 위에 붙고 틀과 같은 흰색, M ≥ 1이면 주황.
+   위쪽 줄과 겹치지 않게 --fm-badge-min-top 아래로, 화면 밖으로 나가지 않게 가로로 붙잡는다(CaptureFrame) ── */
+.fm-hud {
+  --fm-badge-min-top: calc(env(safe-area-inset-top, 0px) + 116px + var(--fm-band-h, 0px));
+  --fm-badge-min-left: calc(var(--fm-gutter) + 40px);
+}
+.fm-desk .fm-hud {
+  --fm-badge-min-top: calc(122px + var(--fm-band-h, 0px));
+}
+.fm-capture__badge {
   position: absolute;
-  inset-inline-start: calc(100% + 18px);
-  inset-block-start: 50%;
-  transform: translateY(-50%);
-  min-block-size: 30px;
-  padding: 0 11px;
-  border-color: color-mix(in srgb, var(--fm-blocked) 70%, transparent);
+  z-index: 5;
+  translate: -100% calc(-100% - 6px);
 }
-/* ── 앱 카드(앱 결과, app-structure §3.1). 카운터와 떨어진 맨 아래 칸이다.
-   바깥 칸·머리줄은 framelet, 안쪽 칸만 앱 문자열. 구분은 색이 아니라 자리와 머리줄로 한다 ── */
-.fm-appresults {
-  display: flex;
-  gap: 12px;
-  max-inline-size: calc(100% - 2 * var(--fm-gutter));
-  /* 카운터와 32px 떨어진다(묶음 간격 10 + 22) */
-  margin-block-start: 22px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-}
-/* 앱이 둘 이상이면 칸을 넓히고 다음 카드가 조금 보이게 한다(휴대폰). 데스크톱은 두 장이 나란히 다 보인다 */
-.fm-appresults:has(> :nth-child(2)) {
-  inline-size: calc(100% - 2 * var(--fm-gutter));
-  max-inline-size: 732px;
-}
-.fm-appresults:has(> :nth-child(2)) > .fm-appcard {
-  inline-size: min(360px, calc(100% - 44px));
-}
-.fm-appcard {
-  flex: none;
-  inline-size: 360px;
-  max-inline-size: 100%;
-  scroll-snap-align: start;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 24px;
-}
-.fm-appcard__head {
-  display: flex;
+.fm-person {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 4px;
-  min-inline-size: 0;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+  font-family: var(--fm-font-sans);
+  font-size: var(--fm-size-result);
+  font-weight: 600;
+  line-height: 1;
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.5)) drop-shadow(0 1px 4px rgb(0 0 0 / 0.35));
 }
+.fm-person[data-tone='exposed'] {
+  color: var(--fm-exposed);
+}
+.fm-person > svg {
+  inline-size: var(--fm-size-label);
+  block-size: var(--fm-size-label);
+}
+button.fm-person {
+  min-block-size: 44px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* ── 플러그인 화면(PluginViews). 칼로리의 금빛 상태창은 food-status-panel.css, 장면 기록은 아래쪽 작은 글자 카드 ── */
+.fm-scenenote {
+  position: absolute;
+  inset-inline: var(--fm-gutter);
+  inset-block-end: var(--fm-bottom-gap, 48px);
+  display: flex;
+  justify-content: center;
+}
+.fm-scenenote__card {
+  max-inline-size: 100%;
+  padding: 8px 12px;
+  border-radius: var(--fm-r-frame);
+  font-family: var(--fm-font-mono);
+  font-size: var(--fm-size-caption);
+  color: var(--fm-sub);
+  overflow-wrap: anywhere;
+}
+
+/* 앱 글자 아이콘(규약 보기 머리줄) */
 .fm-appicon {
   flex: none;
   inline-size: 28px;
   block-size: 28px;
-  border-radius: 8px;
+  border-radius: var(--fm-r-capsule);
   display: grid;
   place-items: center;
-  font-size: 14px;
+  font-size: var(--fm-size-label);
   font-weight: 600;
   background: color-mix(in srgb, var(--fm-text) 16%, transparent);
 }
-.fm-appcard__name {
-  font-size: 15px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.fm-appcard__tag {
-  padding: 2px 8px;
-  border: 1px solid color-mix(in srgb, var(--fm-text) 40%, transparent);
-  border-radius: 999px;
-  font-size: 12px;
-  color: var(--fm-sub);
-  white-space: nowrap;
-}
-/* 안쪽 칸은 바깥 칸과 밝기가 반대(어두운 테마 = 밝은 칸, 밝은 테마 = 어두운 칸) */
-.fm-appcard__body {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: var(--fm-text);
-  color: var(--fm-bg);
-}
-.fm-appcard__text {
-  min-inline-size: 0;
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  overflow-wrap: anywhere;
-}
-.fm-appcard__note {
-  flex: none;
-  padding: 4px 8px;
-  border-radius: 8px;
-  font-size: 12px;
-  background: color-mix(in srgb, var(--fm-bg) 12%, transparent);
-}
-/* /hud: 오브 아래 줄 자리는 그대로, framelet 줄(.fm-result)과 다른 클래스 */
-.fm-hud__applines {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-.fm-hud__appline {
-  font-size: var(--fm-size-result);
-  font-weight: 500;
-}
 
-/* 전달 알림(보조): 위쪽 줄 아래에서 내려온다 */
-.fm-hud__toast {
-  position: absolute;
-  inset-inline: 14px;
-  inset-block-start: calc(env(safe-area-inset-top, 0px) + 60px + var(--fm-band-h, 0px));
-  display: flex;
-  justify-content: center;
-  z-index: 7;
-}
-.fm-toastcard {
-  inline-size: min(100%, 460px);
-  display: grid;
-  grid-template-columns: 44px 1fr auto;
-  gap: 12px;
-  align-items: center;
-  padding: 10px 12px;
-  border-radius: 22px;
-}
-.fm-toastcard__pill {
-  min-block-size: 28px;
-  padding: 0 10px;
-  font-size: 13px;
-}
+/* 썸네일(기록·확인 화면·사용 기록) */
 .fm-thumb {
   position: relative;
   inline-size: 44px;
@@ -609,48 +531,37 @@ button.fm-capsule:focus-visible,
 }
 
 /* 휴대폰·데스크톱 배치 */
-.fm-desk .fm-hud__scene {
-  inset-block-start: calc(80px + var(--fm-band-h, 0px));
-}
-.fm-desk .fm-hud__toast {
-  inset-block-start: calc(72px + var(--fm-band-h, 0px));
-}
 .fm-desk .fm-stage {
   --fm-bottom-gap: 56px;
 }
 
 /* /hud 배치: 600×600, 글자 24px 이상, 유리 없음(theme.css [data-view='hud']) */
 .fm-hud[data-variant='hud'] {
-  --fm-orb-size: 132px;
   --fm-band-h: 0px;
   --fm-bottom-gap: 34px;
+  --fm-badge-min-top: calc(var(--fm-band-h) + 64px);
+  --fm-badge-min-left: calc(var(--fm-gutter) + 104px);
+}
+/* /hud 카운터는 40px 이상(NFR-040) */
+.fm-hud[data-variant='hud'] .fm-person {
+  gap: 6px;
+  font-size: var(--fm-size-counter-sm);
+}
+.fm-hud[data-variant='hud'] .fm-person > svg {
+  inline-size: 0.8em;
+  block-size: 0.8em;
 }
 .fm-hud[data-variant='hud']:has(.fm-hud__band) {
   --fm-band-h: 46px;
 }
-.fm-hud[data-variant='hud'] .fm-hud__scene {
-  inset-block-start: calc(30px + var(--fm-band-h));
-}
-.fm-hud[data-variant='hud'] .fm-hud__scenecap {
-  min-block-size: 52px;
-  padding: 0 22px;
-}
-.fm-hud__input {
-  position: absolute;
-  inset-inline-end: 28px;
-  inset-block-start: calc(42px + var(--fm-band-h, 0px));
-  color: var(--fm-sub);
-}
-/* 오브 묶음 바로 위. 대상 프레임은 위쪽에 있을 때가 많아 겹치지 않게 아래에 둔다 */
-.fm-hud__delivered {
-  position: absolute;
-  inset-inline: 0;
-  inset-block-end: 250px;
-  text-align: center;
-}
-.fm-hud__hold {
-  min-block-size: 32px;
+/* 금빛 상태창의 "kcal"(14px)만 /hud 본문 24px 규칙(NFR-040)에 맞춘다. 나머지 글자는 이미 36px다 */
+.fm-hud[data-variant='hud'] .fm-food-status__energy span {
   font-size: var(--fm-size-label);
+  line-height: 1.2;
+}
+.fm-hud[data-variant='hud'] .fm-scenenote__card {
+  padding: 0;
+  font-size: var(--fm-size-caption);
 }
 .fm-band.fm-band--line {
   min-block-size: 44px;
@@ -658,12 +569,6 @@ button.fm-capsule:focus-visible,
   background: transparent;
   color: var(--fm-exposed);
   border-block-end: 2px solid var(--fm-exposed);
-}
-.fm-hud[data-variant='hud'] .fm-badge {
-  min-block-size: 0;
-  padding: 0;
-  border: 0;
-  color: var(--fm-text);
 }
 
 /* ── 증명 로그(F6) ── */
@@ -787,20 +692,6 @@ button.fm-logcard:focus-visible,
   .fm-phone {
     --fm-orb-size: 104px;
   }
-}
-/* 휴대폰에 앱 카드가 서면 카운터는 오브 + 캡션 한 줄로 낮춰 대상 위를 가리지 않는다. 차단 배지는 오브 위로 */
-.fm-phone .fm-hud:has(.fm-appresults) {
-  --fm-orb-size: 72px;
-}
-.fm-phone .fm-hud:has(.fm-appresults) .fm-orbstack {
-  flex-direction: row;
-  gap: 12px;
-}
-.fm-phone .fm-hud:has(.fm-appresults) .fm-badge {
-  inset-inline-start: 50%;
-  inset-block-start: auto;
-  inset-block-end: calc(100% + 10px);
-  transform: translateX(-50%);
 }
 
 .fm-phone .fm-stage {
@@ -1016,7 +907,7 @@ button.fm-logcard:focus-visible,
   padding-inline-start: 18px;
 }
 
-/* ── 규약 보기(안 B, app-structure §3.2). 새 화면이라 §3.5 간격·모서리(8·12·16·24)와 44px 누르는 영역을 따른다 ── */
+/* ── 규약 보기(안 B, app-structure §3.2). 모서리·색·글자 크기는 기존 토큰(--fm-*), 누르는 영역 44px ── */
 .fm-protocol-open {
   flex: none;
   min-block-size: 44px;
@@ -1035,7 +926,6 @@ button.fm-logcard:focus-visible,
 .fm-appicon.fm-appicon--lg {
   inline-size: 48px;
   block-size: 48px;
-  border-radius: 16px;
   font-size: 20px;
 }
 .fm-protocol__who {
@@ -1052,7 +942,7 @@ button.fm-logcard:focus-visible,
   display: grid;
   gap: 12px;
   padding: 16px;
-  border-radius: 16px;
+  border-radius: var(--fm-r-card);
   background: var(--fm-glass-capsule);
   border: var(--fm-line) solid var(--fm-glass-line);
 }
@@ -1064,7 +954,7 @@ button.fm-logcard:focus-visible,
 }
 .fm-protocol__fixed {
   margin-inline-start: auto;
-  font-size: 12px;
+  font-size: var(--fm-size-caption);
   color: var(--fm-sub);
 }
 .fm-protocol__list {
@@ -1072,7 +962,7 @@ button.fm-logcard:focus-visible,
   padding-inline-start: 20px;
   display: grid;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--fm-size-label);
   line-height: 1.4;
 }
 .fm-protocol__list > li::marker {
@@ -1080,7 +970,7 @@ button.fm-logcard:focus-visible,
 }
 .fm-protocol__small {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fm-size-caption);
   line-height: 1.5;
   color: var(--fm-sub);
 }
@@ -1090,7 +980,7 @@ button.fm-logcard:focus-visible,
 }
 /* fm-kicker는 대문자로 바꾸므로 쓰지 않는다(영문 이름은 문장형 대소문자, §3.5) */
 .fm-protocol__th {
-  font-size: 12px;
+  font-size: var(--fm-size-caption);
   font-weight: 500;
   color: var(--fm-sub);
 }
@@ -1225,8 +1115,10 @@ button.fm-logcard:focus-visible,
   box-shadow: none;
   border-color: rgb(255 255 255 / 0.55);
 }
+/* 틀의 조절 버튼은 플러그인 화면(금빛 상태창 z 4)보다 위에 둔다. framelet 조작을 앱 화면이 덮지 않게 */
 .fm-capture__label {
   position: absolute;
+  z-index: 5;
   min-block-size: 30px;
   padding: 0 11px;
   font-size: 12px;

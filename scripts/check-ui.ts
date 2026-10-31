@@ -6,12 +6,14 @@ import { APP_NAME, CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE, ORIGIN_TOKEN }
 import type { Box } from '../src/core/types';
 import { entryMeta, frameText, logReason, usageMeta, wallClock } from '../src/proof/format';
 import { GUARANTEES, protocolRows, receiverText } from '../src/proof/protocol';
-import { coverBox, coverPointToSource, cornerPoint, dragCornerFromScreen, faceWindowRemaining, nudgeCorner } from '../src/ui/geometry';
-import { appResultLine, deliverySignalLines, formatBytes, josa } from '../src/ui/labels';
+import { boxCenter, coverBox, coverPointToSource, cornerPoint, dragCornerFromScreen, faceWindowRemaining, nudgeCorner } from '../src/ui/geometry';
+import { calorieView, formatBytes, josa, parseCalorieLine } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 import { APP_TEXT_MAX, sanitizeAppText } from '../src/ui/sanitize';
 
 let passed = 0;
+/** ASCII 숫자를 전각 숫자로(NFKC 확인용). */
+const cpw = (digits: string) => Array.from(digits, (d) => String.fromCodePoint(0xff10 + Number(d))).join('');
 function check(name: string, fn: () => void) {
   fn();
   passed += 1;
@@ -25,6 +27,15 @@ check('coverBox: 같은 비율이면 그대로 늘린다', () => {
     width: 100,
     height: 100,
   });
+});
+
+check('boxCenter: 박스 중심을 화면 비율로, 박스가 없거나 화면 크기가 0이면 NaN', () => {
+  assert.deepEqual(boxCenter({ x: 0.25, y: 0.5, w: 0.5, h: 0.25 }, { w: 100, h: 200 }, { w: 200, h: 400 }), { x: 0.5, y: 0.625 });
+  // 가로 영상을 세로 화면에 채우면 가운데 대상은 화면 가운데에 남는다.
+  const c = boxCenter({ x: 0.4, y: 0.4, w: 0.2, h: 0.2 }, { w: 1280, h: 720 }, { w: 360, h: 640 });
+  assert.ok(Math.abs(c.x - 0.5) < 1e-9 && Math.abs(c.y - 0.5) < 1e-9, `가운데여야 함: ${c.x}, ${c.y}`);
+  assert.ok(Number.isNaN(boxCenter(null, null, { w: 360, h: 640 }).x));
+  assert.ok(Number.isNaN(boxCenter({ x: 0, y: 0, w: 1, h: 1 }, null, { w: 0, h: 0 }).y));
 });
 
 check('coverBox: 가로 영상(1280×720)을 세로 화면(360×640)에 채우면 좌우가 잘린다', () => {
@@ -163,17 +174,27 @@ check('wallClock: performance 시각을 같은 순간의 벽시계로 바꾼다'
   assert.equal(wallClock(10_000, 10_000, dateNow), '21:43:10');
 });
 
-check('appResultLine: /hud 앱 결과 줄은 앱 이름으로 시작하고, 고정표면 꼬리를 붙인다', () => {
-  assert.equal(appResultLine('칼로리', '피자 약 285kcal', false), '칼로리 · 피자 약 285kcal');
-  assert.equal(appResultLine('칼로리', '피자 약 285kcal', true), '칼로리 · 피자 약 285kcal · 고정표');
+check('parseCalorieLine: "피자 약 285kcal"을 이름과 숫자로, 형식이 다르면 줄 전체가 이름이고 열량은 null', () => {
+  assert.deepEqual(parseCalorieLine('피자 약 285kcal'), { name: '피자', kcal: 285 });
+  assert.deepEqual(parseCalorieLine('  치즈 피자 두 조각 약 1,140 kcal '), { name: '치즈 피자 두 조각', kcal: 1140 });
+  // 전각 숫자(NFKC)도 읽는다.
+  assert.deepEqual(parseCalorieLine(`피자 약 ${cpw('285')}kcal`), { name: '피자', kcal: 285 });
+  assert.deepEqual(parseCalorieLine('음식(칼로리 정보 없음)'), { name: '음식(칼로리 정보 없음)', kcal: null });
+  assert.deepEqual(parseCalorieLine('약 300kcal'), { name: '약 300kcal', kcal: null });
 });
 
-check('deliverySignalLines: 첫 줄은 "{APP_NAME} → 앱 이름", 둘째 줄은 사진·바이트·가림·시간', () => {
-  const d = { branch: '2b', bytes: 19_046, facesMasked: 2 } as const;
-  assert.deepEqual(deliverySignalLines('칼로리', d, '방금'), [`${APP_NAME} → 칼로리`, '사진 1장 · 18.6KB · 얼굴 2개 가림 · 방금']);
-  assert.equal(deliverySignalLines('칼로리', { ...d, branch: '2a', facesMasked: 0 }, '방금')[1], '사진 1장 · 18.6KB · 가릴 사람 없음 · 방금');
-  assert.equal(deliverySignalLines('칼로리', { ...d, branch: 'raw', facesMasked: 0 }, '3초 전')[1], '원본 전체 · 18.6KB · 비교 모드라 가리지 않음 · 3초 전');
-  assert.ok(!deliverySignalLines('장면 기록', d, '방금')[0].endsWith('앱'), '이름 뒤에 "앱"을 붙이지 않는다');
+check('calorieView: 결과가 없는 최신 전달은 "— kcal"(kcal null), 결과가 오면 같은 id에서 숫자, 고정표는 이름 뒤 표시', () => {
+  const latest = { id: 'd2', objectLabel: 'pizza' };
+  // 첫 결과 전 계산 중
+  assert.deepEqual(calorieView(null, latest), { id: 'd2', name: '피자', kcal: null });
+  // 직전 결과(d1)가 남아 있어도 새 전달(d2)이 계산 중이면 옛 숫자를 붙이지 않는다
+  assert.deepEqual(calorieView({ deliveryId: 'd1', text: '피자 약 300kcal', source: 'api' }, latest), { id: 'd2', name: '피자', kcal: null });
+  // 같은 전달의 결과가 오면 같은 id에서 숫자로('fallback'이 아닌 출처는 모두 보통 결과. B가 더하는 'on-device'도 같다)
+  assert.deepEqual(calorieView({ deliveryId: 'd2', text: '피자 약 300kcal', source: 'api' }, latest), { id: 'd2', name: '피자', kcal: 300 });
+  assert.deepEqual(calorieView({ deliveryId: 'd2', text: '피자 약 285kcal', source: 'fallback' }, latest), { id: 'd2', name: '피자 (고정표)', kcal: 285 });
+  // 전달도 결과도 없으면 창이 없다. 이름이 지워져 비면 창이 없다
+  assert.equal(calorieView(null, null), null);
+  assert.equal(calorieView({ deliveryId: 'd2', text: `${APP_NAME} 약 300kcal`, source: 'api' }, latest), null);
 });
 
 // 보이지 않는 문자는 소스에 그대로 쓰지 않고 코드 포인트로 만든다.

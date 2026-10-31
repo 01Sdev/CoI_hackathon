@@ -49,7 +49,7 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
                 <Hud variant="desktop" onOpenConfirm={() => setTab('confirm')} frameEditing={frameEditing} onFrameEditing={setFrameEditing} />
               }
             />
-            <TopBar layout={layout} />
+            <TopBar layout={layout} frameEditing={frameEditing} onFrameEditing={setFrameEditing} />
             <CameraFallbackNotice />
           </Stage>
         </section>
@@ -71,7 +71,7 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
             <Hud variant="phone" onOpenConfirm={() => setConfirmOpen(true)} frameEditing={frameEditing} onFrameEditing={setFrameEditing} />
           }
         />
-        <TopBar layout={layout} />
+        <TopBar layout={layout} frameEditing={frameEditing} onFrameEditing={setFrameEditing} />
         <CameraFallbackNotice />
       </Stage>
       <LogSheet onOpenConfirm={() => setConfirmOpen(true)} />
