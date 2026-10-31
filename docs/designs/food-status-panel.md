@@ -5,7 +5,7 @@
 ## 파일과 미리보기
 
 - `src/ui/FoodStatusPanel.tsx`: 연결선·상태창 SVG, 드래그·방향키 이동, 닫기, 글로우 제어.
-- `src/ui/food-status-panel.css`: 위 요소만 대상으로 하는 스타일. 기존 `pretendard` 패키지를 재사용하며 새 의존성을 추가하지 않는다.
+- `src/ui/food-status-panel.css`: 위 요소만 대상으로 하는 스타일. 기존 `pretendard` 패키지를 재사용하며 새 의존성을 추가하지 않는다. 글꼴 파일은 앱에서는 `theme.css`가, 미리보기에서는 `dev/food-status-panel.tsx`가 불러온다(2026-11-01, 겹친 `@import` 정리).
 - `dev/food-status-panel.html`, `dev/food-status-panel.tsx`: 해당 컴포넌트만 보여 주는 개발 페이지. 이름은 표시 예시이며 인식을 실행하지 않는다.
 
 `npm run dev`를 실행한 뒤 출력된 로컬 주소에 `/dev/food-status-panel.html`을 붙인다. 예: `http://localhost:5173/dev/food-status-panel.html`. 개발 페이지는 루트 `index.html`만 사용하는 현재 프로덕션 빌드 입력에 포함되지 않는다.

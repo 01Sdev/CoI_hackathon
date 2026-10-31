@@ -1,6 +1,7 @@
 // 전송 범위 프레임(F24·F24a, FR-061). 흰색 뷰파인더 틀이고, 틀 밖 픽셀은 어떤 플러그인에도 가지 않는다(자르기는 A).
 // 소스 0~1 → 화면 px 변환은 대상 위치(targetBox)와 같은 cover 변환이다. 틀 밖은 살짝 어둡게 해서 보내는 범위를 보인다.
-// 조절: 크기 표시를 누르면 조절 모드가 되고 네 꼭짓점을 끈다(터치·마우스·화살표 키). 끌기 규칙은 core dragCorner
+// 조절: 위쪽 줄의 "전송 범위" 버튼(TopBar)으로 조절 모드가 되고 네 꼭짓점을 끈다(터치·마우스·화살표 키).
+// 카메라 위에는 조절 중에만 크기와 "조절 끝내기"를 보인다(사용자 결정 2026-11-01). 끌기 규칙은 core dragCorner
 // (맞은편 꼭짓점 고정, 0~1 안, 최소 0.1에서 멈춤)이고, 끄는 동안 미리 보인 뒤 손을 떼면 setCaptureFrame으로 한 번 쓴다. A는 포착을 시작할 때 한 번 읽는다. 틀 위에서는 스크롤·확대를 막는다(touch-action: none).
 // /hud는 틀만 그린다(어둡게 하지 않음, 조절 없음).
 // badge(사람 아이콘·숫자)는 틀 오른쪽 위 가장자리에 붙인다. 끄는 동안에도 따라가고, 화면 밖으로 나가면 안쪽으로 붙잡는다.
@@ -90,16 +91,16 @@ export function CaptureFrame({
           {badge}
         </div>
       )}
-      {adjustable && (
+      {adjustable && editing && (
         <button
           type="button"
           className="fm-capsule fm-glass fm-glass--panel fm-capture__label"
-          style={{ left: r.left + 10, top: r.top + 10 }}
-          aria-pressed={editing}
-          onClick={() => onEditing?.(!editing)}
+          style={{ left: Math.max(r.left + 10, 12), top: r.top + 10 }}
+          aria-pressed="true"
+          onClick={() => onEditing?.(false)}
         >
-          {editing ? '조절 끝내기' : '전송 범위'}
-          <span className="fm-readout">{editing ? '꼭짓점을 끄세요' : `${sizeText} · 조절`}</span>
+          조절 끝내기
+          <span className="fm-readout">{sizeText} · 꼭짓점을 끄세요</span>
         </button>
       )}
       {adjustable &&

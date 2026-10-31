@@ -1,5 +1,6 @@
 import { StrictMode, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 import { APP_NAME } from '../src/core/constants';
 import { FoodStatusPanel, type FoodStatusResult } from '../src/ui/FoodStatusPanel';
 

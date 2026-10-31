@@ -1,6 +1,5 @@
-@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
-
-/* 연결선·상태창·글꼴만. 바깥 화면의 배치와 색에는 관여하지 않는다. */
+/* 연결선·상태창·글꼴만. 바깥 화면의 배치와 색에는 관여하지 않는다.
+   Pretendard 글꼴 파일은 앱에서는 theme.css, 미리보기에서는 dev/food-status-panel.tsx가 불러온다(같은 @import를 두 번 하면 빌드 CSS에 겹쳐 들어간다). */
 .fm-food-status {
   --food-gold: #dec88d;
   --food-paper: #f5ebd0;

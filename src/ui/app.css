@@ -70,7 +70,7 @@ p {
   justify-content: center;
 }
 
-/* ── 위쪽 줄: 브랜드(왼쪽)·입력(오른쪽) ── */
+/* ── 위쪽 줄: 브랜드(왼쪽)·전송 범위 조절과 입력(오른쪽) ── */
 .fm-topbar {
   position: absolute;
   inset-inline: var(--fm-gutter);
@@ -79,6 +79,15 @@ p {
   justify-content: space-between;
   align-items: flex-start;
   z-index: 6;
+}
+.fm-topbar__end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fm-topbar__frame[aria-pressed='true'] {
+  background: var(--fm-text);
+  color: var(--fm-on-text);
 }
 .fm-brand {
   font-weight: 700;
@@ -432,11 +441,11 @@ button.fm-capsule:focus-visible,
   z-index: 6;
 }
 
-/* ── 사람 아이콘·숫자(카운터 M, FR-035). 흰 틀 오른쪽 위 가장자리 위에 붙고 틀과 같은 흰색, M ≥ 1이면 주황.
+/* ── 사람 아이콘·숫자(카운터 M, FR-035). 작은 글자 한 줄(숫자 16px·아이콘 14px, /hud는 48px). 흰 틀 오른쪽 위 가장자리 위에 붙고 틀과 같은 흰색, M ≥ 1이면 주황.
    위쪽 줄과 겹치지 않게 --fm-badge-min-top 아래로, 화면 밖으로 나가지 않게 가로로 붙잡는다(CaptureFrame) ── */
 .fm-hud {
   --fm-badge-min-top: calc(env(safe-area-inset-top, 0px) + 116px + var(--fm-band-h, 0px));
-  --fm-badge-min-left: calc(var(--fm-gutter) + 88px);
+  --fm-badge-min-left: calc(var(--fm-gutter) + 40px);
 }
 .fm-desk .fm-hud {
   --fm-badge-min-top: calc(122px + var(--fm-band-h, 0px));
@@ -449,13 +458,13 @@ button.fm-capsule:focus-visible,
 .fm-person {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding: 0;
   border: 0;
   background: none;
   color: #fff;
   font-family: var(--fm-font-sans);
-  font-size: var(--fm-size-counter-sm);
+  font-size: var(--fm-size-result);
   font-weight: 600;
   line-height: 1;
   filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.5)) drop-shadow(0 1px 4px rgb(0 0 0 / 0.35));
@@ -464,8 +473,8 @@ button.fm-capsule:focus-visible,
   color: var(--fm-exposed);
 }
 .fm-person > svg {
-  inline-size: 0.8em;
-  block-size: 0.8em;
+  inline-size: var(--fm-size-label);
+  block-size: var(--fm-size-label);
 }
 button.fm-person {
   min-block-size: 44px;
@@ -532,6 +541,15 @@ button.fm-person {
   --fm-bottom-gap: 34px;
   --fm-badge-min-top: calc(var(--fm-band-h) + 64px);
   --fm-badge-min-left: calc(var(--fm-gutter) + 104px);
+}
+/* /hud 카운터는 40px 이상(NFR-040) */
+.fm-hud[data-variant='hud'] .fm-person {
+  gap: 6px;
+  font-size: var(--fm-size-counter-sm);
+}
+.fm-hud[data-variant='hud'] .fm-person > svg {
+  inline-size: 0.8em;
+  block-size: 0.8em;
 }
 .fm-hud[data-variant='hud']:has(.fm-hud__band) {
   --fm-band-h: 46px;
