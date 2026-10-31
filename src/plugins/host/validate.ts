@@ -77,3 +77,15 @@ export function violationReason(attempt: ViolationAttempt, target: string, conne
   }
   return `${base} · ${origin !== null && connectList.includes(origin) ? '허용 목록 안인데 실패' : '허용 목록 밖'}`;
 }
+
+/**
+ * IF-10 답을 화면에 넣기 전에 거른다(02-SSRD 코디 스캔 "호스트 검증"). 줄바꿈은 남기고(\r\n → \n),
+ * 다른 제어 문자(C0·C1)와 방향·보이지 않는 서식 문자(U+061C, U+200B~U+200F, U+202A~U+202E, U+2060~U+2069, U+FEFF)를 지운다.
+ * 결과는 textContent로만 넣는다. 1,000자(PLUGIN_MESSAGE_LIMITS.answerText)로 자른다.
+ */
+export function cleanAnswerText(text: string, limit: number = PLUGIN_MESSAGE_LIMITS.answerText): string {
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0009\u000B-\u001F\u007F-\u009F\u061C\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g, '')
+    .slice(0, limit);
+}

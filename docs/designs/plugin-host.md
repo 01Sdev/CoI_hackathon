@@ -113,6 +113,16 @@
 | 고정표 | `src/core/calorie.ts`의 `CALORIE_TABLE`·`X_LABEL_RE`·`X_LABEL_MAX`를 registry가 JSON 인자로 넣는다. Worker 안 규칙은 core `fallbackText`와 같고, 표 밖 문구는 core가 정한 "음식(종류 미상)"(`fallbackText('')`로 받아 넣는다). check-plugins가 여러 라벨로 core와 대조한다 | — |
 | 변조(`tamper.ts`) | `onInit`이 끝난 뒤(ready 다음) 4종을 차례로: `navigator.mediaDevices.getUserMedia`, `document`·`parent`·`top`·`localStorage`를 이름 그대로 평가(CSP에 `unsafe-eval`이 없어 `new Function`은 쓰지 않는다), `fetch('https://example.com/framelet-tamper', POST)`, `importScripts('https://example.com/framelet-tamper.js')`. 받은 조각도 같은 주소로 보내 본다 | 4종 각각 `reportViolation`. target에 본 결과를 적는다(`→ 없음`, `=ReferenceError`). 시도가 성공하면 target에 "차단 실패!"를 붙인다. fetch·script target은 URL이라 호스트가 목록과 대조한다 |
 
+### 2.11 코디 스캔 말로 묻기 (2026-11-01, docs/designs/outfit-pipelines.md)
+
+| 부분 | 결정 |
+| --- | --- |
+| 호스트 → 플러그인 | `outfitTurns`를 구독해 `asking`이고 처음 보는 turn을 `sendQuestions`가 IF-09로 보낸다. 그 플러그인의 지금 iframe이 ready가 아니거나 그 조각(`deliveryId`)을 받은 iframe이 아니면 바로 `failTurn`. 보낸 질문은 `rt.asked`에 두고 `OUTFIT_ANSWER_TIMEOUT_MS`(20초) 타이머를 건다 |
+| 플러그인 → 호스트 | IF-10 `answer`는 그 iframe에 보낸 questionId에만 받는다(아니면 형식 오류). 한 번만. `cleanAnswerText`(validate.ts)로 줄바꿈은 남기고(CRLF → LF) C0·C1 제어 문자와 방향·보이지 않는 서식 문자를 지운 뒤 1,000자로 잘라 `recordAnswer`. iframe이 사라지면(끄기·전환·종료) 기다리던 질문은 바로 `failTurn` |
+| 부트스트랩 | iframe이 `delivery`와 `question`만 Worker로 넘긴다 |
+| 플러그인(`outfit.ts`) | `onDelivery`로 받은 Blob을 deliveryId별로 최근 4개. `onQuestion`에서 그 Blob을 base64로 `POST {apiBase}/api/outfit`(JSON). 200이고 `answer`가 비지 않으면 그대로(`source`는 서버 값), 그 밖·18초 초과·조각 없음·비교 모드는 대체 문구 `fallback`. `reportViolation`은 부르지 않는다 |
+| 서버(`api/outfit.ts`) | 02-SSRD IF-11 "B 결정". Gemini REST `generateContent`, `gemini-3.5-flash-lite`, 15초, 키 없음·실패도 200 대체 문구 |
+
 ## 3. 고르지 않은 방법
 
 | 방법 | 고르지 않은 이유 |

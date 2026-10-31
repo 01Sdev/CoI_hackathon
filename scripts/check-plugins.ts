@@ -6,11 +6,12 @@ import { createHash, webcrypto } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { build } from 'esbuild';
-import { PLUGIN_MESSAGE_LIMITS } from '../src/core/constants';
+import { OUTFIT_ANSWER_TIMEOUT_MS, PLUGIN_MESSAGE_LIMITS } from '../src/core/constants';
 import { buildCsp, buildSrcdoc, safeConnectList } from '../src/plugins/host/csp';
-import { parsePluginMessage, violationReason } from '../src/plugins/host/validate';
+import { cleanAnswerText, parsePluginMessage, violationReason } from '../src/plugins/host/validate';
 import { CALORIE_TABLE, X_LABEL_MAX, X_LABEL_RE, fallbackText } from '../src/core/calorie';
 import { caloriePlugin } from '../src/plugins/calorie';
+import { OUTFIT_CLIENT_TIMEOUT_MS, OUTFIT_FALLBACK_TEXT, OUTFIT_KEEP_DELIVERIES, outfitPlugin } from '../src/plugins/outfit';
 import { pluginSourceFor } from '../src/plugins/registry';
 import { sha256Pure } from '../src/plugins/sdk/sha256';
 import { buildWorkerSource, pluginCall } from '../src/plugins/sdk/source';
@@ -335,6 +336,112 @@ await check('칼로리: Worker 고정표 문구 = core fallbackText(표 10종·�
 });
 
 // ── 변조 플러그인(Worker처럼 document·navigator·importScripts가 없는 vm) ──
+// ── 코디 스캔(IF-09·IF-10) ──
+await check('answer 거르기: 줄바꿈은 남기고(CRLF → LF) 제어·방향·보이지 않는 문자는 지움, 1,000자', () => {
+  assert.equal(cleanAnswerText('니트예요.\r\n잘 어울려요.\n'), '니트예요.\n잘 어울려요.\n');
+  assert.equal(cleanAnswerText('a\u0000b\u0007c\u001b[31md\u007f\u0085e'), 'abc[31mde');
+  assert.equal(cleanAnswerText('‮evil‬ ⁦x⁩ ‏y‎ ؜z ​w﻿'), 'evil x y z w');
+  assert.equal(cleanAnswerText('\t탭'), '탭');
+  assert.equal(cleanAnswerText('가'.repeat(1_200)).length, 1_000);
+  assert.equal(cleanAnswerText('가'.repeat(10), 4), '가가가가');
+});
+
+const waitUntil = async (cond: () => boolean, ms = 2_000) => {
+  const t0 = Date.now();
+  while (!cond() && Date.now() - t0 < ms) await tick(10);
+};
+interface OutfitCall {
+  url: string;
+  body: { image: string; question: string };
+}
+async function runOutfit(apiBase: string | null, fetchImpl: (signal: AbortSignal) => Promise<Response>, timeoutMs = 80) {
+  const calls: OutfitCall[] = [];
+  const fetchMock = (url: string, init: { body: string; headers: Record<string, string>; signal: AbortSignal }) => {
+    assert.equal(init.headers['Content-Type'], 'application/json');
+    calls.push({ url, body: JSON.parse(init.body) as OutfitCall['body'] });
+    return fetchImpl(init.signal);
+  };
+  const src = buildWorkerSource(pluginCall(outfitPlugin, timeoutMs, 2, OUTFIT_FALLBACK_TEXT));
+  const w = runWorker(src, true, { fetch: fetchMock, AbortController, Response, btoa, String });
+  w.dispatch({ ...init, apiBase });
+  await tick();
+  const answers = () => w.posted.filter((m) => m.type === 'answer');
+  const ask = async (questionId: string, deliveryId: string, text = '이 옷 어디 거야?', ms = 40) => {
+    w.dispatch({ type: 'question', questionId, deliveryId, text });
+    await tick(ms);
+  };
+  return { w, calls, answers, ask };
+}
+const geminiOk = async () => new Response(JSON.stringify({ answer: '데님 재킷이에요.', source: 'api' }), { status: 200 });
+
+await check('코디 스캔: 질문 → 그 조각(base64)과 질문을 /api/outfit에 POST → answer(api)', async () => {
+  const r = await runOutfit('https://h.example', geminiOk);
+  r.w.dispatch(delivery('d1'));
+  await tick();
+  await r.ask('q1', 'd1');
+  assert.equal(r.calls.length, 1);
+  assert.equal(r.calls[0]!.url, 'https://h.example/api/outfit');
+  assert.equal(r.calls[0]!.body.image, Buffer.from(fixture).toString('base64'));
+  assert.equal(r.calls[0]!.body.question, '이 옷 어디 거야?');
+  assert.deepEqual(r.answers(), [{ type: 'answer', questionId: 'q1', text: '데님 재킷이에요.', source: 'api' }]);
+});
+await check('코디 스캔: 서버가 준 대체 문구는 fallback, 비 200·중단·네트워크 오류는 플러그인 대체 문구', async () => {
+  const s = await runOutfit('https://h.example', async () => new Response(JSON.stringify({ answer: '서버 대체', source: 'fallback' })));
+  s.w.dispatch(delivery('d1'));
+  await tick();
+  await s.ask('q1', 'd1');
+  assert.deepEqual(s.answers()[0], { type: 'answer', questionId: 'q1', text: '서버 대체', source: 'fallback' });
+  for (const impl of [
+    async () => new Response('{}', { status: 502 }),
+    async () => new Response(JSON.stringify({ answer: '  ' })),
+    async () => {
+      throw new TypeError('Failed to fetch');
+    },
+    (signal: AbortSignal) =>
+      new Promise<Response>((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))),
+  ]) {
+    const r = await runOutfit('https://h.example', impl);
+    r.w.dispatch(delivery('d1'));
+    await tick();
+    await r.ask('q1', 'd1', '무슨 옷?', 150);
+    assert.deepEqual(r.answers(), [{ type: 'answer', questionId: 'q1', text: OUTFIT_FALLBACK_TEXT, source: 'fallback' }]);
+    assert.equal(r.w.posted.filter((m) => m.type === 'violation').length, 0);
+  }
+});
+await check('코디 스캔: 최근 조각 2개만 들고 있다, 비교 모드(apiBase null)는 요청 0, 받지 않은 조각의 질문은 SDK가 버린다', async () => {
+  const r = await runOutfit('https://h.example', geminiOk);
+  for (const id of ['d1', 'd2', 'd3']) r.w.dispatch(delivery(id));
+  // 해시 → ack → onDelivery가 셋 다 끝날 때까지(부하가 있으면 20ms로 모자랐다).
+  await waitUntil(() => r.w.posted.filter((m) => m.type === 'ack').length === 3);
+  await tick();
+  await r.ask('q1', 'd1'); // 밀려난 조각 → 요청 없이 대체 문구
+  await r.ask('q3', 'd3');
+  assert.deepEqual(r.answers().map((m) => [m.questionId, m.source]), [['q1', 'fallback'], ['q3', 'api']]);
+  assert.equal(r.calls.length, 1);
+  await r.ask('q9', 'never-sent');
+  await r.ask('q3', 'd3'); // 같은 questionId 두 번
+  assert.equal(r.answers().length, 2);
+  const c = await runOutfit(null, geminiOk);
+  c.w.dispatch(delivery('d1'));
+  await tick();
+  await c.ask('q1', 'd1');
+  assert.deepEqual(c.answers()[0], { type: 'answer', questionId: 'q1', text: OUTFIT_FALLBACK_TEXT, source: 'fallback' });
+  assert.equal(c.calls.length, 0);
+});
+await check('코디 스캔: 제품 outfit 소스(18초·4개·대체 문구)와 축소 없이 vm에서 돈다', async () => {
+  const src = pluginSourceFor('outfit')!;
+  assert.ok(src.includes(`, ${OUTFIT_CLIENT_TIMEOUT_MS}, ${OUTFIT_KEEP_DELIVERIES}, ${JSON.stringify(OUTFIT_FALLBACK_TEXT)})`));
+  assert.ok(OUTFIT_CLIENT_TIMEOUT_MS < OUTFIT_ANSWER_TIMEOUT_MS);
+  const w = runWorker(buildWorkerSource(src), true, { fetch: geminiOk, AbortController, Response, btoa, String });
+  w.dispatch({ ...init, apiBase: 'https://h.example' });
+  await tick();
+  w.dispatch(delivery('d1'));
+  await tick();
+  w.dispatch({ type: 'question', questionId: 'q1', deliveryId: 'd1', text: '어울려?' });
+  await tick(40);
+  assert.deepEqual(w.posted.at(-1), { type: 'answer', questionId: 'q1', text: '데님 재킷이에요.', source: 'api' });
+});
+
 await check('변조: 켜면 4종 자기 보고, 차단 실패 없음', async () => {
   const w = runWorker(buildWorkerSource(pluginSourceFor('tamper')!), true, {
     fetch: async () => {
