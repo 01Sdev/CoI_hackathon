@@ -139,3 +139,77 @@ export function applyCpuMap(map: CpuMap, src: Uint8ClampedArray, out: Uint8Clamp
     }
   }
 }
+
+/**
+ * 원본 위치(0~1, 위가 0) → 출력 위치(0~1, 위가 0). sourceUv의 역사상. 출력에 안 보이는 원본 위치는 0~1 밖의 값이 된다.
+ * k > 0이면 방사형 배율 r(1 + k r²/D) = T를 뉴턴법으로 푼다.
+ */
+export function warpedXY(u: number, v: number, p: WarpParams): { x: number; y: number } {
+  const tx = (2 * u - 1 - p.ox) * p.As * p.z;
+  const ty = (2 * v - 1 - p.oy) * p.z;
+  let px = tx;
+  let py = ty;
+  const T = Math.hypot(tx, ty);
+  if (p.k !== 0 && T > 0) {
+    const D = 1 + p.Ao * p.Ao;
+    let r = T;
+    for (let i = 0; i < 20; i++) {
+      const g = r + (p.k * r * r * r) / D - T;
+      r -= g / (1 + (3 * p.k * r * r) / D);
+    }
+    px = (tx * r) / T;
+    py = (ty * r) / T;
+  }
+  if (on(p.periphery)) {
+    const angle = Math.atan((px * Math.tan(p.periphery)) / p.Ao);
+    const pxo = (angle / p.periphery) * p.Ao;
+    py = (py * Math.tan(p.periphery) * Math.cos(angle)) / p.periphery;
+    px = pxo;
+  }
+  return { x: (px / p.Ao + 1) / 2, y: (py + 1) / 2 };
+}
+
+/** 박스 둘레를 변마다 9점씩 옮겨 감싸는 박스. 휜 사상에서 세로 극값은 변 가운데 쪽에 생길 수 있어 모서리만 옮기지 않는다. */
+function mapBox(b: { x: number; y: number; w: number; h: number }, f: (x: number, y: number) => { x: number; y: number } | null) {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  const N = 8;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    for (const [x, y] of [
+      [b.x + t * b.w, b.y],
+      [b.x + t * b.w, b.y + b.h],
+      [b.x, b.y + t * b.h],
+      [b.x + b.w, b.y + t * b.h],
+    ] as const) {
+      const q = f(x, y);
+      if (!q) continue;
+      x0 = Math.min(x0, q.x);
+      y0 = Math.min(y0, q.y);
+      x1 = Math.max(x1, q.x);
+      y1 = Math.max(y1, q.y);
+    }
+  }
+  return x0 <= x1 && y0 <= y1 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+}
+
+/** 원본 박스(0~1) → 휜 출력에서 감싸는 박스(0~1), 변마다 margin(박스 크기 비율)만큼 넓힌다. 출력 밖으로 나갈 수 있다. */
+export function sourceBoxToWarped(b: { x: number; y: number; w: number; h: number }, p: WarpParams, margin: number) {
+  const m = mapBox(b, (x, y) => warpedXY(x, y, p));
+  if (!m) return null;
+  return { x: m.x - m.w * margin, y: m.y - m.h * margin, w: m.w * (1 + 2 * margin), h: m.h * (1 + 2 * margin) };
+}
+
+/** 휜 출력 박스(0~1) → 원본에서 감싸는 박스(0~1). 원본 밖은 버린다(cover면 생기지 않음). 모두 밖이면 null. */
+export function warpedBoxToSource(b: { x: number; y: number; w: number; h: number }, p: WarpParams) {
+  const m = mapBox(b, (x, y) => {
+    const uv = sourceUv(x, y, p);
+    return uv ? { x: uv.u, y: uv.v } : null;
+  });
+  if (!m) return null;
+  const x0 = Math.max(0, m.x);
+  const y0 = Math.max(0, m.y);
+  return { x: x0, y: y0, w: Math.min(1, m.x + m.w) - x0, h: Math.min(1, m.y + m.h) - y0 };
+}

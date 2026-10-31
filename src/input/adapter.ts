@@ -7,6 +7,7 @@
 import { lensStore } from '../core/store';
 import type { InputKind, InputSource } from '../core/types';
 import { CAMERA_IDEAL, DEFAULT_VIDEO_URL, OPEN_TIMEOUT_MS, PHONE_MAX_WIDTH, WIDE_WARP } from './config';
+import type { WarpParams } from './warp';
 import { createWarpRenderer, type WarpRenderer } from './warpRenderer';
 
 let video: HTMLVideoElement | null = null;
@@ -69,6 +70,10 @@ export interface Frame {
   source: HTMLCanvasElement | HTMLVideoElement;
   width: number;
   height: number;
+  /** 휘기 전 <video>. 같은 task 안에서 읽으면 source와 같은 순간의 프레임이다. */
+  video: HTMLVideoElement;
+  /** 이번에 쓴 사상(휜 0~1 ↔ 원본 0~1, src/input/warp.ts). 광각이 꺼져 있으면 null(source가 곧 video). */
+  warp: WarpParams | null;
 }
 
 /**
@@ -79,8 +84,9 @@ export function grabFrame(): Frame | null {
   const v = video;
   if (!v || v.readyState < 2 || !v.videoWidth || !v.videoHeight) return null;
   const w = getWarp();
-  if (w && w.render(v)) return { source: w.canvas, width: w.canvas.width, height: w.canvas.height };
-  return { source: v, width: v.videoWidth, height: v.videoHeight };
+  const p = w?.render(v) ?? null;
+  if (w && p) return { source: w.canvas, width: w.canvas.width, height: w.canvas.height, video: v, warp: p };
+  return { source: v, width: v.videoWidth, height: v.videoHeight, video: v, warp: null };
 }
 
 /** 미리보기 캔버스를 previewFps 이하로 다시 그린다. 캔버스가 문서에서 빠지면 멈춘다. */

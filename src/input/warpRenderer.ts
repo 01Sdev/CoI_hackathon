@@ -3,13 +3,16 @@
 // shader는 pov-warp-lab.html 97~117행 그대로다(설계 docs/designs/input-wide-warp.md).
 
 import { WIDE_WARP } from './config';
-import { applyCpuMap, buildCpuMap, cpuSampleSize, warpOutputSize, warpParams, type CpuMap, type WarpSettings } from './warp';
+import { applyCpuMap, buildCpuMap, cpuSampleSize, warpOutputSize, warpParams, type CpuMap, type WarpParams, type WarpSettings } from './warp';
 
 export interface WarpRenderer {
   readonly canvas: HTMLCanvasElement;
   readonly mode: 'gpu' | 'cpu';
-  /** 지금 <video> 프레임을 휘어 그린다. 같은 task 안에서 canvas를 drawImage로 읽으면 이 프레임이다. 영상이 아직 없으면 false. */
-  render(video: HTMLVideoElement): boolean;
+  /**
+   * 지금 <video> 프레임을 휘어 그린다. 같은 task 안에서 canvas를 drawImage로 읽으면 이 프레임이다.
+   * 그린 사상(원본 ↔ 출력 좌표 변환용)을 돌려준다. 영상이 아직 없으면 null.
+   */
+  render(video: HTMLVideoElement): WarpParams | null;
 }
 
 const VERT = `#version 300 es
@@ -100,7 +103,7 @@ function createGpu(canvas: HTMLCanvasElement): WarpRenderer | null {
     canvas,
     mode: 'gpu',
     render(video) {
-      if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return false;
+      if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return null;
       resize(canvas, video, WIDE_WARP.maxLongSide);
       const p = warpParams(video.videoWidth / video.videoHeight, canvas.width / canvas.height, settings());
       gl.viewport(0, 0, canvas.width, canvas.height);
@@ -115,7 +118,7 @@ function createGpu(canvas: HTMLCanvasElement): WarpRenderer | null {
       // GL의 y는 위가 +라 세로 이동만 부호를 바꾼다(pov-warp-lab.html 210행).
       gl.uniform2f(uniforms.offset, p.ox, -p.oy);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
-      return true;
+      return p;
     },
   };
 }
@@ -131,7 +134,7 @@ function createCpu(canvas: HTMLCanvasElement): WarpRenderer | null {
     canvas,
     mode: 'cpu',
     render(video) {
-      if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return false;
+      if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return null;
       resize(canvas, video, WIDE_WARP.cpuMaxLongSide);
       const As = video.videoWidth / video.videoHeight;
       const { width: sw, height: sh } = cpuSampleSize(As);
@@ -146,7 +149,7 @@ function createCpu(canvas: HTMLCanvasElement): WarpRenderer | null {
       if (!map || map.key !== key) map = { key, map: buildCpuMap(canvas.width, canvas.height, sw, sh, p), image: ctx.createImageData(canvas.width, canvas.height) };
       applyCpuMap(map.map, src, map.image.data);
       ctx.putImageData(map.image, 0, 0);
-      return true;
+      return p;
     },
   };
 }

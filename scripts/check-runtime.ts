@@ -3,18 +3,18 @@
 
 import assert from 'node:assert/strict';
 import { VISION_CONFIG } from '../src/vision/config';
-import { area, clampToFrame, classifyScene, expand, fitLongSide, inCenterRegion, intersect, matchTarget, type Found } from '../src/vision/geometry';
+import { area, clampToFrame, classifyScene, expand, fitLongSide, inCenterRegion, intersect, matchTarget, scaleBox, type Found } from '../src/vision/geometry';
 import { containsBox, cropToFramePx, frameToPx } from '../src/core/frame';
 import { CAPTURE_FRAME_DEFAULT } from '../src/core/constants';
 import { SCENE_NONE, stepScene, type SceneState } from '../src/vision/scene';
-import { cooldownUntil, decideBranch, headRegion } from '../src/vision/branch';
+import { cooldownUntil, decideBranch, headRegion, uncoveredFaces } from '../src/vision/branch';
 import { planCapture } from '../src/vision/plan';
 import { selectActiveConsents } from '../src/core/selectors';
 import { sha256HexSync } from '../src/broker/sha256';
 import { blendMasked, dilate, dilateRadius, shapeMask } from '../src/vision/shape';
 import { createLensStore } from '../src/core/store';
 import { WIDE_WARP } from '../src/input/config';
-import { applyCpuMap, buildCpuMap, sourceUv, warpOutputSize, warpParams, type WarpSettings } from '../src/input/warp';
+import { applyCpuMap, buildCpuMap, sourceBoxToWarped, sourceUv, warpedBoxToSource, warpedXY, warpOutputSize, warpParams, type WarpSettings } from '../src/input/warp';
 import { gazeHeld, matchBoxes, pickConsent, pickGazeTarget, stepGaze, stepTracks, type Track } from '../src/vision/track';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -600,6 +600,81 @@ check('광각 기본값(cover 0.82)은 출력 어디서도 원본 밖을 읽지 
       assert.ok(sourceUv(x, y, p), `${sw}×${sh} (${x},${y})`);
     }
   }
+});
+
+check('광각 정방향 사상: warpedXY ∘ sourceUv = 항등(k 0·0.5, 16:9·9:16·출력 비율 다름)', () => {
+  for (const strength of [0, 0.5]) {
+    for (const [As, Ao] of [[16 / 9, 16 / 9], [9 / 16, 9 / 16], [16 / 9, 4 / 3]] as const) {
+      const p = warpParams(As, Ao, warpSet({ periphery: 0.82, strength }));
+      for (let i = 0; i <= 20; i++) {
+        for (let j = 0; j <= 20; j++) {
+          const uv = sourceUv(i / 20, j / 20, p);
+          assert.ok(uv);
+          const q = warpedXY(uv.u, uv.v, p);
+          assert.ok(Math.abs(q.x - i / 20) < 1e-9 && Math.abs(q.y - j / 20) < 1e-9);
+        }
+      }
+    }
+  }
+});
+
+check('광각 박스 옮기기: 원본 얼굴 박스를 옮긴 사각형이 휜 프레임에서 그 얼굴 픽셀을 모두 덮는다(가운데·가장자리), 역사상은 조각을 덮는다', () => {
+  const W = 1280, H = 720;
+  const p = warpParams(W / H, W / H, warpSet({ periphery: 0.82 }));
+  for (const face of [{ x: 0.45, y: 0.3, w: 0.1, h: 0.18 }, { x: 0.88, y: 0.3, w: 0.09, h: 0.16 }, { x: 0.02, y: 0.6, w: 0.08, h: 0.15 }]) {
+    const m = sourceBoxToWarped(face, p, 0);
+    assert.ok(m);
+    for (let y = 0; y < H; y += 2) {
+      for (let x = 0; x < W; x += 2) {
+        const uv = sourceUv((x + 0.5) / W, (y + 0.5) / H, p);
+        if (!uv || uv.u < face.x || uv.u > face.x + face.w || uv.v < face.y || uv.v > face.y + face.h) continue;
+        const px = (x + 0.5) / W, py = (y + 0.5) / H;
+        assert.ok(px >= m.x - 1e-9 && px <= m.x + m.w + 1e-9 && py >= m.y - 1e-9 && py <= m.y + m.h + 1e-9, JSON.stringify({ face, x, y }));
+      }
+    }
+  }
+  // 역사상: 휜 조각 둘레를 원본으로 옮긴 사각형 안에 조각 안 모든 점의 원본 위치가 든다
+  const crop01 = { x: 0.7, y: 0.1, w: 0.3, h: 0.6 };
+  const back = warpedBoxToSource(crop01, p);
+  assert.ok(back);
+  for (let i = 0; i <= 30; i++) {
+    for (let j = 0; j <= 30; j++) {
+      const uv = sourceUv(crop01.x + (crop01.w * i) / 30, crop01.y + (crop01.h * j) / 30, p);
+      assert.ok(uv && uv.u >= back.x - 1e-9 && uv.u <= back.x + back.w + 1e-9 && uv.v >= back.y - 1e-9 && uv.v <= back.y + back.h + 1e-9);
+    }
+  }
+});
+
+check('광각 보강: 휜 프레임에서 놓친 가장자리 얼굴이 원본 검출로 잡혀 가려지고, 원본 쪽 출구 재검사에서 덮인 것으로 나온다', () => {
+  // 휜 1280×720 프레임, 조각 = 오른쪽 절반. 얼굴은 원본 (0.88~0.97, 0.3~0.46) → 휜 프레임 오른쪽 끝.
+  const W = 1280, H = 720;
+  const p = warpParams(W / H, W / H, warpSet({ periphery: 0.82 }));
+  const cropPx = { x: 640, y: 0, w: 640, h: 720 };
+  const srcFace = { x: 0.88, y: 0.3, w: 0.09, h: 0.16 };
+  const trueWarped = sourceBoxToWarped(srcFace, p, 0);
+  assert.ok(trueWarped);
+  const truePx = scaleBox(trueWarped, W, H);
+  // 휜 쪽 검출: 얼굴은 놓치고 피자 위를 잘못 잡았다(/dev local-face-pizza에서 본 경우)
+  const wrong = face(800, 150, 120, 120);
+  const onlyWarped = decideBranch(cropPx, [], [wrong]);
+  assert.equal(uncoveredFaces([truePx], onlyWarped.masks.map((x) => x.rect), cropPx).length, 1); // 원본 쪽 재검사가 잡아 보류한다
+  // 원본 쪽 검출을 더하면 그 얼굴 자리가 가려진다
+  const mapped = sourceBoxToWarped(srcFace, p, VISION_CONFIG.warpFaceMargin);
+  assert.ok(mapped);
+  const mappedPx = scaleBox(mapped, W, H);
+  const both = decideBranch(cropPx, [], [wrong, face(mappedPx.x, mappedPx.y, mappedPx.w, mappedPx.h)]);
+  assert.equal(both.branch, '2b');
+  assert.deepEqual(uncoveredFaces([truePx], both.masks.map((x) => x.rect), cropPx), []);
+});
+
+check('uncoveredFaces: 조각 밖 얼굴은 무시, 사각형 하나로 50% 이상 덮여야 덮인 것', () => {
+  const crop2 = { x: 0, y: 0, w: 100, h: 100 };
+  const fc = { x: 40, y: 40, w: 20, h: 20 };
+  assert.deepEqual(uncoveredFaces([{ x: 200, y: 0, w: 10, h: 10 }], [], crop2), []);
+  assert.equal(uncoveredFaces([fc], [], crop2).length, 1);
+  assert.deepEqual(uncoveredFaces([fc], [{ x: 35, y: 35, w: 30, h: 30 }], crop2), []);
+  // 둘로 나뉘어 40%씩만 덮이면 덮이지 않은 것
+  assert.equal(uncoveredFaces([fc], [{ x: 40, y: 40, w: 8, h: 20 }, { x: 52, y: 40, w: 8, h: 20 }], crop2).length, 1);
 });
 
 console.log(`\n${passed}개 통과`);

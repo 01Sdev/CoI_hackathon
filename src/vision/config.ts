@@ -70,6 +70,10 @@ export const VISION_CONFIG = {
   faceScoreMin: 0.5,
   /** 얼굴 검출 전에 조각의 긴 변이 이보다 작으면 이 크기로 키운다. */
   faceMinSide: 256,
+  /** 가림용 얼굴 검출 타일 한 변 = 조각 짧은 변 × 이 비율(최소 faceMinSide). 조각 긴 변이 타일의 1.2배 이하면 타일을 쓰지 않는다. */
+  faceTileRatio: 0.6,
+  /** 타일 간격 상한(타일 한 변 대비). 0.7이면 30% 이상 겹친다. */
+  faceTileStride: 0.7,
   /** 2b: 얼굴 박스를 변마다 넓히는 비율. */
   faceExpand: 0.15,
   /** 2c: 사람 박스 위쪽 비율. */
@@ -99,6 +103,14 @@ export const VISION_CONFIG = {
   gazeGraceMs: 400,
   /** 포착 프레임 재검출에서 동의 상자와 같은 사람으로 보는 최소 IoU. */
   consentMatchIouMin: 0.3,
+
+  // ── 광각 보강(docs/designs/input-wide-warp.md) ──
+  /** 광각일 때 휘기 전 원본에서도 얼굴을 찾고 원본 쪽 출구 재검사를 한다. 끄면 가장자리 얼굴 가림 보장이 약해진다(처리량 비교용으로만 끈다). */
+  warpRawFaces: true,
+  /** 휘기 전 원본에서 찾은 얼굴을 휜 좌표로 옮긴 뒤 변마다 넓히는 비율(그다음 faceExpand도 더해진다). */
+  warpFaceMargin: 0.1,
+  /** 휜 조각에 대응하는 원본 영역을 변마다 넓히는 비율(가장자리 얼굴이 잘려 검출이 빠지지 않게). */
+  warpRawPad: 0.05,
 
   // ── 비교 모드(F17) ──
   /** raw JPEG 품질. 해상도는 원본 그대로(05 결정 30). */

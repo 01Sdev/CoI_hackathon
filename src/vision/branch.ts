@@ -100,3 +100,16 @@ export function decideBranch(
 export function cooldownUntil(startedAt: number, maxPerMinute: number): number {
   return startedAt + 60_000 / maxPerMinute;
 }
+
+/**
+ * 원본 쪽 출구 재검사(광각, docs/designs/input-wide-warp.md): 조각과 겹치는 얼굴 중 가린 사각형 하나로 minCover 이상 덮이지 않은 것.
+ * 박스는 모두 같은 단위(휜 프레임 px). 조각 밖 부분은 보내지 않으므로 조각 안 부분만 잰다. 덮개 여럿에 나뉘어 걸치면 덮이지 않은 것으로 친다.
+ */
+export function uncoveredFaces(faces: readonly Box[], masks: readonly Box[], crop: Box, minCover = 0.5): Box[] {
+  return faces.filter((f) => {
+    const inCrop = intersect(f, crop);
+    const a = area(inCrop);
+    if (a <= 0) return false;
+    return !masks.some((m) => area(intersect(inCrop, m)) >= minCover * a);
+  });
+}
