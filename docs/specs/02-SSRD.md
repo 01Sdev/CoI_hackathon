@@ -41,7 +41,7 @@ flowchart LR
   BR -- "Delivery · LogEntry · Counter" --> ST
   PH -- "Plugin.status · LogEntry(violation) · result" --> ST
   ST --> UI
-  UI -- "액션: applyManifest · setPluginEnabled · selectInput, compareMode 쓰기" --> ST
+  UI -- "액션: applyManifest · setPluginEnabled · selectInput · setCaptureFrame, compareMode 쓰기" --> ST
   UI -- "BroadcastChannel" --> OUT
 ```
 
@@ -51,7 +51,7 @@ flowchart LR
 | 가리기 전 조각 | **A만**, 분기 직후 해제(ERD §1) | 같음 |
 | 가린 조각 Blob | A가 만들고 → B 호스트가 전달 → 플러그인·`/api/calorie`. C는 **같은 Blob**으로 썸네일 | — |
 | Delivery·Counter 숫자 | A가 계산, C는 표시만(재계산 금지) | 플러그인 |
-| 비교 모드(F17) `raw` Blob = 원본 전체 | **G1의 유일한 예외.** A → 칼로리 플러그인 1개(ERD), C 썸네일. 켜져 있는 동안 칼로리 iframe은 `connect-src 'none'`으로 다시 만들어져 원본이 브라우저 밖으로 나가지 않는다(§4 비교 모드, 팀원 D1). 끄는 즉시 썸네일 해제 | 칼로리 외 플러그인, `/api/calorie`를 포함한 모든 서버 |
+| 비교 모드(F17) `raw` Blob = 원본 중 전송 범위 프레임(F24) 안 전체 | **G1의 유일한 예외.** A → 칼로리 플러그인 1개(ERD), C 썸네일. 켜져 있는 동안 칼로리 iframe은 `connect-src 'none'`으로 다시 만들어져 원본이 브라우저 밖으로 나가지 않는다(§4 비교 모드, 팀원 D1). 끄는 즉시 썸네일 해제 | 칼로리 외 플러그인, `/api/calorie`를 포함한 모든 서버 |
 
 - 브라우저가 **강제**하는 경계는 호스트 ↔ 플러그인 하나다(origin `null` iframe + Worker + CSP). A·B 호스트·C는 같은 origin이므로 A/C 경계는 아래 **코드 규칙**으로 지킨다.
 
@@ -125,6 +125,43 @@ type PluginToHost =
 **발표 문구:** 위반 로그는 플러그인 자기 보고라 플러그인이 지어낼 수도 있다. 그래서 "차단은 브라우저가 강제하고, 로그는 플러그인 보고, 증거는 네트워크 탭"으로만 말한다. 보고를 위조하기 어렵게 만드는 장치(전용 포트, IIFE)는 이번 범위에서 두지 않는다.
 
 **플러그인 입력 위생:** 플러그인에서 온 모든 문자열 필드(`text`, `target`, `pluginId`)는 `textContent`로만 쓴다. 시작값 [제안]은 플러그인당 받는 메시지 초당 20건, 메시지 하나의 직렬화 크기 8KiB, `text` 200자, ID 128자, `target` 512자다. Blob·`MessagePort` 같은 정해지지 않은 타입은 받지 않는다. 형식이 틀린 메시지는 버리고 기록하며, 한도를 넘거나 위반이 반복되면 그 iframe을 종료하고 LogEntry(`enforcedBy: host`)를 남긴다. 이것은 앱의 처리량 제한이지 브라우저 차원의 CPU·메모리 격리 보장은 아니다. 부트스트랩은 `event.source === parent`인 `init`만, 1번만 받고 리스너를 지운다.
+
+**트랙 연결 기준 (2026-10-31 확정, 사용자 승인):**
+- **A → B 전달.** A의 중개기는 `connectPluginHost(send)`(`src/broker/broker.ts`, `src/vision`에서도 export)로 연결을 받는다. `send`의 모양은 `(pluginId, msg: DeliveryMessage) => void`이고, 돌아오기 전에 `markDelivery`를 써야 한다. B는 `startPluginHost()`와 `sendDelivery(deliveryId): boolean`을 export하고 A를 import하지 않는다. 둘은 `main.tsx`에서 허브가 잇는다: `connectPluginHost((_id, msg) => { sendDelivery(msg.deliveryId); })`. B의 `sendDelivery`가 안에서 `markDelivery`를 쓰므로 A의 요구를 지킨다.
+- **C → A 미리보기.** C는 A의 `src/input/preview.ts`의 `mountPreview(container)`를 부른다(런타임 시작 포함). 원본 픽셀은 A 안에 머문다.
+- **시작 배선.** `main.tsx`가 React 밖에서 시작 함수를 한 번씩 부른다. 시작 함수는 여러 번 불러도 한 번만 붙고 해제 함수를 돌려준다.
+
+**스토어가 막는 것 (2026-10-31 추가, 사용자 승인):**
+- `setResult`는 그 플러그인에 실제로 보낸(`dispatched`) 전달의 **첫** 결과만 받는다. 없는 전달·`prepared` 전달·다른 플러그인·두 번째 결과·새 세션 전 전달의 결과는 버리고 `false`를 돌려준다. 늦게 온 옛 결과가 새 세션 화면에 뜨거나 `apiSends`가 부풀어 "전달 수 = API 요청 수" 대조가 어긋나는 것을 막는다.
+- `setPluginRuntime`에 `gateOpen: true`와 함께 `desired`(그 iframe을 만든 때의 `selectDesiredRuntime` 값)를 주면, 지금 값과 다를 때 게이트를 열지 않는다. B가 `ready` 처리 중에 대조와 쓰기 사이에 await를 끼워도 낡은 정책으로 게이트가 열리지 않게 하는 보험이다. B는 게이트를 열 때 `desired`를 넘긴다.
+
+**전송 범위 프레임 (F24·F24a, 2026-10-31 추가, 사용자 승인):**
+- **상태.** `Session.captureFrame = {x, y, w, h}`이고, 소스 프레임 기준 0\~1이다(`targetBox`와 같은 좌표). 기본값은 가운데 60%(0.2, 0.2, 0.6, 0.6) [제안]이다. C만 `setCaptureFrame(rect)`로 쓴다. 스토어가 0\~1 밖을 잘라 맞추고 한 변을 0.1 [제안] 이상으로 맞춘다. A는 포착을 시작할 때 한 번 읽고, 그 포착이 끝날 때까지 그 값을 쓴다.
+- **처리 순서(A `vision/`).**
+  1. 0단계 판정은 지금처럼 전체 화면에서 한다.
+  2. 포착 프레임 전체에서 대상과 사람을 다시 찾는다(FR-013).
+  3. 대상 박스를 10% 넓힌 뒤 프레임(원본 px)과의 교집합을 `cropRect`로 삼는다.
+  4. 교집합이 비면 `hold`(branch `null`, reason "프레임 밖")로 끝내고 쿨다운을 시작한다. "대상 재검출 실패"와 같은 취급이다.
+  5. `cropRect`만 캔버스에 그려 2단계(가림·분기)를 한다. 사람 박스는 전체 프레임 좌표에서 잘린 조각 좌표로 옮겨 O·P를 잰다.
+  6. `maxSide` 축소, 인코딩, 출구 재검사를 거쳐 중개기로 넘긴다.
+- 프레임 밖 픽셀은 가림 캔버스에도 그리지 않는다. 기존 인물 가림(2a\~2d)은 프레임과 별개로 그대로 동작한다.
+- **기록.** `Delivery.frameRect`와 LogEntry `frameRect`에 그 포착에 쓴 프레임을 원본 px로 남긴다. "프레임 밖" hold에도 남긴다. 불변식은 `cropRect ⊆ frameRect`다. `areaRatio`는 지금처럼 `cropRect` 면적 / 원본 프레임 면적이다.
+- **표시(C).** 미리보기 위에 흰색 틀을 그린다(소스 좌표 → 화면 좌표 변환은 `targetBox`와 같다). 꼭짓점 끌기는 터치 이벤트로 받고, 틀 위에서는 페이지 스크롤·확대를 막는다(`touch-action: none`). 플러그인 결과(HUD 카드 등)는 틀과 상관없는 자리에 둔다. `/hud`에는 틀만 그린다.
+- **비교 모드(F17, 사용자 결정 2026-10-31).** raw 전달에도 프레임을 적용한다. raw 조각은 원본 중 프레임 안 전체이고(`cropRect = frameRect`), 가리지 않는다. 프레임은 늘 비어 있지 않으므로 raw에는 "프레임 밖" hold가 없다. 프레임 밖 픽셀은 비교 모드에서도 어떤 플러그인에도 가지 않는다.
+- **F24b 공간 고정 프레임**은 명세만 둔다. 웹 데모 계약에는 없다.
+
+**사용 기록 (F25, 2026-10-31 추가, 사용자 승인. 우선순위 [제안] P1):**
+- 스토어가 `markDelivery`(`dispatched`)마다 `Counter.usage`에 이미지 없는 줄 `{at, pluginId, deliveryId, objectLabel, bytes, frameW, frameH}`를 더한다. 이 줄은 증가 전용이고, 화면 로그 100건과 따로 세션 동안 남는다.
+- 대표 조각은 `usageSamples[pluginId]`에 최근 3장 [제안]만 둔다. 각 항목은 `{pluginId, deliveryId, at, thumbnailRef}`이다. `thumbnailRef`는 그 Delivery의 썸네일 URL을 같이 쓴다. 로그 100건에서 밀려나도 대표 조각에 남아 있으면 해제하지 않고, 대표 조각에서 빠질 때 그 Delivery가 이미 밀려났으면 그때 해제한다.
+- branch `raw`(비교 모드)는 남기지 않는다. 남기는 것은 이미 가린 조각(2b·2c)이나 가릴 필요가 없던 조각(2a)뿐이다.
+- 새 세션 시작과 새로고침 때 둘 다 비운다(영구 저장 없음).
+- C는 폰 하단 시트에 "사용 기록"을 두고 "OO 플러그인에서 사용됨 · 시각 · 대상 · 바이트 · 프레임 크기"로 보여 준다. 플러그인 이름은 `textContent`로만 넣는다.
+
+**core 변경 목록(F24·F25).** 이 명세 PR에는 코드가 없다. 구현 PR에서 시험과 함께 넣는다(영향: A·C).
+- `Session.captureFrame`, `setCaptureFrame`
+- `Delivery.frameRect`, `LogEntry.frameRect`
+- `Counter.usage`, `usageSamples`
+- `src/core/frame.ts`: `clampFrame`, `frameToPx`, `intersectBox`(A의 자르기와 C의 끌기가 같은 좌표 함수를 쓴다)
 
 ### 플러그인 SDK (Worker 안의 전역 `famelet`, 2026-10-31 추가)
 
@@ -243,6 +280,7 @@ type OutwardMessage = { type: 'outward'; apps: number; compareMode: boolean; at:
    ```
    `clamped`일 때만 `X-Famelet-Kcal-Clamped: 1`을 붙인다. 한 판을 한 조각 값으로 덮어쓰지 않도록 기준값에 `portion`을 반영했다. 바꿀 때는 이름도 표의 이름으로 바꿔 숫자와 이름의 출처가 섞이지 않게 한다.
 7. 본문은 `${name} 약 ${kcal}kcal` 한 줄이다.
+8. **502일 때 로그 한 줄(2026-10-31 추가, 사용자 승인).** 서버는 `console.error`에 원인 한 줄만 남긴다. 예: `calorie 502 upstream=400 type=invalid_request_error` 또는 `calorie 502 timeout`. 이미지, 요청·응답 본문, 키는 남기지 않는다. 모델 이름이나 출력 형식이 틀려 매번 고정표로 빠져도 조용히 지나가지 않게 하기 위해서다. 배포 직후 실제 키로 1번 호출해 200을 확인한다(배포 체크리스트).
 
 `X_LABEL_RE = /^[a-z]+( [a-z]+)*$/`와 길이 32자 이하(`src/core/calorie.ts`). 소문자 단어를 공백 하나로 이은 것만 받는다. COCO 이름(가장 긴 것 14자, `hot dog` 포함)은 모두 통과하고, 줄바꿈·연속 공백·대문자·쉼표(중복 헤더가 `, `로 이어진 값)는 거른다. 플러그인도 같은 정규식을 통과할 때만 `x-label`을 붙인다.
 
@@ -380,6 +418,7 @@ sequenceDiagram
 | 전달 일시 정지 (F20) | 발표자 화면의 버튼이 `Session.paused = true`로 바꾼다. 게이트와 iframe은 그대로 두고, 보낼 수 있는지는 `selectCanSend`(`ready` ∧ 게이트 열림 ∧ 일시 정지 아님)가 판단한다. 일시 정지 중 포착은 하지 않는다 |
 | 새 세션 시작 (F20) | 전환 공통 절차를 모든 플러그인에 적용하고, 카운터를 0으로 되돌리고, `compareMode = false`로 시작한다 |
 | 대상 재검출 실패 | 포착한 프레임에서 대상(피자)을 다시 찾지 못하면 `hold`(branch 없음, reason "대상 재검출 실패")로 끝내고 쿨다운을 시작한다. 2d와 같은 취급이다 |
+| 프레임 밖 (F24) | 넓힌 대상 박스가 전송 범위 프레임과 겹치지 않으면 `hold`(branch 없음, reason "프레임 밖", `frameRect` 포함)로 끝내고 쿨다운을 시작한다. `sendDelivery` 호출도, Delivery도 없다. 쿨다운을 시작하므로 같은 플러그인에서 `60 / maxPerMinute`초에 1번만 남는다 |
 | **전환 공통 절차** | 매니페스트 적용, 비교 모드 켜기·끄기, 플러그인 켜기, 새 세션 시작은 모두 같은 순서를 따른다(입력 전환은 iframe을 다시 만들지 않고 A가 진행 중 포착만 버린다). B는 플러그인마다 `selectDesiredRuntime` 하나를 구독하고 최신 값만 처리한다. 스토어의 `prepareDelivery`는 `runtimeId`·`manifestVersion`이 지금 iframe과 다르거나, `raw`가 통신이 막힌 비교 모드 칼로리 iframe이 아니면 거부한다(`docs/designs/core-store.md` §2.2·§2.3). ① 전달 게이트를 닫는다. ② 진행 중인 포착·인코딩·해시를 버린다(시작 때의 `runtimeId`와 다르면 `sendDelivery`가 거부). ③ 옛 iframe·Worker를 종료한다. ④ 새 정책으로 iframe을 만든다(`runtimeId` 새로). ⑤ 새 `ready`가 오면 게이트를 연다. 새 `ready`가 3초 [제안] 안에 오지 않으면 그 플러그인은 `stopped`로 멈추고, **옛 권한으로 되돌아가지 않는다.** 사용자가 다시 켜야 풀린다. 이미 보낸 데이터를 회수하지는 못한다 |
 | 매니페스트 변경 (F11·F14) | C `applyManifest(pluginId, json)` → A `validateManifest(json, pluginId)` → 잘못된 JSON·범위 위반이면 기존 값을 유지하고 iframe은 그대로 둔다. 통과하면 `version+1` 후 전환 공통 절차. 같은 플러그인 적용은 하나씩 처리한다 |
 | 비교 모드 켜기·끄기 (F17) | [팀원 D1] 스위치는 데스크톱 모드 발표자 화면에만 두고, 플러그인 메시지로 켜는 경로는 없다. `Session.compareMode`는 새로고침하면 항상 `false`로 시작한다. 켜면 전환 공통 절차로 칼로리 iframe을 `connect-src 'none'`, `apiBase: null`로 다시 만들고, 새 `ready` 뒤에만 A가 `raw`(칼로리에만, 축소 여부 미정)를 보낸다. 플러그인은 원본을 받지만 서버로 보내지 않으므로 결과 줄은 고정표(`source: 'fallback'`)다. 입력은 팀원만 찍힌 녹화 영상을 쓴다. 끌 때도 전환 공통 절차로 원래 `network`의 iframe으로 돌아간다. "보호 중" 표시는 끄는 즉시 바뀌지만, 이미 보낸 `raw` 전달은 지우지 않으므로 M·`outwardApps`는 최근 10초 창이 지나면서 0이 된다. `raw` 썸네일은 끌 때 해제하고 숫자 기록은 남긴다 |

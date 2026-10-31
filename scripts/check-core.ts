@@ -14,6 +14,8 @@ import {
 } from '../src/core/selectors';
 import type { DeliveryBranch, FaceCheck } from '../src/core/types';
 import { adjustKcal, fallbackText, isValidLabel } from '../src/core/calorie';
+import { CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE } from '../src/core/constants';
+import { clampFrame, frameToPx, intersectBox } from '../src/core/frame';
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -445,11 +447,140 @@ check('startNewSession: 새 id, 비교 모드·일시 정지 해제, 로그·Cou
   assert.deepEqual(revoked, [r.delivery.thumbnailRef]);
 });
 
-check('setResult: source api일 때만 apiSends +1', () => {
-  const { store } = setup();
-  store.getState().setResult('calorie', { deliveryId: 'x', text: 'a', source: 'fallback', at: 0 });
-  store.getState().setResult('calorie', { deliveryId: 'y', text: 'b', source: 'api', at: 0 });
+check('setResult: 보낸 전달의 첫 결과만 받고, source api일 때만 apiSends +1', () => {
+  const { store, ready, send } = setup();
+  ready();
+  const a = send();
+  const b = send();
+  const line = (deliveryId: string, source: 'api' | 'fallback') => ({ deliveryId, text: '피자 약 285kcal', source, at: 0 });
+  assert.equal(store.getState().setResult('calorie', line(a.delivery.id, 'fallback')), true);
+  assert.equal(store.getState().setResult('calorie', line(b.delivery.id, 'api')), true);
   assert.equal(store.getState().counter.apiSends, 1);
+  assert.equal(store.getState().setResult('calorie', line(b.delivery.id, 'api')), false, '두 번째 결과는 버린다');
+  assert.equal(store.getState().counter.apiSends, 1);
+});
+
+check('setResult: 없는·보내지 않은·다른 플러그인·새 세션 전 전달의 결과는 버린다', () => {
+  const { store, ready, delivery, send } = setup();
+  ready();
+  const line = (deliveryId: string) => ({ deliveryId, text: 'x', source: 'api' as const, at: 0 });
+  assert.equal(store.getState().setResult('calorie', line('dlv-none')), false);
+  const prepared = store.getState().prepareDelivery(delivery(), { sceneDecisionId: null })!;
+  assert.equal(store.getState().setResult('calorie', line(prepared.delivery.id)), false, 'prepared는 아직 보내지 않음');
+  const sent = send();
+  assert.equal(store.getState().setResult('hello', line(sent.delivery.id)), false, '다른 플러그인');
+  store.getState().startNewSession();
+  assert.equal(store.getState().setResult('calorie', line(sent.delivery.id)), false, '새 세션 전 전달');
+  assert.deepEqual(store.getState().results, {});
+  assert.equal(store.getState().counter.apiSends, 0);
+});
+
+check('게이트: desired가 지금 값과 다르면 gateOpen: true를 받아도 닫아 둔다', () => {
+  const { store } = setup();
+  const before = selectDesiredRuntime(store.getState(), 'calorie')!;
+  store.getState().setCompareMode(true); // 칼로리의 connect가 'none'으로 바뀐다
+  store.getState().setPluginRuntime('calorie', {
+    status: 'ready',
+    runtimeId: 'old',
+    runtimePolicy: { connect: 'network', manifestVersion: 1 },
+    gateOpen: true,
+    desired: before,
+  });
+  assert.equal(store.getState().plugins.calorie!.gateOpen, false);
+  const now = selectDesiredRuntime(store.getState(), 'calorie')!;
+  store.getState().setPluginRuntime('calorie', {
+    status: 'ready',
+    runtimeId: 'new',
+    runtimePolicy: { connect: 'none', manifestVersion: 1 },
+    gateOpen: true,
+    desired: now,
+  });
+  assert.equal(store.getState().plugins.calorie!.gateOpen, true);
+});
+
+// ── F24 전송 범위 프레임 · F25 사용 기록 ──
+check('clampFrame: 범위 밖은 0~1 안으로, 한 변은 최소값 이상, 숫자가 아니면 null', () => {
+  assert.deepEqual(clampFrame({ x: -0.2, y: 0.95, w: 0.5, h: 0.5 }), { x: 0, y: 0.5, w: 0.5, h: 0.5 });
+  assert.deepEqual(clampFrame({ x: 0.5, y: 0.5, w: 0.01, h: 2 }), { x: 0.5, y: 0, w: CAPTURE_FRAME_MIN_SIDE, h: 1 });
+  assert.equal(clampFrame({ x: Number.NaN, y: 0, w: 0.5, h: 0.5 }), null);
+});
+
+check('frameToPx·intersectBox: 넓힌 대상 박스를 프레임으로 자르면 프레임 안, 겹치지 않으면 null', () => {
+  const frame = frameToPx({ ...CAPTURE_FRAME_DEFAULT }, 720, 1280);
+  assert.deepEqual(frame, { x: 144, y: 256, w: 432, h: 768 });
+  const crop = intersectBox({ x: 100, y: 300, w: 200, h: 200 }, frame)!;
+  assert.deepEqual(crop, { x: 144, y: 300, w: 156, h: 200 });
+  assert.ok(crop.x >= frame.x && crop.y >= frame.y);
+  assert.ok(crop.x + crop.w <= frame.x + frame.w && crop.y + crop.h <= frame.y + frame.h);
+  assert.equal(intersectBox({ x: 0, y: 0, w: 100, h: 100 }, frame), null);
+  assert.equal(intersectBox({ x: 0, y: 0, w: 144, h: 300 }, frame), null, '변이 닿기만 하면 넓이 0');
+});
+
+check('setCaptureFrame: 기본값은 가운데 60%, 범위를 맞춰 쓰고, 숫자가 아니면 무시, 새 세션에도 유지', () => {
+  const { store } = setup();
+  assert.deepEqual(store.getState().session.captureFrame, { ...CAPTURE_FRAME_DEFAULT });
+  store.getState().setCaptureFrame({ x: 0.9, y: 0.1, w: 0.3, h: 0.05 });
+  assert.deepEqual(store.getState().session.captureFrame, { x: 0.7, y: 0.1, w: 0.3, h: CAPTURE_FRAME_MIN_SIDE });
+  store.getState().setCaptureFrame({ x: 0, y: 0, w: Number.POSITIVE_INFINITY, h: 0.5 });
+  assert.equal(store.getState().session.captureFrame.x, 0.7);
+  store.getState().startNewSession();
+  assert.equal(store.getState().session.captureFrame.x, 0.7);
+});
+
+check('사용 기록: dispatched마다 한 줄(프레임 크기 포함), failed는 없음, deliver 로그에 frameRect', () => {
+  const { store, ready, delivery, send } = setup();
+  ready();
+  const frameRect = { x: 144, y: 256, w: 432, h: 768 };
+  const r = send({ frameRect, cropRect: { x: 144, y: 300, w: 156, h: 200 } });
+  assert.deepEqual(r.log.frameRect, frameRect);
+  const failed = store.getState().prepareDelivery(delivery(), { sceneDecisionId: null })!;
+  store.getState().markDelivery(failed.delivery.id, 'failed');
+  send(); // F24 구현 전 호출(frameRect 없음)
+  const usage = store.getState().counter.usage;
+  assert.equal(usage.length, 2);
+  assert.deepEqual(usage[0], {
+    at: usage[0]!.at,
+    pluginId: 'calorie',
+    deliveryId: r.delivery.id,
+    objectLabel: 'pizza',
+    bytes: 3,
+    frameW: 432,
+    frameH: 768,
+  });
+  assert.equal(usage[1]!.frameW, null);
+});
+
+check('대표 조각: 플러그인별 최근 3장, raw 제외, 로그에서 밀려나도 남은 조각의 썸네일은 해제하지 않음', () => {
+  const { store, ready, send, revoked } = setup();
+  ready();
+  const sent = [send(), send(), send(), send()];
+  const ids = () => store.getState().usageSamples.calorie!.map((x) => x.deliveryId);
+  assert.deepEqual(ids(), sent.slice(1).map((r) => r.delivery.id));
+  assert.deepEqual(revoked, [], '빠진 첫 조각은 아직 로그에 있으므로 로그가 해제한다');
+  for (let i = 0; i < 100; i += 1) {
+    store.getState().addLog({ pluginId: 'calorie', sceneDecisionId: null, kind: 'hold', branch: '2d', reason: `보류 ${i}`, enforcedBy: null });
+  }
+  for (const r of sent) assert.equal(store.getState().deliveries[r.delivery.id], undefined);
+  assert.deepEqual(revoked, [sent[0]!.delivery.thumbnailRef], '대표 조각에 없는 첫 건만 해제');
+  // 새 조각이 들어와 가장 오래된 조각이 빠지면, 그 Delivery는 이미 밀려났으므로 이때 해제한다.
+  const next = send();
+  assert.deepEqual(revoked, [sent[0]!.delivery.thumbnailRef, sent[1]!.delivery.thumbnailRef]);
+  store.getState().setCompareMode(true);
+  ready('calorie', 'r2', 'none');
+  send({ branch: 'raw', faces: 1 });
+  assert.deepEqual(ids(), [sent[2]!.delivery.id, sent[3]!.delivery.id, next.delivery.id], 'raw는 넣지 않는다');
+  assert.equal(store.getState().counter.usage.length, 6);
+});
+
+check('새 세션: 사용 기록·대표 조각을 비우고, 같이 쓰는 썸네일은 한 번만 해제', () => {
+  const { store, ready, send, revoked } = setup();
+  ready();
+  const a = send();
+  const b = send();
+  store.getState().startNewSession();
+  assert.deepEqual([...revoked].sort(), [a.delivery.thumbnailRef, b.delivery.thumbnailRef].sort());
+  assert.deepEqual(store.getState().usageSamples, {});
+  assert.deepEqual(store.getState().counter.usage, []);
 });
 
 console.log(`\n${passed}개 통과`);
