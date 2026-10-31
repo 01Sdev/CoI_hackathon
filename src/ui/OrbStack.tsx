@@ -16,7 +16,8 @@ export function OrbStack({
 }: {
   value: ReactNode;
   tone: Tone;
-  caption: ReactNode;
+  /** 없으면 캡션 캡슐을 그리지 않는다(/hud는 오브와 결과만). */
+  caption?: ReactNode;
   /** 오브 옆 배지(차단 수). 오브 숫자와 섞지 않는다. */
   badge?: ReactNode;
   result?: ReactNode;
@@ -42,13 +43,17 @@ export function OrbStack({
         )}
         {badge}
       </div>
-      <div className="fm-orbstack__row">
-        <span className="fm-capsule fm-glass fm-glass--panel" data-tone={tone}>
-          <span className="fm-dot" aria-hidden="true" />
-          {caption}
-        </span>
-        {result}
-      </div>
+      {(caption || result) && (
+        <div className="fm-orbstack__row">
+          {caption && (
+            <span className="fm-capsule fm-glass fm-glass--panel" data-tone={tone}>
+              <span className="fm-dot" aria-hidden="true" />
+              {caption}
+            </span>
+          )}
+          {result}
+        </div>
+      )}
     </div>
   );
 }

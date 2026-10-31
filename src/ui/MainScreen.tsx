@@ -4,17 +4,20 @@
 import { useState } from 'react';
 import { useLensStore } from '../core/store';
 import type { InputKind } from '../core/types';
+import { Hud } from './Hud';
 import { StartScreen } from './screens/StartScreen';
 import { CameraFallbackNotice } from './screens/StatusPanels';
 import { unlockAudio } from './signal';
 import { EngineGate, Stage } from './Stage';
 import { TopBar } from './TopBar';
 import { useLayoutMode } from './useLayoutMode';
+import { useStoreTick } from './useSignals';
 
 export function MainScreen({ autostart = false }: { autostart?: boolean }) {
   const layout = useLayoutMode();
   const selectInput = useLensStore((s) => s.selectInput);
   const [started, setStarted] = useState(autostart);
+  useStoreTick();
 
   if (!started) {
     const start = (kind: InputKind) => {
@@ -31,7 +34,7 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
         <section className="fm-desk__stage" aria-label="카메라와 HUD">
           <Stage>
             <div className="fm-hud-guide" aria-hidden="true" />
-            <EngineGate ready={null} />
+            <EngineGate ready={<Hud variant="desktop" />} />
             <TopBar layout={layout} />
             <CameraFallbackNotice />
           </Stage>
@@ -45,7 +48,7 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
   return (
     <div className="fm-phone">
       <Stage className="fm-phone__stage">
-        <EngineGate ready={null} />
+        <EngineGate ready={<Hud variant="phone" />} />
         <TopBar layout={layout} />
         <CameraFallbackNotice />
       </Stage>

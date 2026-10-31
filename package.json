@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
     "check:core": "tsx scripts/check-core.ts",
     "check:plugins": "tsx scripts/check-plugins.ts",
-    "check:api": "tsx scripts/check-api.ts"
+    "check:api": "tsx scripts/check-api.ts",
+    "check:ui": "tsx scripts/check-ui.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.135.0",

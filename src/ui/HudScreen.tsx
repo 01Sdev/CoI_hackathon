@@ -1,12 +1,15 @@
 // 글래스 HUD(/hud): 600×600 단독, 검은 배경(가산형 디스플레이에서 투명), 항상 다크, 입력은 녹화 영상(FR-037).
 // 화면이 600보다 작으면 비례 축소한다(K-14). 시작은 선택 버튼(Enter)이나 탭 한 번 — 오디오 잠금 해제에 제스처가 필요하다.
 
-import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { APP_NAME } from '../core/constants';
 import { useLensStore } from '../core/store';
+import { Hud } from './Hud';
+import { Preview } from './Preview';
 import { unlockAudio } from './signal';
 import { applyTheme } from './theme';
 import { useElapsedSeconds, useEngineView } from './useEngineView';
+import { useStoreTick } from './useSignals';
 
 const SIZE = 600;
 
@@ -21,11 +24,12 @@ function useFitScale(): number {
   return scale;
 }
 
-export function HudScreen({ autostart = false, children }: { autostart?: boolean; children?: ReactNode }) {
+export function HudScreen({ autostart = false }: { autostart?: boolean }) {
   const setViewMode = useLensStore((s) => s.setViewMode);
   const selectInput = useLensStore((s) => s.selectInput);
   const [started, setStarted] = useState(autostart);
   const scale = useFitScale();
+  useStoreTick();
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -55,7 +59,8 @@ export function HudScreen({ autostart = false, children }: { autostart?: boolean
   return (
     <div className="fm-hudroute">
       <div className="fm-hudroute__frame" style={{ transform: `scale(${scale})` }}>
-        {started ? <HudGate>{children}</HudGate> : <HudStart onStart={start} />}
+        <Preview hidden />
+        {started ? <HudGate /> : <HudStart onStart={start} />}
       </div>
     </div>
   );
@@ -72,10 +77,10 @@ function HudStart({ onStart }: { onStart(): void }) {
 }
 
 /** /hud의 로딩·실패는 큰 글자 한두 줄만(본문 24px 이상). */
-function HudGate({ children }: { children?: ReactNode }) {
+function HudGate() {
   const engine = useEngineView();
   const sec = useElapsedSeconds();
-  if (engine === 'ready') return <>{children}</>;
+  if (engine === 'ready') return <Hud variant="hud" />;
   const failed = engine === 'failed';
   return (
     <div className="fm-hudstart" role={failed ? 'alert' : 'status'}>

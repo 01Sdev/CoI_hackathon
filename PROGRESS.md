@@ -42,7 +42,8 @@
 - [x] 화면 배치(phone/desktop/hud/outward)와 라우팅, 시작·로딩·실패 화면 — `track-c/screens`
 - [ ] A: `src/input/preview.ts`의 `mountPreview(container)`와 `setEngine` 호출(C가 기다리는 연결점, 없으면 HUD는 `liveObservation`으로 판정 중을 안다)
 - [ ] 배포: `/hud`·`/outward`를 `index.html`로 되돌리는 rewrite(V6, NFR-024)
-- [ ] HUD 카운터·증명 로그·확인 화면·매니페스트 편집기
+- [x] HUD 다섯 요소·카운터 M·10초 호·차단 배지·전달 신호(점멸·소리·진동·알림)·보류 줄 — `track-c/hud`
+- [ ] 증명 로그·확인 화면·매니페스트 편집기
 - [ ] 전달 신호(테두리 점멸·효과음), `/outward`, 비교 모드·발표자 컨트롤
 
 ## 외부 봇 작업 (그록봇, 허브가 관리)
