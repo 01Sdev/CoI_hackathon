@@ -9,9 +9,11 @@ import { CAPTURE_FRAME_DEFAULT } from '../src/core/constants';
 import { SCENE_NONE, stepScene, type SceneState } from '../src/vision/scene';
 import { cooldownUntil, decideBranch, headRegion } from '../src/vision/branch';
 import { planCapture } from '../src/vision/plan';
+import { selectActiveConsents } from '../src/core/selectors';
 import { sha256HexSync } from '../src/broker/sha256';
 import { blendMasked, dilate, dilateRadius, shapeMask } from '../src/vision/shape';
 import { createLensStore } from '../src/core/store';
+import { gazeHeld, matchBoxes, pickConsent, pickGazeTarget, stepGaze, stepTracks, type Track } from '../src/vision/track';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
@@ -397,6 +399,110 @@ check('cropToFramePx: 무작위 500회 모두 cropRect ⊆ frameRect이고 넓�
 check('프레임 밖 보류도 쿨다운: 포착 시작 기준 간격(maxPerMinute 6 → 10초에 1건)', () => {
   // runCapture는 "프레임 밖"을 cooled에 넣어 끝난 시각 + 간격으로 쿨다운을 확정한다. 간격 계산은 같은 함수다.
   assert.equal(Math.max(cooldownUntil(0, 6), cooldownUntil(120, 6)), 10_120);
+});
+
+// ── 코디 스캔 응시 동의(docs/designs/outfit-pipelines.md) ──
+const b = (x: number, y: number, w: number, h: number) => ({ x, y, w, h });
+
+check('추적: 조금 움직인 사람은 같은 trackId, 새 사람은 새 trackId', () => {
+  let n = 0;
+  const id = () => `p${++n}`;
+  const t1 = stepTracks([], [{ box: b(0.1, 0.1, 0.2, 0.5), score: 0.9 }], 0, id);
+  assert.deepEqual(t1.visible.map((t) => t.id), ['p1']);
+  const t2 = stepTracks(t1.tracks, [{ box: b(0.12, 0.1, 0.2, 0.5), score: 0.9 }, { box: b(0.6, 0.1, 0.2, 0.5), score: 0.8 }], 200, id);
+  assert.deepEqual(t2.visible.map((t) => t.id), ['p1', 'p2']);
+});
+
+check('추적: 안 보인 사람은 trackKeepMs(2초)까지 남고 그 뒤 버린다', () => {
+  let n = 0;
+  const id = () => `p${++n}`;
+  const t1 = stepTracks([], [{ box: b(0.1, 0.1, 0.2, 0.5), score: 0.9 }], 0, id);
+  const gone = stepTracks(t1.tracks, [], 2000, id);
+  assert.deepEqual(gone.tracks.map((t) => t.id), ['p1']);
+  const back = stepTracks(gone.tracks, [{ box: b(0.11, 0.1, 0.2, 0.5), score: 0.9 }], 2000, id);
+  assert.deepEqual(back.visible.map((t) => t.id), ['p1']);
+  assert.deepEqual(stepTracks(t1.tracks, [], 2001, id).tracks, []);
+});
+
+check('추적: 두 사람이 엇갈려 한 상자가 둘과 겹치면 잇지 않는다(동의가 옮겨 가지 않게)', () => {
+  const prev: Track[] = [
+    { id: 'p1', box: b(0.3, 0.1, 0.2, 0.6), score: 0.9, lastSeenAt: 0 },
+    { id: 'p2', box: b(0.36, 0.1, 0.2, 0.6), score: 0.9, lastSeenAt: 0 },
+  ];
+  let n = 10;
+  const t = stepTracks(prev, [{ box: b(0.33, 0.1, 0.2, 0.6), score: 0.9 }], 200, () => `p${++n}`);
+  assert.deepEqual(t.visible.map((x) => x.id), ['p11']);
+  assert.equal(matchBoxes([b(0, 0, 10, 10)], [b(1, 0, 10, 10), b(2, 0, 10, 10)], 0.3).size, 0);
+});
+
+check('응시 대상: 짧은 변 × 0.18 원 안 ∧ 흰 틀과 겹침, 그중 가장 가운데', () => {
+  // 640×360: 반지름 = 360 × 0.18 = 64.8px. 중심 (320,180).
+  const full = b(0, 0, 1, 1);
+  const at = (cxPx: number, id: string): Track => ({ id, box: b((cxPx - 32) / 640, 0.3, 64 / 640, 0.4), score: 0.9, lastSeenAt: 0 });
+  assert.equal(pickGazeTarget([at(320 + 64, 'a')], full, 640, 360, 0.18)?.id, 'a');
+  assert.equal(pickGazeTarget([at(320 + 66, 'a')], full, 640, 360, 0.18), null);
+  assert.equal(pickGazeTarget([at(360, 'a'), at(330, 'b')], full, 640, 360, 0.18)?.id, 'b');
+  // 흰 틀이 왼쪽 절반이면 가운데 사람(x 288..352)과 겹치므로 대상, 오른쪽 끝 0.1이면 안 겹침
+  assert.equal(pickGazeTarget([at(320, 'a')], b(0, 0, 0.5, 1), 640, 360, 0.18)?.id, 'a');
+  assert.equal(pickGazeTarget([at(320, 'a')], b(0.9, 0, 0.1, 1), 640, 360, 0.18), null);
+});
+
+check('응시 유지: 3초 이어지면 후보, 400ms 안의 빈틈은 이어 보고 다른 사람이면 처음부터', () => {
+  const tr = (id: string): Track => ({ id, box: b(0.4, 0.2, 0.2, 0.6), score: 0.9, lastSeenAt: 0 });
+  let g = stepGaze(null, tr('p1'), 0, 400);
+  g = stepGaze(g, null, 400, 400); // 빈틈 400ms: 이어 봄
+  assert.equal(g?.since, 0);
+  g = stepGaze(g, tr('p1'), 2999, 400);
+  assert.equal(gazeHeld(g, 2999, 3000), false);
+  assert.equal(gazeHeld(g, 3000, 3000), true);
+  g = stepGaze(g, tr('p1'), 3000, 400);
+  assert.equal(stepGaze(g, null, 3400, 400), g);
+  assert.equal(stepGaze(g, null, 3401, 400), null);
+  const other = stepGaze(g, tr('p2'), 3100, 400);
+  assert.equal(other?.trackId, 'p2');
+  assert.equal(other?.since, 3100);
+});
+
+check('코디 스캔 조각 주인: 살아 있는 동의(만료 전 ∧ 2초 안에 봄) 중 가장 가운데', () => {
+  const c = (trackId: string, cx: number, lastSeenAt: number, expiresAt: number) => ({ trackId, box: b(cx - 0.1, 0.2, 0.2, 0.6), grantedAt: 0, lastSeenAt, expiresAt });
+  const consents = { a: c('a', 0.3, 1000, 60_000), z: c('z', 0.52, 1000, 60_000), old: c('old', 0.5, 0, 60_000), exp: c('exp', 0.5, 2900, 3000) };
+  const live = selectActiveConsents({ consents }, 3000);
+  assert.deepEqual(live.map((x) => x.trackId).sort(), ['a', 'z']);
+  assert.equal(pickConsent(live, 640, 360)?.trackId, 'z');
+  assert.equal(pickConsent([], 640, 360), null);
+});
+
+check('코디 스캔 분기: 동의한 사람 얼굴 가림(2b), 동의 안 한 사람은 겹침 50% 이상이어도 몸 전체 가림(R4 아님)', () => {
+  // 조각 = 동의한 사람 박스(100,100,100,100). 다른 사람(150,90,100,200)은 조각과 50×100 = 50% 겹침.
+  // 얼굴 중심 (130,115)은 동의한 사람 머리 영역(x 90..210, y 100..140) 안, 다른 사람 머리 영역(x 140..260) 밖.
+  const me = person(100, 100, 100, 100);
+  const other = person(150, 90, 100, 200);
+  const r = decideBranch(crop, [me, other], [face(120, 105, 20, 20)], VISION_CONFIG, new Set([other]));
+  assert.equal(r.branch, '2b');
+  assert.deepEqual(r.masks.map((m) => m.kind).sort(), ['body', 'face']);
+  assert.deepEqual(r.masks.find((m) => m.kind === 'body')?.rect, other.box);
+  assert.equal(r.detections.find((d) => d.kind === 'person' && d.overlap === 0.5)?.masked, 'body');
+  // 같은 사람이 동의 안 한 사람 집합에 없으면 R4(겹침 50%, 얼굴 없음)로 보류된다
+  assert.equal(decideBranch(crop, [me, other], [face(120, 105, 20, 20)]).branch, '2d');
+});
+
+check('코디 스캔 분기: 동의한 사람 얼굴이 없으면 그대로 R4 보류, 얼굴 대응 불확실도 보류', () => {
+  const me = person(100, 100, 100, 100);
+  const other = person(120, 90, 120, 200);
+  assert.equal(decideBranch(crop, [me, other], [], VISION_CONFIG, new Set([other])).branch, '2d');
+  // 얼굴 중심 (140,115)이 두 사람 머리 영역(x 90..210·108..252, y 100..140·90..170) 모두에 든다
+  const r = decideBranch(crop, [me, other], [face(130, 105, 20, 20)], VISION_CONFIG, new Set([other]));
+  assert.equal(r.branch, '2d');
+  assert.equal(r.reason, '얼굴-사람 대응 불확실');
+});
+
+check('게이트: 코디 스캔(outfit)은 켜면 person 장면에서만 포착 대상(maxSide 512), food면 skip', () => {
+  const { st } = readyStore();
+  st.getState().setPluginEnabled('outfit', true);
+  st.getState().setPluginRuntime('outfit', { status: 'ready', runtimeId: 'rt-o', runtimePolicy: { connect: 'network', manifestVersion: 1 }, gateOpen: true });
+  const person = planCapture(st.getState(), 'person', 0);
+  assert.deepEqual(person.capture.map((c) => [c.pluginId, c.kind, c.maxSide, c.raw]), [['outfit', 'outfit', 512, false]]);
+  assert.ok(planCapture(st.getState(), 'food', 0).undeclared.includes('outfit'));
 });
 
 console.log(`\n${passed}개 통과`);

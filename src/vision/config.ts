@@ -90,6 +90,16 @@ export const VISION_CONFIG = {
   /** 2c(머리 영역) 안에서 모양으로 가린다. V2·V3에서 사각형보다 덜 가린 사례가 나오면 false(사각형 전체 = 사각형 ∪ Selfie). */
   selfieShapeHead: true,
 
+  // ── 코디 스캔 응시 동의(docs/designs/outfit-pipelines.md). 3초·원 반지름·동의 수명은 core 상수(GAZE_*·CONSENT_*) ──
+  /** 틱 사이 사람 상자를 같은 사람으로 잇는 최소 IoU. */
+  trackIouMin: 0.3,
+  /** 안 보인 추적을 남겨 두는 시간(ms). CONSENT_LOST_MS와 같게 두어 짧게 가려진 사람의 동의가 이어지게 한다. */
+  trackKeepMs: 2000,
+  /** 응시 대상이 이만큼 안 비면 3초를 이어 센다(ms). 검출이 한두 틱 빠지는 정도. */
+  gazeGraceMs: 400,
+  /** 포착 프레임 재검출에서 동의 상자와 같은 사람으로 보는 최소 IoU. */
+  consentMatchIouMin: 0.3,
+
   // ── 비교 모드(F17) ──
   /** raw JPEG 품질. 해상도는 원본 그대로(05 결정 30). */
   rawQuality: 0.8,
