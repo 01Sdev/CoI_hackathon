@@ -2,11 +2,11 @@
 // 좌표 변환·시간 창·문구처럼 경계가 있는 함수만 확인한다(AGENTS.md "테스트").
 
 import assert from 'node:assert/strict';
-import { CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE } from '../src/core/constants';
+import { APP_NAME, CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE } from '../src/core/constants';
 import type { Box } from '../src/core/types';
 import { entryMeta, frameText, usageMeta, wallClock } from '../src/proof/format';
 import { coverBox, coverPointToSource, cornerPoint, dragCornerFromScreen, faceWindowRemaining, nudgeCorner } from '../src/ui/geometry';
-import { appResultLine, formatBytes, josa } from '../src/ui/labels';
+import { appResultLine, deliverySignalLines, formatBytes, josa } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 
 let passed = 0;
@@ -164,6 +164,14 @@ check('wallClock: performance 시각을 같은 순간의 벽시계로 바꾼다'
 check('appResultLine: /hud 앱 결과 줄은 앱 이름으로 시작하고, 고정표면 꼬리를 붙인다', () => {
   assert.equal(appResultLine('칼로리', '피자 약 285kcal', false), '칼로리 · 피자 약 285kcal');
   assert.equal(appResultLine('칼로리', '피자 약 285kcal', true), '칼로리 · 피자 약 285kcal · 고정표');
+});
+
+check('deliverySignalLines: 첫 줄은 "{APP_NAME} → 앱 이름", 둘째 줄은 사진·바이트·가림·시간', () => {
+  const d = { branch: '2b', bytes: 19_046, facesMasked: 2 } as const;
+  assert.deepEqual(deliverySignalLines('칼로리', d, '방금'), [`${APP_NAME} → 칼로리`, '사진 1장 · 18.6KB · 얼굴 2개 가림 · 방금']);
+  assert.equal(deliverySignalLines('칼로리', { ...d, branch: '2a', facesMasked: 0 }, '방금')[1], '사진 1장 · 18.6KB · 가릴 사람 없음 · 방금');
+  assert.equal(deliverySignalLines('칼로리', { ...d, branch: 'raw', facesMasked: 0 }, '3초 전')[1], '원본 전체 · 18.6KB · 비교 모드라 가리지 않음 · 3초 전');
+  assert.ok(!deliverySignalLines('장면 기록', d, '방금')[0].endsWith('앱'), '이름 뒤에 "앱"을 붙이지 않는다');
 });
 
 console.log(`\n${passed}개 통과`);
