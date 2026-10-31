@@ -41,7 +41,7 @@ flowchart LR
   BR -- "Delivery · LogEntry · Counter" --> ST
   PH -- "Plugin.status · LogEntry(violation) · result" --> ST
   ST --> UI
-  UI -- "액션: applyManifest · setPluginEnabled · selectInput, compareMode 쓰기" --> ST
+  UI -- "액션: applyManifest · setPluginEnabled · selectInput · setCaptureFrame, compareMode 쓰기" --> ST
   UI -- "BroadcastChannel" --> OUT
 ```
 
@@ -51,7 +51,7 @@ flowchart LR
 | 가리기 전 조각 | **A만**, 분기 직후 해제(ERD §1) | 같음 |
 | 가린 조각 Blob | A가 만들고 → B 호스트가 전달 → 플러그인·`/api/calorie`. C는 **같은 Blob**으로 썸네일 | — |
 | Delivery·Counter 숫자 | A가 계산, C는 표시만(재계산 금지) | 플러그인 |
-| 비교 모드(F17) `raw` Blob = 원본 전체 | **G1의 유일한 예외.** A → 칼로리 플러그인 1개(ERD), C 썸네일. 켜져 있는 동안 칼로리 iframe은 `connect-src 'none'`으로 다시 만들어져 원본이 브라우저 밖으로 나가지 않는다(§4 비교 모드, 팀원 D1). 끄는 즉시 썸네일 해제 | 칼로리 외 플러그인, `/api/calorie`를 포함한 모든 서버 |
+| 비교 모드(F17) `raw` Blob = 원본 중 전송 범위 프레임(F24) 안 전체 | **G1의 유일한 예외.** A → 칼로리 플러그인 1개(ERD), C 썸네일. 켜져 있는 동안 칼로리 iframe은 `connect-src 'none'`으로 다시 만들어져 원본이 브라우저 밖으로 나가지 않는다(§4 비교 모드, 팀원 D1). 끄는 즉시 썸네일 해제 | 칼로리 외 플러그인, `/api/calorie`를 포함한 모든 서버 |
 
 - 브라우저가 **강제**하는 경계는 호스트 ↔ 플러그인 하나다(origin `null` iframe + Worker + CSP). A·B 호스트·C는 같은 origin이므로 A/C 경계는 아래 **코드 규칙**으로 지킨다.
 
@@ -119,7 +119,7 @@ type PluginToHost =
 | IF-03 | `ready` | Worker SDK → 호스트 | Worker가 `onInit`까지 끝낸 뒤 1번. 호스트가 `Plugin.status = ready` |
 | IF-04 | `ack` | SDK → 호스트 | `delivery`를 받으면 SDK가 받은 Blob으로 SHA-256을 계산해 응답한다. 호스트는 기대 해시를 메시지에 싣지 않고 자기 쪽에만 둔 채 비교한다. 해시를 함께 보내면 나쁜 플러그인이 계산 없이 그 값을 돌려줘도 일치로 나오기 때문이다. 그래도 `ack`는 플러그인이 보낸 값이라 독립된 수신 증명이 아니며, 협조하는 참조 플러그인의 전송 무결성 점검으로만 쓴다. Worker는 `crypto.subtle`을 먼저 쓰고, 없으면 순수 JS로 계산한다. iPhone Safari에서 순수 JS 경로를 강제로 탄 계약 재현(V10)은 match 2ms, 한 바이트 변조 시 mismatch 2ms, 응답 억제 시 timeout 2,001ms였다(제품 SDK 통합은 미검증). iPhone Safari 실측(S7)에서 HTTPS의 origin `null` Worker는 `isSecureContext = true`, `crypto.subtle`이 있었고 SHA-256 값도 표준과 같았다. 로컬 HTTP에서는 `crypto.subtle`이 없었다. 팀원 D4의 Chrome 관측("Worker에 `crypto.subtle` 없음")도 같은 이유로 보인다(미확인). 그래서 순수 JS 경로는 로컬 개발용으로 남기고, 강제로 그 경로를 타게 하는 시험을 따로 한 번 돌린다. B가 `Delivery.ackSha256`과 `Delivery.ackStatus: 'pending' | 'match' | 'mismatch' | 'timeout'`을 기록한다(보낼 때 `pending`, 2초 안에 `ack`가 없으면 `timeout`, 팀원 SSRD 제안). `mismatch`는 LogEntry `violation`(reason "해시 불일치", `enforcedBy: host`). `timeout`인 Delivery도 지우지 않고 C가 "수신 미확인"으로 표시한다(M은 보낸 시점 기준으로 이미 센다. 덜 세는 쪽보다 안전하다). 해시는 전송 무결성일 뿐 보장 근거가 아니다 |
 | IF-05 | `result` | SDK `famelet.result()` → 호스트 | `text`는 C가 `textContent`로 결과 줄에 표시(200자까지) |
-| IF-06 | `violation` | SDK → 부트스트랩 → 호스트 | 플러그인이 `reportViolation()`으로 보낸 **자기 보고**다. B가 LogEntry(`kind: violation`, `reason` = `attempt` + `target`, `enforcedBy: plugin-report`)로 기록하고 UI는 "플러그인 내부 보고"로 표기 → HUD 빨강. 변조 4종 = 4줄. `fetch`·`script`이면 호스트가 `target`의 origin을 현재 매니페스트 `network`와 대조해 "허용 목록 밖" 또는 "허용 목록 안인데 실패"를 덧붙인다. 앱이 아는 정책 판단과 플러그인이 본 요청 실패를 구분해 적기 위해서다. CSP 위반 이벤트는 두 브라우저 모두에서 관측되지 않았다. 팀원 D6(Chrome)에서는 iframe 부트스트랩의 `securitypolicyviolation` 리스너에 Worker의 CSP 위반이 잡히지 않았다. iPhone Safari 실측(S4)에서는 Worker 안에 리스너를 먼저 설치해도 2초 동안 이벤트가 0건이었다(차단 자체는 됨). 그래서 플러그인이 받은 `TypeError`만으로 "브라우저가 CSP 차단을 확인했다"고 적지 않는다. 차단이 실제로 일어났다는 증거는 네트워크 탭의 "서버 도달 0건"이다. 호스트가 직접 감지하는 것은 둘뿐이다(`enforcedBy: host`): iframe 재로드(메시지 없이 감지 → 즉시 종료, reason "iframe 재로드")와 해시 불일치 |
+| IF-06 | `violation` | SDK → 부트스트랩 → 호스트 | 플러그인이 `reportViolation()`으로 보낸 **자기 보고**다. B가 LogEntry(`kind: violation`, `reason` = `attempt` + `target`, `enforcedBy: plugin-report`)로 기록하고 UI는 "플러그인 내부 보고"로 표기 → HUD 빨강. 변조 4종 = 4줄. `fetch`·`script`이면 호스트가 `target`의 origin을 그 iframe의 실제 `connect-src` 목록(`network` ∩ `HOST_ALLOWED_ORIGINS`, 비교 모드 칼로리는 빈 목록)과 대조해 "허용 목록 밖" 또는 "허용 목록 안인데 실패"를 덧붙인다(`network`에 있어도 호스트가 허용하지 않은 주소는 "밖"이다. `docs/designs/plugin-host.md` §2.3). 앱이 아는 정책 판단과 플러그인이 본 요청 실패를 구분해 적기 위해서다. CSP 위반 이벤트는 두 브라우저 모두에서 관측되지 않았다. 팀원 D6(Chrome)에서는 iframe 부트스트랩의 `securitypolicyviolation` 리스너에 Worker의 CSP 위반이 잡히지 않았다. iPhone Safari 실측(S4)에서는 Worker 안에 리스너를 먼저 설치해도 2초 동안 이벤트가 0건이었다(차단 자체는 됨). 그래서 플러그인이 받은 `TypeError`만으로 "브라우저가 CSP 차단을 확인했다"고 적지 않는다. 차단이 실제로 일어났다는 증거는 네트워크 탭의 "서버 도달 0건"이다. 호스트가 직접 감지하는 것은 둘뿐이다(`enforcedBy: host`): iframe 재로드(메시지 없이 감지 → 즉시 종료, reason "iframe 재로드")와 해시 불일치 |
 
 **transferable:** 쓰지 않는다 [제안]. Blob은 불변이라 같은 객체를 썸네일·`bytes`에 그대로 쓸 수 있다(ArrayBuffer transfer는 송신 측이 비어 로그용 사본이 따로 필요).
 
@@ -135,6 +135,34 @@ type PluginToHost =
 **스토어가 막는 것 (2026-10-31 추가, 사용자 승인):**
 - `setResult`는 그 플러그인에 실제로 보낸(`dispatched`) 전달의 **첫** 결과만 받는다. 없는 전달·`prepared` 전달·다른 플러그인·두 번째 결과·새 세션 전 전달의 결과는 버리고 `false`를 돌려준다. 늦게 온 옛 결과가 새 세션 화면에 뜨거나 `apiSends`가 부풀어 "전달 수 = API 요청 수" 대조가 어긋나는 것을 막는다.
 - `setPluginRuntime`에 `gateOpen: true`와 함께 `desired`(그 iframe을 만든 때의 `selectDesiredRuntime` 값)를 주면, 지금 값과 다를 때 게이트를 열지 않는다. B가 `ready` 처리 중에 대조와 쓰기 사이에 await를 끼워도 낡은 정책으로 게이트가 열리지 않게 하는 보험이다. B는 게이트를 열 때 `desired`를 넘긴다.
+
+**전송 범위 프레임 (F24·F24a, 2026-10-31 추가, 사용자 승인):**
+- **상태.** `Session.captureFrame = {x, y, w, h}`이고, 소스 프레임 기준 0\~1이다(`targetBox`와 같은 좌표). 기본값은 가운데 60%(0.2, 0.2, 0.6, 0.6) [제안]이다. C만 `setCaptureFrame(rect)`로 쓴다. 스토어가 0\~1 밖을 잘라 맞추고 한 변을 0.1 [제안] 이상으로 맞춘다. A는 포착을 시작할 때 한 번 읽고, 그 포착이 끝날 때까지 그 값을 쓴다.
+- **처리 순서(A `vision/`).**
+  1. 0단계 판정은 지금처럼 전체 화면에서 한다.
+  2. 포착 프레임 전체에서 대상과 사람을 다시 찾는다(FR-013).
+  3. 대상 박스를 10% 넓힌 뒤 프레임(원본 px)과의 교집합을 `cropRect`로 삼는다.
+  4. 교집합이 비면 `hold`(branch `null`, reason "프레임 밖")로 끝내고 쿨다운을 시작한다. "대상 재검출 실패"와 같은 취급이다.
+  5. `cropRect`만 캔버스에 그려 2단계(가림·분기)를 한다. 사람 박스는 전체 프레임 좌표에서 잘린 조각 좌표로 옮겨 O·P를 잰다.
+  6. `maxSide` 축소, 인코딩, 출구 재검사를 거쳐 중개기로 넘긴다.
+- 프레임 밖 픽셀은 가림 캔버스에도 그리지 않는다. 기존 인물 가림(2a\~2d)은 프레임과 별개로 그대로 동작한다.
+- **기록.** `Delivery.frameRect`와 LogEntry `frameRect`에 그 포착에 쓴 프레임을 원본 px로 남긴다. "프레임 밖" hold에도 남긴다. 불변식은 `cropRect ⊆ frameRect`다. `areaRatio`는 지금처럼 `cropRect` 면적 / 원본 프레임 면적이다.
+- **표시(C).** 미리보기 위에 흰색 틀을 그린다(소스 좌표 → 화면 좌표 변환은 `targetBox`와 같다). 꼭짓점 끌기는 터치 이벤트로 받고, 틀 위에서는 페이지 스크롤·확대를 막는다(`touch-action: none`). 플러그인 결과(HUD 카드 등)는 틀과 상관없는 자리에 둔다. `/hud`에는 틀만 그린다.
+- **비교 모드(F17, 사용자 결정 2026-10-31).** raw 전달에도 프레임을 적용한다. raw 조각은 원본 중 프레임 안 전체이고(`cropRect = frameRect`), 가리지 않는다. 프레임은 늘 비어 있지 않으므로 raw에는 "프레임 밖" hold가 없다. 프레임 밖 픽셀은 비교 모드에서도 어떤 플러그인에도 가지 않는다.
+- **F24b 공간 고정 프레임**은 명세만 둔다. 웹 데모 계약에는 없다.
+
+**사용 기록 (F25, 2026-10-31 추가, 사용자 승인. 우선순위 [제안] P1):**
+- 스토어가 `markDelivery`(`dispatched`)마다 `Counter.usage`에 이미지 없는 줄 `{at, pluginId, deliveryId, objectLabel, bytes, frameW, frameH}`를 더한다. 이 줄은 증가 전용이고, 화면 로그 100건과 따로 세션 동안 남는다.
+- 대표 조각은 `usageSamples[pluginId]`에 최근 3장 [제안]만 둔다. 각 항목은 `{pluginId, deliveryId, at, thumbnailRef}`이다. `thumbnailRef`는 그 Delivery의 썸네일 URL을 같이 쓴다. 로그 100건에서 밀려나도 대표 조각에 남아 있으면 해제하지 않고, 대표 조각에서 빠질 때 그 Delivery가 이미 밀려났으면 그때 해제한다.
+- branch `raw`(비교 모드)는 남기지 않는다. 남기는 것은 이미 가린 조각(2b·2c)이나 가릴 필요가 없던 조각(2a)뿐이다.
+- 새 세션 시작과 새로고침 때 둘 다 비운다(영구 저장 없음).
+- C는 폰 하단 시트에 "사용 기록"을 두고 "OO 플러그인에서 사용됨 · 시각 · 대상 · 바이트 · 프레임 크기"로 보여 준다. 플러그인 이름은 `textContent`로만 넣는다.
+
+**core 변경 목록(F24·F25).** 이 명세 PR에는 코드가 없다. 구현 PR에서 시험과 함께 넣는다(영향: A·C).
+- `Session.captureFrame`, `setCaptureFrame`
+- `Delivery.frameRect`, `LogEntry.frameRect`
+- `Counter.usage`, `usageSamples`
+- `src/core/frame.ts`: `clampFrame`, `frameToPx`, `intersectBox`(A의 자르기와 C의 끌기가 같은 좌표 함수를 쓴다)
 
 ### 플러그인 SDK (Worker 안의 전역 `famelet`, 2026-10-31 추가)
 
@@ -179,7 +207,7 @@ type OutwardMessage = { type: 'outward'; apps: number; compareMode: boolean; at:
 | 항목 | 계약 |
 | --- | --- |
 | 요청 | `POST {apiBase}/api/calorie`, `Content-Type: image/jpeg`, 본문 = `delivery.blob` **그대로**(base64·multipart·재인코딩 금지 → `Delivery.bytes` = 네트워크 탭 요청 본문 크기, F6), 선택 헤더 `x-label: <objectLabel>`(COCO 영문 물체 라벨. 장면 분류 `food`를 넣지 않는다) |
-| 응답 200 | 본문 한 줄 `<음식> 약 <숫자>kcal`(예: `피자 약 285kcal`) 또는 `음식 아님`. `Content-Type: text/plain; charset=utf-8` [제안] |
+| 응답 200 | 본문 한 줄 `<음식> 약 <숫자>kcal`(예: `피자 약 285kcal`) 또는 `음식 아님`. `Content-Type: text/plain; charset=utf-8`(트랙 B 결정, `api/calorie.ts`). 모든 응답에 `Cache-Control: no-store` |
 | 받은 본문 확인 (P1) | 서버가 실제로 읽은 요청 본문의 바이트 수와 SHA-256(소문자 hex, ERD `Delivery.sha256`과 같은 표기)을 응답 헤더 `X-Famelet-Body-Bytes`, `X-Famelet-Body-SHA256`으로 돌려준다. 본문을 끝까지 읽은 응답(200·415·502)에만 붙인다. 이미지는 저장하지 않는다. 데모 5단계에서 "서버가 받은 바이트 = 로그 바이트"를 보여 주는 근거로 쓴다. 네트워크 탭의 `Content-Length`는 HTTP/2에서 생략될 수 있어 보조 값으로만 쓴다. 이 대조는 브라우저→`/api/calorie` 구간까지이며, 서버가 AI 공급자로 보내는 요청까지 같다는 뜻은 아니다 |
 | 형식 | Vercel 함수 `api/calorie.ts`, Web 형식 `export async function POST(req: Request)`와 `export function OPTIONS()`. 본문은 `await req.arrayBuffer()`로 그대로 읽는다(받은 바이트를 정확히 세기 위해) |
 | 판정 순서 | ① OPTIONS → 204. POST·OPTIONS가 아닌 메서드 → 405. ② 인스턴스 전역 고정 창으로 60초에 60건을 넘으면 429(서버 자체 제한에서만 429를 낸다). ③ `Content-Length`가 614,400B(600KiB)를 넘으면 읽기 전에 413. 읽은 바이트가 넘어도 413. ④ `Content-Type`이 `image/jpeg`가 아니거나, 0바이트이거나, 첫 3바이트가 `FF D8 FF`가 아니면 415. ⑤ 키가 없거나, 모델 호출이 실패(Anthropic의 400·401·429·5xx 포함)하거나, 시간 제한을 넘거나, 응답 처리가 실패하면 502. ⑥ 그 밖에는 200 |
@@ -391,6 +419,7 @@ sequenceDiagram
 | 전달 일시 정지 (F20) | 발표자 화면의 버튼이 `Session.paused = true`로 바꾼다. 게이트와 iframe은 그대로 두고, 보낼 수 있는지는 `selectCanSend`(`ready` ∧ 게이트 열림 ∧ 일시 정지 아님)가 판단한다. 일시 정지 중 포착은 하지 않는다 |
 | 새 세션 시작 (F20) | 전환 공통 절차를 모든 플러그인에 적용하고, 카운터를 0으로 되돌리고, `compareMode = false`로 시작한다 |
 | 대상 재검출 실패 | 포착한 프레임에서 대상(피자)을 다시 찾지 못하면 `hold`(branch 없음, reason "대상 재검출 실패")로 끝내고 쿨다운을 시작한다. 2d와 같은 취급이다 |
+| 프레임 밖 (F24) | 넓힌 대상 박스가 전송 범위 프레임과 겹치지 않으면 `hold`(branch 없음, reason "프레임 밖", `frameRect` 포함)로 끝내고 쿨다운을 시작한다. `sendDelivery` 호출도, Delivery도 없다. 쿨다운을 시작하므로 같은 플러그인에서 `60 / maxPerMinute`초에 1번만 남는다 |
 | **전환 공통 절차** | 매니페스트 적용, 비교 모드 켜기·끄기, 플러그인 켜기, 새 세션 시작은 모두 같은 순서를 따른다(입력 전환은 iframe을 다시 만들지 않고 A가 진행 중 포착만 버린다). B는 플러그인마다 `selectDesiredRuntime` 하나를 구독하고 최신 값만 처리한다. 스토어의 `prepareDelivery`는 `runtimeId`·`manifestVersion`이 지금 iframe과 다르거나, `raw`가 통신이 막힌 비교 모드 칼로리 iframe이 아니면 거부한다(`docs/designs/core-store.md` §2.2·§2.3). ① 전달 게이트를 닫는다. ② 진행 중인 포착·인코딩·해시를 버린다(시작 때의 `runtimeId`와 다르면 `sendDelivery`가 거부). ③ 옛 iframe·Worker를 종료한다. ④ 새 정책으로 iframe을 만든다(`runtimeId` 새로). ⑤ 새 `ready`가 오면 게이트를 연다. 새 `ready`가 3초 [제안] 안에 오지 않으면 그 플러그인은 `stopped`로 멈추고, **옛 권한으로 되돌아가지 않는다.** 사용자가 다시 켜야 풀린다. 이미 보낸 데이터를 회수하지는 못한다 |
 | 매니페스트 변경 (F11·F14) | C `applyManifest(pluginId, json)` → A `validateManifest(json, pluginId)` → 잘못된 JSON·범위 위반이면 기존 값을 유지하고 iframe은 그대로 둔다. 통과하면 `version+1` 후 전환 공통 절차. 같은 플러그인 적용은 하나씩 처리한다 |
 | 비교 모드 켜기·끄기 (F17) | [팀원 D1] 스위치는 데스크톱 모드 발표자 화면에만 두고, 플러그인 메시지로 켜는 경로는 없다. `Session.compareMode`는 새로고침하면 항상 `false`로 시작한다. 켜면 전환 공통 절차로 칼로리 iframe을 `connect-src 'none'`, `apiBase: null`로 다시 만들고, 새 `ready` 뒤에만 A가 `raw`(칼로리에만, 축소 여부 미정)를 보낸다. 플러그인은 원본을 받지만 서버로 보내지 않으므로 결과 줄은 고정표(`source: 'fallback'`)다. 입력은 팀원만 찍힌 녹화 영상을 쓴다. 끌 때도 전환 공통 절차로 원래 `network`의 iframe으로 돌아간다. "보호 중" 표시는 끄는 즉시 바뀌지만, 이미 보낸 `raw` 전달은 지우지 않으므로 M·`outwardApps`는 최근 10초 창이 지나면서 0이 된다. `raw` 썸네일은 끌 때 해제하고 숫자 기록은 남긴다 |
