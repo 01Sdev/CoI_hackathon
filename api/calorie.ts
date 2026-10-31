@@ -40,7 +40,7 @@ export const SYSTEM_PROMPT = `너는 사진 한 장에 담긴 음식의 열량�
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Expose-Headers': 'X-Famelet-Body-Bytes, X-Famelet-Body-SHA256, X-Famelet-Kcal-Clamped',
+  'Access-Control-Expose-Headers': 'X-Framelet-Body-Bytes, X-Framelet-Body-SHA256, X-Framelet-Kcal-Clamped',
 };
 
 /** 모델 호출 인자(02-SSRD "서버의 모델 호출" 표). 실측 스크립트(V5)도 이것을 그대로 쓴다. */
@@ -163,8 +163,8 @@ export function createCalorieHandler(deps: CalorieDeps = {}) {
     if (body.byteLength > MAX_BODY_BYTES) return text(413, 'payload too large');
     // 받은 본문 확인(P1): 끝까지 읽은 응답(200·415·502)에만 붙인다. 이미지는 어디에도 남기지 않는다.
     const received = {
-      'X-Famelet-Body-Bytes': String(body.byteLength),
-      'X-Famelet-Body-SHA256': createHash('sha256').update(body).digest('hex'),
+      'X-Framelet-Body-Bytes': String(body.byteLength),
+      'X-Framelet-Body-SHA256': createHash('sha256').update(body).digest('hex'),
     };
 
     // ④
@@ -202,7 +202,7 @@ export function createCalorieHandler(deps: CalorieDeps = {}) {
       console.error(`calorie 502 ${answer.reason}`);
       return text(502, 'upstream format', received);
     }
-    return text(200, answer.text, answer.clamped ? { ...received, 'X-Famelet-Kcal-Clamped': '1' } : received);
+    return text(200, answer.text, answer.clamped ? { ...received, 'X-Framelet-Kcal-Clamped': '1' } : received);
   };
 }
 

@@ -61,7 +61,7 @@ export function PresenterBar() {
       >
         {armed ? '한 번 더 누르면 새 세션' : '새 세션 시작'}
       </button>
-      <button type="button" className="fm-btn fm-btn--sm fm-glass" onClick={() => window.open('/outward', 'famelet-outward', 'popup')}>
+      <button type="button" className="fm-btn fm-btn--sm fm-glass" onClick={() => window.open('/outward', 'framelet-outward', 'popup')}>
         바깥 표시 열기
       </button>
       <span className="fm-readout fm-presenter__meta">

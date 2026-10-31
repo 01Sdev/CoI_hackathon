@@ -6,6 +6,8 @@
 // 브라우저가 강제하는 경계는 아니다(CSP connect-src는 V15 iPhone 확인 뒤, 2번). 플러그인 iframe·Worker는 자기 전역을 쓰므로
 // 이 가드와 상관없다.
 
+import { APP_NAME } from '../core/constants';
+
 /** 같은 origin, blob:, data:만 허용한다. 주소를 해석하지 못하면 막는다. */
 export function isAllowedHostRequest(url: string, origin: string): boolean {
   let u: URL;
@@ -52,7 +54,7 @@ export function installHostRequestGuard(w: GuardTarget, warn: (...args: unknown[
     const key = `${kind}|${target}`;
     if (!warned.has(key)) {
       warned.add(key);
-      warn('[famelet] 호스트 외부 요청을 막음', kind, target);
+      warn(`[${APP_NAME}] 호스트 외부 요청을 막음`, kind, target);
     }
     return new TypeError(`호스트 외부 요청 차단: ${target}`);
   };

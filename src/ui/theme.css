@@ -1,5 +1,5 @@
 /*
- * famelet 디자인 토큰. 근거: docs/designs/design-system.md (팀 시안 "LensGate OS" Dark/Light를 따르고 다듬은 것).
+ * framelet 디자인 토큰. 근거: docs/designs/design-system.md (팀 시안 "LensGate OS" Dark/Light를 따르고 다듬은 것).
  * 테마는 <html data-theme="dark|light">. 기본은 dark(시안: 어두운 실내·야간·기본값). /hud는 항상 dark + 유리 없음.
  * 색은 의미에만 쓴다: safe = 아무도 넘어가지 않음, exposed = 비교 모드·노출, blocked = 차단, hold = 보류(색 없음).
  * lens(파랑)는 의미가 없는 유일한 색이다: 브랜드 점, 데이터 선, 로딩 스캔, 키보드 포커스.

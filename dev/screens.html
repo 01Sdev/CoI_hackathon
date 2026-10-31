@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>famelet 화면별 배치도</title>
+    <title>framelet 화면별 배치도</title>
     <!-- 화면 단위 배치도. 근거: PRD "HUD·화면 요구사항", docs/designs/design-system.md §6·§7. 개발 서버 전용(프로덕션 빌드 제외) -->
     <style>
       * { box-sizing: border-box; }
@@ -69,7 +69,7 @@
     </style>
   </head>
   <body>
-    <h1>famelet 화면별 배치도</h1>
+    <h1>framelet 화면별 배치도</h1>
     <p class="lead">PRD의 네 가지 화면(휴대폰·데스크톱·글래스 /hud·바깥 표시 /outward)과 시작·로딩·실패 상태입니다. HUD 요소는 장면·입력·대상 위치·카운터·결과 다섯 개만 두고, 로그는 휴대폰 하단 시트와 데스크톱 오른쪽 탭으로 보냅니다. 사람에게는 박스를 그리지 않습니다. 시연 음식은 피자입니다.</p>
     <div id="app"></div>
 
@@ -88,7 +88,7 @@
         `<div class="fm-orb fm-glass fm-glass--panel" data-tone="${tone}" style="--orb:${size}px;--fm-window:${win}">${n}</div>`;
       const top = (input = '후면 카메라', inputTone) =>
         `<div class="abs" style="left:20px;right:20px;top:58px;display:flex;justify-content:space-between">
-           <span class="fm-capsule fm-glass fm-glass--panel brand"><span class="brand-dot"></span>famelet</span>
+           <span class="fm-capsule fm-glass fm-glass--panel brand"><span class="brand-dot"></span>framelet</span>
            ${capsule(input, { tone: inputTone })}
          </div>`;
       const scene = (y = 118, text = '음식 앞', score = '0.94', extra = ' · 화면 속 1명') =>
@@ -117,7 +117,7 @@
           `<div class="cam" style="background:var(--fm-bg)"></div><div class="lines fm-grid" style="opacity:.6"></div>
            <div class="abs stack" style="left:28px;right:28px;top:250px;align-items:flex-start;gap:16px">
              <span class="fm-kicker">first-person vision broker</span>
-             <div class="brand" style="font-size:44px"><span class="brand-dot" style="width:12px;height:12px"></span>famelet</div>
+             <div class="brand" style="font-size:44px"><span class="brand-dot" style="width:12px;height:12px"></span>framelet</div>
              <div style="font-size:19px;line-height:1.55;font-weight:500">앱에는 필요한 조각 한 장만.<br>찍힌 사람의 얼굴은 가려서.<br>넘어간 것은 전부 로그로.</div>
            </div>
            <div class="abs stack" style="left:24px;right:24px;bottom:56px;align-items:stretch">
@@ -183,7 +183,7 @@
            ${compare ? '<div class="fm-band abs" style="left:0;right:0;top:0;z-index:2">비교 모드 · 원본 전체가 칼로리에 갑니다 · 통신은 막혀 있음</div>' : ''}
            <div class="abs" style="left:126px;top:85px;width:600px;height:600px;border-radius:24px;outline:1px dashed var(--fm-hairline)"></div>
            <div class="abs" style="left:20px;right:20px;top:${compare ? 52 : 20}px;display:flex;justify-content:space-between">
-             <span class="fm-capsule fm-glass fm-glass--panel brand"><span class="brand-dot"></span>famelet</span>${capsule(compare ? '녹화 영상' : '웹캠')}</div>
+             <span class="fm-capsule fm-glass fm-glass--panel brand"><span class="brand-dot"></span>framelet</span>${capsule(compare ? '녹화 영상' : '웹캠')}</div>
            ${scene(110)}${reticle('27%', '31%', '44%', '15%')}
            ${compare ? hudBottom('2', 'exposed', '앱에 반영된 사람 2명 · 노출', '피자 약 285kcal · 고정표', 470, 0.7) : hudBottom('0', 'safe', '앱에 반영된 사람 0명 · 보호됨', '피자 약 285kcal', 470)}</div>`;
       const right = (tab, body) =>
@@ -269,7 +269,7 @@
       // ── 바깥 표시(/outward) ──
       const outward = (n, tone, sub, stale = false) =>
         `<div class="abs stack" style="inset:0;justify-content:center;gap:22px;${stale ? 'opacity:.55' : ''}">
-           <span class="fm-kicker" style="font-size:22px">${stale ? 'connection lost' : 'famelet · outward'}</span>
+           <span class="fm-kicker" style="font-size:22px">${stale ? 'connection lost' : 'framelet · outward'}</span>
            <div style="font-size:64px;font-weight:600;letter-spacing:-0.02em">지금 당신의 얼굴을 본 앱</div>
            <div class="fm-num" style="font-size:300px;line-height:.9;font-weight:300;color:${stale ? 'var(--fm-sub)' : `var(--fm-${tone})`}">${stale ? '–' : n}<span style="font-size:90px">${stale ? '' : '개'}</span></div>
            <div class="fm-readout" style="font-size:28px">${sub}</div></div>`;
