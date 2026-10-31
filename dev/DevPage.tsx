@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { selectThroughput } from '../src/core/selectors';
+import { selectFaceM, selectOutwardApps, selectThroughput } from '../src/core/selectors';
 import { lensStore, useLensStore } from '../src/core/store';
 import type { InputKind } from '../src/core/types';
 import { getVideoUrl, setVideoUrl } from '../src/input/adapter';
@@ -29,12 +29,15 @@ export function DevPage() {
       <section>
         <Controls />
         <Preview />
+        <Presenter />
       </section>
       <section>
         <ModelStatus />
         <LiveObservation />
         <SceneDecisions />
         <Throughput />
+        <Plugins />
+        <Logs />
       </section>
     </main>
   );
@@ -149,7 +152,7 @@ function Throughput() {
     <div style={box}>
       <b>처리량(직전 60초)</b>
       <div style={mono}>
-        {`0단계 ${t.stage0Runs} · 얼굴 ${t.faceDetectRuns} · 소스 프레임 ${t.sourceFrames} · 전달 ${t.deliveries} · 보류 ${t.holds}\n비율 ${n(t.ratio, 3)}\n0단계 실측 ${n(st.fps)}fps · 추론 평균 ${n(st.meanInferMs)}ms · p95 ${n(st.p95InferMs)}ms`}
+        {`0단계 ${t.stage0Runs} · 얼굴 ${t.faceDetectRuns} · 소스 프레임 ${t.sourceFrames} · 전달 ${t.deliveries} · 보류 ${t.holds}\n비율 ${n(t.ratio, 3)}\n0단계 실측 ${n(st.fps)}fps · 추론 평균 ${n(st.meanInferMs)}ms · p95 ${n(st.p95InferMs)}ms\n첫 판정 ${n(st.firstInferenceAt, 0)}ms(페이지 시작부터)`}
       </div>
     </div>
   );
@@ -158,4 +161,86 @@ function Throughput() {
 export function fmtBox(b: { x: number; y: number; w: number; h: number }): string {
   const f = (n: number) => n.toFixed(2);
   return `[${f(b.x)}, ${f(b.y)}, ${f(b.w)}, ${f(b.h)}]`;
+}
+
+const CALORIE_BASE = { purpose: '음식 칼로리 추정', scenes: ['food'], region: 'target', quality: 0.8, maxPerMinute: 6, network: ['$ORIGIN'] };
+
+function Presenter() {
+  const { compareMode, paused } = useLensStore(useShallow((s) => ({ compareMode: s.session.compareMode, paused: s.session.paused })));
+  const m = useLensStore((s) => selectFaceM(s));
+  const k = useLensStore((s) => selectOutwardApps(s));
+  const [msg, setMsg] = useState('');
+  const apply = (maxSide: number, maxPerMinute = 6) => {
+    const r = lensStore.getState().applyManifest('calorie', JSON.stringify({ ...CALORIE_BASE, maxSide, maxPerMinute }));
+    setMsg(r.ok ? `calorie maxSide ${maxSide}, maxPerMinute ${maxPerMinute} 적용` : r.errors.join(', '));
+  };
+  return (
+    <div style={{ ...box, marginTop: 8 }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button onClick={() => lensStore.getState().setCompareMode(!compareMode)}>비교 모드 {compareMode ? '끄기' : '켜기'}</button>
+        <button onClick={() => lensStore.getState().setPaused(!paused)}>{paused ? '전달 재개' : '전달 일시 정지'}</button>
+        <button onClick={() => lensStore.getState().startNewSession()}>새 세션</button>
+        <button onClick={() => apply(256)}>maxSide 256</button>
+        <button onClick={() => apply(64)}>maxSide 64</button>
+        <button onClick={() => apply(256, 30)}>maxPerMinute 30</button>
+      </div>
+      <div style={mono}>{`비교 모드 ${compareMode ? '켜짐' : '꺼짐'} · 일시 정지 ${paused ? '예' : '아니오'} · M ${m} · K ${k}${msg ? `\n${msg}` : ''}`}</div>
+    </div>
+  );
+}
+
+function Plugins() {
+  const rows = useLensStore(
+    useShallow((s) =>
+      s.pluginOrder.map((id) => {
+        const p = s.plugins[id];
+        return p ? `${id}|${p.enabled}|${p.status}|${p.gateOpen}|${p.busy}|${Math.round(p.cooldownUntil)}|${p.manifest.version}|${p.runtimePolicy?.manifestVersion ?? '-'}|${p.runtimePolicy?.connect ?? '-'}|${p.manifest.maxSide}` : id;
+      }),
+    ),
+  );
+  return (
+    <div style={box}>
+      <b>플러그인(목 호스트)</b>
+      <div style={mono}>
+        {rows.map((r) => {
+          const [id, enabled, status, gate, busy, cd, ver, rver, connect, maxSide] = r.split('|');
+          return (
+            <div key={id}>
+              <label>
+                <input type="checkbox" checked={enabled === 'true'} onChange={(e) => lensStore.getState().setPluginEnabled(id as string, e.target.checked)} /> {id}
+              </label>
+              {` ${status} gate=${gate} busy=${busy} cooldownUntil=${cd} v${ver}/iframe v${rver} ${connect} maxSide=${maxSide}`}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Logs() {
+  const logs = useLensStore(useShallow((s) => s.logs.slice(-12).reverse()));
+  const deliveries = useLensStore((s) => s.deliveries);
+  const detections = useLensStore((s) => s.detections);
+  return (
+    <div style={box}>
+      <b>로그(최근 12)</b>
+      {logs.length === 0 && <div style={mono}>없음</div>}
+      {logs.map((l) => {
+        const d = l.deliveryId ? deliveries[l.deliveryId] : undefined;
+        const dets = detections[l.id] ?? [];
+        return (
+          <div key={l.id} data-log-kind={l.kind} data-branch={l.branch ?? ''} style={{ display: 'flex', gap: 8, borderTop: '1px solid #222', padding: '4px 0' }}>
+            {d?.thumbnailRef ? <img src={d.thumbnailRef} alt="" style={{ width: 72, height: 72, objectFit: 'contain', background: '#000' }} /> : <div style={{ width: 72 }} />}
+            <div style={mono}>
+              {`${l.kind} ${l.pluginId} ${l.branch ?? '-'} ${l.reason}`}
+              {d &&
+                `\n${d.objectLabel} ${d.width}×${d.height} ${d.bytes}B 비율 ${d.areaRatio.toFixed(3)} 가림 ${d.facesMasked} 재검사 ${d.faceCheck.status === 'checked' ? d.faceCheck.detectedFaces : 'error'}\n${d.sendStatus} ack=${d.ackStatus} 위치=${d.location} crop=${fmtBox(d.cropRect)}`}
+              {dets.length > 0 && `\n검출: ${dets.map((x) => `${x.kind}${x.masked !== 'none' ? `(${x.masked})` : ''} ${x.score.toFixed(2)}${x.overlap !== null ? ` 겹침 ${x.overlap.toFixed(2)}` : ''}`).join(', ')}`}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }

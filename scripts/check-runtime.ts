@@ -5,6 +5,12 @@ import assert from 'node:assert/strict';
 import { VISION_CONFIG } from '../src/vision/config';
 import { area, clampToFrame, classifyScene, expand, fitLongSide, inCenterRegion, intersect, matchTarget, type Found } from '../src/vision/geometry';
 import { SCENE_NONE, stepScene, type SceneState } from '../src/vision/scene';
+import { cooldownUntil, decideBranch, headRegion } from '../src/vision/branch';
+import { planCapture } from '../src/vision/plan';
+import { sha256HexSync } from '../src/broker/sha256';
+import { createLensStore } from '../src/core/store';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -119,6 +125,164 @@ check('matchTarget: 같은 라벨 중 hint와 가장 많이 겹치는 것', () =
   assert.equal(m?.box.x, 110);
   assert.equal(matchTarget([f('donut', 100, 100, 50, 50)], 'pizza', hint, 0.3), null);
   assert.equal(matchTarget([f('pizza', 100, 100, 50, 50, 0.2)], 'pizza', hint, 0.3), null);
+});
+
+// ── 분기 결정표(§4.2) ──
+// 조각 100×100 at (100,100). 면적 10,000. 5% = 500, 50% = 5,000.
+const crop = { x: 100, y: 100, w: 100, h: 100 };
+const person = (x: number, y: number, w: number, h: number) => f('person', x, y, w, h);
+const face = (x: number, y: number, w: number, h: number) => f('face', x, y, w, h);
+
+check('R1 2a: 사람·얼굴 없음', () => {
+  const r = decideBranch(crop, [], []);
+  assert.equal(r.branch, '2a');
+  assert.equal(r.masks.length, 0);
+});
+
+check('겹침 5% 경계: 정확히 5%는 O 아님(2a), 넘으면 O(2c)', () => {
+  // 사람 박스가 조각과 100×5 = 500(5%) 겹침
+  assert.equal(decideBranch(crop, [person(100, 195, 100, 200)], []).branch, '2a');
+  // 100×5.1 = 510(5.1%)
+  assert.equal(decideBranch(crop, [person(100, 194.9, 100, 200)], []).branch, '2c');
+});
+
+check('R2 2b: 겹치는 사람 + 그 사람 얼굴 → 얼굴만 가림', () => {
+  const r = decideBranch(crop, [person(80, 80, 140, 300)], [face(130, 110, 30, 30)]);
+  assert.equal(r.branch, '2b');
+  assert.deepEqual(r.masks.map((m) => m.kind), ['face']);
+  // 얼굴 박스 +15%(변마다)
+  assert.deepEqual(r.masks[0]?.rect, { x: 125.5, y: 105.5, w: 39, h: 39 });
+});
+
+check('R3 2c: 겹침 5% 초과 50% 미만, 얼굴 없음 → 머리 영역 가림', () => {
+  const p = person(150, 50, 100, 200); // 조각과 50×100 = 5,000? → 50% 이상이면 2d이므로 폭을 줄인다
+  const p2 = person(160, 50, 100, 200); // 40×100 = 4,000(40%)
+  assert.equal(decideBranch(crop, [p], []).branch, '2d');
+  const r = decideBranch(crop, [p2], []);
+  assert.equal(r.branch, '2c');
+  assert.deepEqual(r.masks[0]?.rect, headRegion(p2.box));
+  assert.deepEqual(headRegion(p2.box), { x: 150, y: 50, w: 120, h: 80 });
+});
+
+check('R4 2d: 겹침 50% 이상, 얼굴 없음 → 보류, 아무것도 가리지 않음', () => {
+  const r = decideBranch(crop, [person(50, 50, 200, 400)], []);
+  assert.equal(r.branch, '2d');
+  assert.equal(r.masks.length, 0);
+  assert.ok(r.detections.every((d) => d.masked === 'none'));
+});
+
+check('R5 2b: 사람과 안 겹친 얼굴도 가린다', () => {
+  const r = decideBranch(crop, [], [face(120, 120, 20, 20)]);
+  assert.equal(r.branch, '2b');
+  assert.equal(r.masks.length, 1);
+});
+
+check('여러 사람: 한 명이라도 R4면 전체 2d', () => {
+  const r = decideBranch(crop, [person(80, 80, 140, 300), person(0, 0, 400, 400)], [face(130, 110, 30, 30)]);
+  // 얼굴 중심이 두 사람 박스 모두에 들어 있음 → 대응 불확실
+  assert.equal(r.branch, '2d');
+  const r2 = decideBranch(crop, [person(160, 50, 100, 200), person(40, 90, 100, 300)], []);
+  // 둘째 사람: 겹침 40×100? (100..140)×(100..200) = 4,000 → 2c, 첫째도 2c
+  assert.equal(r2.branch, '2c');
+  const r3 = decideBranch(crop, [person(160, 50, 100, 200), person(20, 20, 200, 400)], []);
+  assert.equal(r3.branch, '2d');
+});
+
+check('얼굴 대응 사람 + 다른 사람 머리 → 2c(둘 다 가림)', () => {
+  const r = decideBranch(crop, [person(80, 80, 60, 300), person(170, 40, 100, 200)], [face(95, 110, 30, 30)]);
+  assert.equal(r.branch, '2c');
+  assert.deepEqual(r.masks.map((m) => m.kind).sort(), ['face', 'head']);
+  assert.equal(r.detections.filter((d) => d.masked !== 'none').length, 2);
+});
+
+check('머리 영역 밖 얼굴(몸통 앞)은 그 사람 얼굴로 치지 않는다 → 얼굴 가림 + 그 사람 머리 가림', () => {
+  // 사람 (160,0,100,400): 조각과 40% 겹침, 머리 영역 y 0..160. 얼굴 중심 (175,180)은 박스 안이지만 머리 영역 밖.
+  const r = decideBranch(crop, [person(160, 0, 100, 400)], [face(165, 170, 20, 20)]);
+  assert.equal(r.branch, '2c');
+  assert.deepEqual(r.masks.map((m) => m.kind).sort(), ['face', 'head']);
+  // 같은 얼굴이 머리 영역 안이면 그 사람 얼굴(R2)
+  assert.equal(decideBranch(crop, [person(160, 0, 100, 400)], [face(165, 120, 20, 20)]).branch, '2b');
+});
+
+check('Detection 박스는 조각 기준 0~1로 자른다', () => {
+  const r = decideBranch(crop, [person(160, 50, 100, 200)], []);
+  const d = r.detections[0];
+  assert.deepEqual(d?.box, { x: 0.6, y: 0, w: 0.4, h: 1 });
+  assert.equal(d?.overlap, 0.4);
+});
+
+// ── 쿨다운(FR-012) ──
+check('쿨다운: maxPerMinute 6 → 10초, 30 → 2초', () => {
+  assert.equal(cooldownUntil(1000, 6), 11_000);
+  assert.equal(cooldownUntil(0, 30), 2_000);
+});
+
+// ── 포착 게이트(§4.1) ──
+function readyStore() {
+  let t = 0;
+  const st = createLensStore({ clock: () => t, revokeUrl: () => undefined, hostOrigin: 'https://h.test' });
+  const s = st.getState();
+  s.setPluginRuntime('calorie', { status: 'ready', runtimeId: 'rt-1', runtimePolicy: { connect: 'network', manifestVersion: 1 }, gateOpen: true });
+  s.setPluginEnabled('hello', true);
+  s.setPluginRuntime('hello', { status: 'ready', runtimeId: 'rt-h', runtimePolicy: { connect: 'network', manifestVersion: 1 }, gateOpen: true });
+  return { st, setT: (v: number) => (t = v) };
+}
+
+check('게이트(F21): food면 calorie(256)·hello 장면 기록(64)이 각자 매니페스트대로, person이면 둘 다 skip', () => {
+  const { st } = readyStore();
+  const food = planCapture(st.getState(), 'food', 0);
+  assert.deepEqual(food.capture.map((c) => [c.pluginId, c.maxSide]), [['calorie', 256], ['hello', 64]]);
+  assert.deepEqual(food.undeclared, []);
+  const person = planCapture(st.getState(), 'person', 0);
+  assert.deepEqual(person.capture, []);
+  assert.deepEqual(person.undeclared, ['calorie', 'hello']);
+});
+
+check('게이트: 쿨다운·busy·일시 정지·게이트 닫힘이면 포착 안 함', () => {
+  const { st } = readyStore();
+  st.getState().setPluginBusy('calorie', false, 10_000);
+  assert.deepEqual(planCapture(st.getState(), 'food', 9_999).capture.map((c) => c.pluginId), ['hello']);
+  assert.deepEqual(planCapture(st.getState(), 'food', 10_000).capture.map((c) => c.pluginId), ['calorie', 'hello']);
+  st.getState().setPluginBusy('hello', true);
+  assert.deepEqual(planCapture(st.getState(), 'food', 10_000).capture.map((c) => c.pluginId), ['calorie']);
+  st.getState().setPaused(true);
+  assert.equal(planCapture(st.getState(), 'food', 10_000).capture.length, 0);
+  assert.equal(planCapture(st.getState(), 'person', 10_000).undeclared.length, 0); // 보낼 수 없으면 skip도 없음(F22 착용자 일시 정지)
+});
+
+check('게이트: 매니페스트 적용 직후(게이트 닫힘·버전 다름) 포착 안 함, 새 iframe ready 뒤 새 maxSide', () => {
+  const { st } = readyStore();
+  const json = JSON.stringify({ purpose: '음식 칼로리 추정', scenes: ['food'], maxSide: 64, network: ['$ORIGIN'] });
+  assert.equal(st.getState().applyManifest('calorie', json).ok, true);
+  assert.deepEqual(planCapture(st.getState(), 'food', 0).capture.map((c) => c.pluginId), ['hello']);
+  st.getState().setPluginRuntime('calorie', { status: 'ready', runtimeId: 'rt-2', runtimePolicy: { connect: 'network', manifestVersion: 2 }, gateOpen: true });
+  const c = planCapture(st.getState(), 'food', 0).capture.find((x) => x.pluginId === 'calorie');
+  assert.equal(c?.maxSide, 64);
+  assert.equal(c?.runtimeId, 'rt-2');
+  assert.equal(c?.manifestVersion, 2);
+});
+
+check('게이트: 비교 모드 칼로리는 connect none iframe이 ready일 때만 raw', () => {
+  const { st } = readyStore();
+  st.getState().setCompareMode(true);
+  assert.equal(planCapture(st.getState(), 'food', 0).capture.some((c) => c.pluginId === 'calorie'), false);
+  st.getState().setPluginRuntime('calorie', { status: 'ready', runtimeId: 'rt-3', runtimePolicy: { connect: 'none', manifestVersion: 1 }, gateOpen: true });
+  const plan = planCapture(st.getState(), 'food', 0);
+  assert.equal(plan.capture.find((c) => c.pluginId === 'calorie')?.raw, true);
+  assert.equal(plan.capture.find((c) => c.pluginId === 'hello')?.raw, false);
+});
+
+// ── SHA-256 순수 JS(IF-04 대체 경로) ──
+check('sha256HexSync: "abc", 빈 입력, 55·56·64바이트 경계, M0 JPEG', () => {
+  const enc = (str: string) => new TextEncoder().encode(str);
+  assert.equal(sha256HexSync(enc('abc')), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  assert.equal(sha256HexSync(new Uint8Array(0)), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+  for (const n of [55, 56, 63, 64, 65, 1000]) {
+    const buf = new Uint8Array(n).map((_, i) => (i * 31) & 0xff);
+    assert.equal(sha256HexSync(buf), createHash('sha256').update(buf).digest('hex'), `길이 ${n}`);
+  }
+  const jpg = new Uint8Array(readFileSync(new URL('../dev/fixtures/m0-test.jpg', import.meta.url)));
+  assert.equal(sha256HexSync(jpg), '358dbf25d013fc82e1a6e8fdeca1f735cf1b8aad35a445c63f01aa39033605e8');
 });
 
 console.log(`\n${passed}개 통과`);

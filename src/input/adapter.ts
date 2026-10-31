@@ -27,7 +27,8 @@ function ensureVideo(): HTMLVideoElement {
   v.setAttribute('autoplay', '');
   v.disablePictureInPicture = true;
   // 좌우 반전하지 않는다(targetBox를 그대로 겹치기 위해). 크기는 컨테이너를 따른다.
-  Object.assign(v.style, { width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' });
+  // object-fit은 정하지 않는다(브라우저 기본 contain). C의 CSS가 cover로 바꾸면 그 매핑으로 박스를 겹친다.
+  Object.assign(v.style, { width: '100%', height: '100%', display: 'block', background: '#000' });
   video = v;
   return v;
 }
@@ -66,7 +67,13 @@ export function mountPreview(container: HTMLElement): () => void {
   // DOM에 옮겨 붙이면 일부 브라우저가 재생을 멈춘다.
   void v.play().catch(() => undefined);
   return () => {
-    if (v.parentElement === container) container.removeChild(v);
+    if (v.parentElement !== container) return;
+    container.removeChild(v);
+    // 문서에서 떼면 브라우저가 잠시 뒤(안정 상태에서) 재생을 멈춘다. 미리보기가 없는 화면에서도 판정은 이어져야 하므로
+    // 그 뒤에 다시 재생한다(muted라 허용). 그 사이 다른 곳에 다시 붙었으면 mountPreview가 이미 재생했다.
+    setTimeout(() => {
+      if (!v.isConnected && v.paused) void v.play().catch(() => undefined);
+    }, 0);
   };
 }
 
@@ -93,7 +100,10 @@ function waitForFrames(v: HTMLVideoElement): Promise<void> {
   });
 }
 
-async function openCamera(v: HTMLVideoElement, kind: 'webcam' | 'rear'): Promise<number> {
+/** 늦게 끝난 열기 요청. 그 스트림은 멈추고 <video>에는 붙이지 않는다. */
+class Superseded extends Error {}
+
+async function openCamera(v: HTMLVideoElement, kind: 'webcam' | 'rear', mySeq: number): Promise<number> {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('getUserMedia 없음(HTTPS가 아니거나 지원하지 않는 브라우저)');
   const constraints: MediaStreamConstraints = {
     audio: false, // 마이크는 열지 않는다(C-8).
@@ -103,7 +113,12 @@ async function openCamera(v: HTMLVideoElement, kind: 'webcam' | 'rear'): Promise
       ...(kind === 'rear' ? { facingMode: { ideal: 'environment' } } : {}),
     },
   };
+  // 권한 창이 떠 있는 동안에는 시간 제한을 두지 않는다(사용자가 고르는 중). 그 사이 다른 요청이 오면 이 스트림은 버린다.
   const s = await navigator.mediaDevices.getUserMedia(constraints);
+  if (mySeq !== openSeq) {
+    for (const t of s.getTracks()) t.stop();
+    throw new Superseded();
+  }
   stream = s;
   v.removeAttribute('src');
   v.loop = false;
@@ -132,6 +147,10 @@ export async function openInput(kind: InputKind): Promise<InputSource | null> {
   const mySeq = ++openSeq;
   const v = ensureVideo();
   stopStream();
+  // 이전 입력을 바로 끊는다. 새 입력이 뜨기 전까지 옛 프레임이 판정·포착되지 않게 한다(stage0은 input이 null이면 쉰다).
+  v.pause();
+  v.srcObject = null;
+  v.removeAttribute('src');
   epoch += 1;
   lensStore.getState().setInput(null);
 
@@ -159,15 +178,12 @@ export async function openInput(kind: InputKind): Promise<InputSource | null> {
   }
 
   try {
-    const fps = await openCamera(v, kind);
-    if (mySeq !== openSeq) {
-      stopStream();
-      return null;
-    }
+    const fps = await openCamera(v, kind, mySeq);
+    if (mySeq !== openSeq) return null; // 이후 요청이 stopStream으로 이미 정리했다.
     return finish(source(kind, fps, null));
   } catch (e) {
+    if (e instanceof Superseded || mySeq !== openSeq) return null;
     console.warn(`[input] ${kind} 실패, 녹화 영상으로 전환`, e);
-    if (mySeq !== openSeq) return null;
     stopStream();
     try {
       const fps = await openFile(v, videoUrl);

@@ -7,7 +7,7 @@ import type { Box, SceneDecision } from '../core/types';
 import { getInputEpoch, getVideo } from '../input/adapter';
 import { VISION_CONFIG } from './config';
 import { classifyScene, fitLongSide, scaleBox, type Found } from './geometry';
-import { getModels, type Models } from './models';
+import { detectObjects, getModels, reportEngine } from './models';
 import { SCENE_NONE, stepScene, type SceneState } from './scene';
 
 /** 0단계 틱 하나의 결과. 포착 게이트가 틱마다 받는다. */
@@ -34,6 +34,8 @@ let lastFrameCount: number | null = null;
 let canvas: HTMLCanvasElement | null = null;
 let stopLoop: (() => void) | null = null;
 let warned = false;
+/** 첫 추론을 C에 ready로 알렸는가. */
+let engineReady = false;
 const tickListeners = new Set<(t: Stage0Tick) => void>();
 /** 최근 틱 시각과 추론 시간(ms). 처리량 확인(V1)용. */
 const recentTicks: number[] = [];
@@ -47,18 +49,22 @@ export interface Stage0Stats {
   meanInferMs: number | null;
   /** 최근 추론 p95(ms). */
   p95InferMs: number | null;
+  /** 첫 0단계 추론이 끝난 시각(performance.now, 페이지 시작 기준). 아직이면 null. NFR-001 "첫 판정" 실측용. */
+  firstInferenceAt: number | null;
 }
+
+let firstInferenceAt: number | null = null;
 
 export function getStage0Stats(): Stage0Stats {
   const n = recentTicks.length;
   const first = recentTicks[0];
   const last = recentTicks[n - 1];
   const fps = n >= 2 && first !== undefined && last !== undefined && last > first ? ((n - 1) * 1000) / (last - first) : null;
-  if (recentInferMs.length === 0) return { fps, meanInferMs: null, p95InferMs: null };
+  if (recentInferMs.length === 0) return { fps, meanInferMs: null, p95InferMs: null, firstInferenceAt };
   const sorted = [...recentInferMs].sort((a, b) => a - b);
   const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
   const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] ?? null;
-  return { fps, meanInferMs: mean, p95InferMs: p95 };
+  return { fps, meanInferMs: mean, p95InferMs: p95, firstInferenceAt };
 }
 
 const pushRecent = (arr: number[], v: number) => {
@@ -92,23 +98,12 @@ function takeSourceFrames(v: HTMLVideoElement): number {
   return total - prev;
 }
 
-function detect(m: Models, source: HTMLCanvasElement): Found[] {
-  const r = m.object.detect(source);
-  const out: Found[] = [];
-  for (const d of r.detections) {
-    const c = d.categories[0];
-    const b = d.boundingBox;
-    if (!c || !b) continue;
-    out.push({ label: c.categoryName, score: c.score, box: { x: b.originX, y: b.originY, w: b.width, h: b.height } });
-  }
-  return out;
-}
-
 function runTick(v: HTMLVideoElement) {
   const m = getModels();
   if (!m || inFlight) return;
   if (v.readyState < 2 || v.videoWidth === 0 || v.paused) return;
   const store = lensStore.getState();
+  if (!store.session.input) return; // 입력을 바꾸는 중(옛 프레임을 보지 않는다)
   const epochNow = getInputEpoch();
   if (epochNow !== lastEpoch || store.session.id !== lastSessionId) {
     lastEpoch = epochNow;
@@ -135,13 +130,21 @@ function runTick(v: HTMLVideoElement) {
     let found: Found[];
     try {
       const t0 = performance.now();
-      found = detect(m, canvas);
+      found = detectObjects(m, canvas);
+      if (!engineReady) {
+        engineReady = true;
+        firstInferenceAt = performance.now();
+        reportEngine({ status: 'ready', detail: null });
+      }
       pushRecent(recentInferMs, performance.now() - t0);
       pushRecent(recentTicks, now);
     } catch (e) {
       if (!warned) console.warn('[vision] 0단계 추론 실패', e);
       warned = true;
       return;
+    } finally {
+      // 캔버스는 다음 틱에 다시 쓰지만 원본을 줄인 프레임이 남지 않게 지운다.
+      ctx.clearRect(0, 0, width, height);
     }
     store.recordRuns({ stage0Runs: 1, sourceFrames: takeSourceFrames(v) });
 
