@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>M0 plugin host</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { margin: 0; padding: 16px; }
+      table { border-collapse: collapse; width: 100%; font-size: 14px; }
+      th, td { border-bottom: 1px solid #8884; padding: 6px 8px; text-align: left; vertical-align: top; }
+      td.pass { color: #1a7f37; font-weight: 600; }
+      td.fail { color: #cf222e; font-weight: 600; }
+      code, pre { font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+      #summary { font-size: 18px; font-weight: 600; }
+      #frames iframe { width: 1px; height: 1px; border: 0; }
+    </style>
+  </head>
+  <body>
+    <h1>M0: 플러그인 호스트 시험</h1>
+    <p>개발 서버 전용. 고정 JPEG <code>/dev/fixtures/m0-test.jpg</code>를 hello 플러그인 변형에 보낸다(02-SSRD §5, V10). 칼로리·변조는 <a href="./plugins.html">plugins.html</a>.</p>
+    <p id="summary">실행 중…</p>
+    <table>
+      <thead><tr><th>#</th><th>확인</th><th>결과</th><th>내용</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <h2>iframe CSP</h2>
+    <pre id="csp"></pre>
+    <div id="frames"></div>
+    <script type="module" src="./m0.ts"></script>
+  </body>
+</html>
