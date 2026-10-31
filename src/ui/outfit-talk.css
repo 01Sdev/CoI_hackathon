@@ -160,11 +160,21 @@
   opacity: 0.35;
   cursor: default;
 }
-.fm-talkbar__hint {
+.fm-talkbar__above {
   position: absolute;
   left: 50%;
-  bottom: calc(100% + 14px);
+  bottom: calc(100% + 12px);
   translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  inline-size: max-content;
+  max-inline-size: 100%;
+  pointer-events: none;
+}
+.fm-talkbar__hint,
+.fm-talkbar__notice {
   max-inline-size: 100%;
   margin: 0;
   padding: 6px 12px;
@@ -176,6 +186,18 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* 받아쓰기 서비스 고지: 알림보다 옅게 */
+.fm-talkbar__notice {
+  padding: 2px 10px;
+  background: rgb(13 14 19 / 0.55);
+  color: var(--chat-muted);
+  font-size: 11px;
+}
+.fm-talkbar__dot[data-state='transcribing'],
+.fm-talkbar__dot[data-state='starting'] {
+  background: #3fd0ff;
+  animation: fm-talk-pulse 0.8s ease-in-out infinite;
 }
 
 /* 질문·답 패널: 시야 오른쪽 가장자리(22px). 글이 적으면 짧고, 많으면 시야 절반까지 자라고 안에서 스크롤한다.
