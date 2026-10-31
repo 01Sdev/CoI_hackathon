@@ -3,8 +3,9 @@
 
 import assert from 'node:assert/strict';
 import { CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE } from '../src/core/constants';
+import type { Box } from '../src/core/types';
 import { entryMeta, frameText, usageMeta, wallClock } from '../src/proof/format';
-import { coverBox, coverPointToSource, cornerPoint, dragCorner, faceWindowRemaining } from '../src/ui/geometry';
+import { coverBox, coverPointToSource, cornerPoint, dragCornerFromScreen, faceWindowRemaining, nudgeCorner } from '../src/ui/geometry';
 import { formatBytes, josa } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 
@@ -106,28 +107,35 @@ check('coverPointToSource: coverBox의 역(잘린 가로 영상에서도 같은 
   }
 });
 
-check('dragCorner: 반대 꼭짓점은 그대로, 끈 꼭짓점이 손가락을 따라간다', () => {
-  const f = dragCorner(frame0, 'se', { x: 0.9, y: 0.7 });
-  assert.ok(near(f.x, 0.2) && near(f.y, 0.2) && near(f.w, 0.7) && near(f.h, 0.5));
-  const g = dragCorner(frame0, 'nw', { x: 0.1, y: 0.3 });
-  assert.ok(near(g.x + g.w, 0.8) && near(g.y + g.h, 0.8) && near(g.x, 0.1) && near(g.y, 0.3));
-  const c = cornerPoint(g, 'nw');
-  assert.ok(near(c.x, 0.1) && near(c.y, 0.3));
+// 꼭짓점 끌기 규칙(맞은편 고정·0~1·최소 0.1)은 core dragCorner이고 check-core가 본다. 여기는 화면 좌표·키보드 쪽만 본다.
+const srcV = { w: 720, h: 1280 }; // 세로 영상
+const dstP = { w: 375, h: 812 }; // 휴대폰 화면(좌우가 잘린다)
+const screenOf = (x: number, y: number) => {
+  const r = coverBox({ x, y, w: 0, h: 0 }, srcV, dstP);
+  return { x: r.left, y: r.top };
+};
+const sameBox = (a: Box, b: Box) => near(a.x, b.x) && near(a.y, b.y) && near(a.w, b.w) && near(a.h, b.h);
+
+check('dragCornerFromScreen: 화면에서 끈 점이 소스 좌표의 꼭짓점이 된다(잘린 cover 화면)', () => {
+  const f = dragCornerFromScreen(frame0, 'br', screenOf(0.9, 0.7), srcV, dstP);
+  assert.ok(sameBox(f, { x: 0.2, y: 0.2, w: 0.7, h: 0.5 }), JSON.stringify(f));
+  const g = dragCornerFromScreen(frame0, 'tl', screenOf(0.1, 0.3), srcV, dstP);
+  assert.ok(sameBox(g, { x: 0.1, y: 0.3, w: 0.7, h: 0.5 }), JSON.stringify(g));
 });
 
-check('dragCorner: 최소 크기에서 멈추고 뒤집히지 않는다', () => {
-  const f = dragCorner(frame0, 'nw', { x: 0.95, y: 0.95 }); // 반대편 너머로 끌어도
-  assert.ok(near(f.w, CAPTURE_FRAME_MIN_SIDE) && near(f.h, CAPTURE_FRAME_MIN_SIDE));
-  assert.ok(near(f.x + f.w, 0.8) && near(f.y + f.h, 0.8), '반대 꼭짓점(0.8, 0.8) 고정');
-  const g = dragCorner(frame0, 'ne', { x: 0.21, y: 0.79 });
-  assert.ok(near(g.x, 0.2) && near(g.w, CAPTURE_FRAME_MIN_SIDE) && near(g.y + g.h, 0.8) && near(g.h, CAPTURE_FRAME_MIN_SIDE));
+check('dragCornerFromScreen: 맞은편 너머로 끌어도 최소 크기에서 멈추고, 화면 밖으로 끌면 0~1에서 멈춘다', () => {
+  const f = dragCornerFromScreen(frame0, 'tl', screenOf(0.95, 0.95), srcV, dstP);
+  assert.ok(sameBox(f, { x: 0.8 - CAPTURE_FRAME_MIN_SIDE, y: 0.8 - CAPTURE_FRAME_MIN_SIDE, w: CAPTURE_FRAME_MIN_SIDE, h: CAPTURE_FRAME_MIN_SIDE }), JSON.stringify(f));
+  const g = dragCornerFromScreen(frame0, 'bl', { x: -500, y: 5000 }, srcV, dstP);
+  assert.ok(sameBox(g, { x: 0, y: 0.2, w: 0.8, h: 0.8 }), JSON.stringify(g));
 });
 
-check('dragCorner: 화면 밖으로 끌면 0~1 안에서 멈춘다', () => {
-  const f = dragCorner(frame0, 'sw', { x: -0.5, y: 1.7 });
-  assert.ok(near(f.x, 0) && near(f.y, 0.2) && near(f.w, 0.8) && near(f.h, 0.8));
-  const g = dragCorner(frame0, 'ne', { x: Number.NaN, y: 0.1 });
-  assert.ok(Number.isFinite(g.x) && Number.isFinite(g.w), 'NaN이 와도 숫자 틀');
+check('nudgeCorner·cornerPoint: 화살표 키 한 번이 그 꼭짓점만 옮기고 1에서 멈춘다', () => {
+  assert.deepEqual(cornerPoint(frame0, 'tr'), { x: 0.8, y: 0.2 });
+  const f = nudgeCorner(frame0, 'tr', 0.02, 0);
+  assert.ok(sameBox(f, { x: 0.2, y: 0.2, w: 0.62, h: 0.6 }), JSON.stringify(f));
+  const g = nudgeCorner({ x: 0.2, y: 0.2, w: 0.79, h: 0.6 }, 'br', 0.05, 0);
+  assert.ok(near(g.x + g.w, 1), '오른쪽 끝 1에서 멈춤');
 });
 
 check('frameText·entryMeta: deliver와 "프레임 밖" 줄에 프레임 W×H, 없으면 생략', () => {

@@ -1,7 +1,7 @@
 // 좌표 변환과 시간 창 계산. 경계가 있는 함수라 scripts/check-ui.ts가 확인한다.
 
-import { CAPTURE_FRAME_MIN_SIDE, RECENT_WINDOW_MS } from '../core/constants';
-import { clampFrame } from '../core/frame';
+import { RECENT_WINDOW_MS } from '../core/constants';
+import { dragCorner, type FrameCorner } from '../core/frame';
 import type { Box, RecentFaceRecord } from '../core/types';
 
 export interface Size {
@@ -51,30 +51,25 @@ export function coverPointToSource(p: Point, src: Size | null, dst: Size): Point
   return { x: (p.x - ox) / (s.w * scale), y: (p.y - oy) / (s.h * scale) };
 }
 
-export type Corner = 'nw' | 'ne' | 'sw' | 'se';
-
 /**
- * F24a 꼭짓점 끌기: 반대 꼭짓점을 고정하고 한 꼭짓점을 p(소스 0~1)로 옮긴다.
- * 점은 0~1 안으로 자르고, 한 변은 min 이상이라 틀이 뒤집히지 않는다. 마지막에 core clampFrame으로 한 번 더 맞춘다.
+ * 화면 px 점으로 꼭짓점을 끈다(F24a). 화면 → 소스 0~1은 coverPointToSource, 끌기 규칙(맞은편 고정·0~1 안·최소 0.1)은
+ * core dragCorner가 정한다. 결과는 setCaptureFrame에 그대로 넘긴다.
  */
-export function dragCorner(f: Box, corner: Corner, p: Point, min = CAPTURE_FRAME_MIN_SIDE): Box {
-  const px = Math.min(1, Math.max(0, p.x));
-  const py = Math.min(1, Math.max(0, p.y));
-  let x0 = f.x;
-  let y0 = f.y;
-  let x1 = f.x + f.w;
-  let y1 = f.y + f.h;
-  if (corner === 'nw' || corner === 'sw') x0 = Math.min(px, x1 - min);
-  else x1 = Math.max(px, x0 + min);
-  if (corner === 'nw' || corner === 'ne') y0 = Math.min(py, y1 - min);
-  else y1 = Math.max(py, y0 + min);
-  return clampFrame({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 }) ?? f;
+export function dragCornerFromScreen(f: Box, corner: FrameCorner, p: Point, src: Size | null, dst: Size): Box {
+  const s = coverPointToSource(p, src, dst);
+  return dragCorner(f, corner, s.x, s.y);
 }
 
 /** 꼭짓점의 소스 0~1 위치. */
-export function cornerPoint(f: Box, corner: Corner): Point {
+export function cornerPoint(f: Box, corner: FrameCorner): Point {
   return {
-    x: corner === 'nw' || corner === 'sw' ? f.x : f.x + f.w,
-    y: corner === 'nw' || corner === 'ne' ? f.y : f.y + f.h,
+    x: corner === 'tl' || corner === 'bl' ? f.x : f.x + f.w,
+    y: corner === 'tl' || corner === 'tr' ? f.y : f.y + f.h,
   };
+}
+
+/** 화살표 키 한 번: 꼭짓점을 소스 0~1에서 (dx, dy)만큼 옮긴다. 규칙은 dragCorner와 같다. */
+export function nudgeCorner(f: Box, corner: FrameCorner, dx: number, dy: number): Box {
+  const p = cornerPoint(f, corner);
+  return dragCorner(f, corner, p.x + dx, p.y + dy);
 }

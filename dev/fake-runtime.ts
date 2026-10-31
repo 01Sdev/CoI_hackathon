@@ -8,7 +8,7 @@
 
 import { shallow } from 'zustand/shallow';
 import { newId, type LensStore, type NewDetection } from '../src/core/store';
-import { frameToPx, intersectBox } from '../src/core/frame';
+import { cropToFramePx, frameToPx } from '../src/core/frame';
 import { selectCanSend, selectDesiredRuntime, type DesiredRuntime } from '../src/core/selectors';
 import type { Box, DeliveryBranch, InputKind, SceneLabel } from '../src/core/types';
 
@@ -170,7 +170,7 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
     const frameRect = frameToPx(s.session.captureFrame, srcW, srcH);
     const t = s.liveObservation?.targetBox ?? TARGET;
     const wide = { x: (t.x - t.w * 0.1) * srcW, y: (t.y - t.h * 0.1) * srcH, w: t.w * 1.2 * srcW, h: t.h * 1.2 * srcH };
-    const crop = intersectBox(wide, frameRect);
+    const crop = cropToFramePx(wide, frameRect);
     if (!crop && kind !== 'raw') {
       s.addLog({ pluginId, sceneDecisionId: sceneId, kind: 'hold', branch: null, reason: '프레임 밖', enforcedBy: null, frameRect });
       s.setPluginBusy(pluginId, false, cooldown);

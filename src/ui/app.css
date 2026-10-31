@@ -1050,8 +1050,8 @@ button.fm-logcard:focus-visible,
   touch-action: none;
   cursor: nwse-resize;
 }
-.fm-capture__handle[data-corner='ne'],
-.fm-capture__handle[data-corner='sw'] {
+.fm-capture__handle[data-corner='tr'],
+.fm-capture__handle[data-corner='bl'] {
   cursor: nesw-resize;
 }
 .fm-capture__handle::after {
