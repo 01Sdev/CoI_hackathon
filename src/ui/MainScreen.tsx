@@ -24,6 +24,7 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
   const [started, setStarted] = useState(autostart);
   const [tab, setTab] = useState<SideTab>('log');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [frameEditing, setFrameEditing] = useState(false);
   useStoreTick();
   // 바깥 표시(/outward)는 휴대폰·데스크톱 메인 창만 보낸다. /hud 창까지 보내면 두 값이 번갈아 보인다.
   useOutwardPublisher();
@@ -43,7 +44,11 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
         <section className="fm-desk__stage" aria-label="카메라와 HUD">
           <Stage>
             <div className="fm-hud-guide" aria-hidden="true" />
-            <EngineGate ready={<Hud variant="desktop" onOpenConfirm={() => setTab('confirm')} />} />
+            <EngineGate
+              ready={
+                <Hud variant="desktop" onOpenConfirm={() => setTab('confirm')} frameEditing={frameEditing} onFrameEditing={setFrameEditing} />
+              }
+            />
             <TopBar layout={layout} />
             <CameraFallbackNotice />
           </Stage>
@@ -59,9 +64,13 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
   }
 
   return (
-    <div className="fm-phone">
+    <div className="fm-phone" data-frame-editing={frameEditing}>
       <Stage className="fm-phone__stage">
-        <EngineGate ready={<Hud variant="phone" onOpenConfirm={() => setConfirmOpen(true)} />} />
+        <EngineGate
+          ready={
+            <Hud variant="phone" onOpenConfirm={() => setConfirmOpen(true)} frameEditing={frameEditing} onFrameEditing={setFrameEditing} />
+          }
+        />
         <TopBar layout={layout} />
         <CameraFallbackNotice />
       </Stage>

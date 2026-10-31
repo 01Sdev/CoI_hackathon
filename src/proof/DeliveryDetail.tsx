@@ -44,6 +44,7 @@ export function DeliveryDetail({ entryId, onBack }: { entryId: string; onBack():
       ['크기', `${d.width}×${d.height}px`],
       ['원본 대비 면적', percent(d.areaRatio)],
       ['자른 영역(원본 px)', `${Math.round(d.cropRect.x)}, ${Math.round(d.cropRect.y)} · ${Math.round(d.cropRect.w)}×${Math.round(d.cropRect.h)}`],
+      ['전송 범위 프레임', d.frameRect ? `${Math.round(d.frameRect.x)}, ${Math.round(d.frameRect.y)} · ${Math.round(d.frameRect.w)}×${Math.round(d.frameRect.h)}` : '기록 없음'],
       ['가린 얼굴', `${d.facesMasked}개`],
       ['출구 재검사', d.faceCheck.status === 'checked' ? `얼굴 ${d.faceCheck.detectedFaces}개 검출` : '검사 실패'],
       ['처리 위치', '이 기기(브라우저)'],
@@ -53,6 +54,10 @@ export function DeliveryDetail({ entryId, onBack }: { entryId: string; onBack():
     );
   } else if (entry.kind !== 'deliver') {
     rows.push(['사유', entryMeta(entry, null)]);
+    if (entry.frameRect) {
+      const f = entry.frameRect;
+      rows.push(['전송 범위 프레임', `${Math.round(f.x)}, ${Math.round(f.y)} · ${Math.round(f.w)}×${Math.round(f.h)}`]);
+    }
   }
 
   return (

@@ -8,6 +8,7 @@
 
 import { shallow } from 'zustand/shallow';
 import { newId, type LensStore, type NewDetection } from '../src/core/store';
+import { cropToFramePx, frameToPx } from '../src/core/frame';
 import { selectCanSend, selectDesiredRuntime, type DesiredRuntime } from '../src/core/selectors';
 import type { Box, DeliveryBranch, InputKind, SceneLabel } from '../src/core/types';
 
@@ -163,6 +164,18 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
     const raw = s.session.compareMode && p.kind === 'calorie';
     const kind: DeliveryBranch | '2d' = force ?? (raw ? 'raw' : NORMAL_CYCLE[n % NORMAL_CYCLE.length]!);
     const cooldown = now() + 60_000 / p.manifest.maxPerMinute;
+    // F24: 포착을 시작할 때 프레임을 한 번 읽고, 넓힌 대상 박스 ∩ 프레임을 자른다. 겹치지 않으면 "프레임 밖" 보류.
+    const srcW = s.session.input?.width ?? 720;
+    const srcH = s.session.input?.height ?? 1280;
+    const frameRect = frameToPx(s.session.captureFrame, srcW, srcH);
+    const t = s.liveObservation?.targetBox ?? TARGET;
+    const wide = { x: (t.x - t.w * 0.1) * srcW, y: (t.y - t.h * 0.1) * srcH, w: t.w * 1.2 * srcW, h: t.h * 1.2 * srcH };
+    const crop = cropToFramePx(wide, frameRect);
+    if (!crop && kind !== 'raw') {
+      s.addLog({ pluginId, sceneDecisionId: sceneId, kind: 'hold', branch: null, reason: '프레임 밖', enforcedBy: null, frameRect });
+      s.setPluginBusy(pluginId, false, cooldown);
+      return;
+    }
     const face: NewDetection = { kind: 'face', box: { x: 0.78, y: 0.06, w: 0.12, h: 0.2 }, score: 0.82, overlap: null, masked: 'face' };
     const person: NewDetection = { kind: 'person', box: { x: 0.7, y: 0, w: 0.3, h: 1 }, score: 0.91, overlap: 0.14, masked: 'none' };
 
@@ -195,8 +208,10 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
           bytes,
           width: side,
           height: Math.round(side * 0.75),
-          areaRatio: raw ? 1 : 0.058 + Math.random() * 0.01,
-          cropRect: raw ? { x: 0, y: 0, w: 720, h: 1280 } : { x: 160, y: 380, w: 400, h: 300 },
+          // raw는 프레임 안 원본 전체(cropRect = frameRect, F17·F24)
+          areaRatio: raw ? (frameRect.w * frameRect.h) / (srcW * srcH) : ((crop?.w ?? 0) * (crop?.h ?? 0)) / (srcW * srcH),
+          cropRect: raw ? frameRect : crop!,
+          frameRect,
           facesMasked: kind === '2b' || kind === '2c' ? 1 : 0,
           faceCheck: { status: 'checked', detectedFaces: raw ? 2 : 0 },
           location: 'browser',

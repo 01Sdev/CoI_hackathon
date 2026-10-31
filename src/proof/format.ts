@@ -1,8 +1,8 @@
 // 증명 로그 한 줄의 문구(F6, FR-027). 숫자는 모두 Delivery·LogEntry 값 그대로다. 해시는 상세에만 둔다.
 // reason은 A·B 호스트가 쓴 문자열이고, 플러그인 문자열이 아니다.
 
-import type { Delivery, LogEntry, PluginKind } from '../core/types';
-import { formatBytes, PLUGIN_NAME } from '../ui/labels';
+import type { Box, Delivery, LogEntry, PluginKind, UsageRecord } from '../core/types';
+import { formatBytes, objectName, PLUGIN_NAME } from '../ui/labels';
 import type { Tone } from '../ui/OrbStack';
 
 /** 방금 · 14초 전 · 3분 전 · 1시간 전. */
@@ -45,17 +45,24 @@ export function entryTitle(e: LogEntry, d: Delivery | null, kind: PluginKind | u
   }
 }
 
-/** 바이트 · 원본의 n% · 이 기기에서 · 수신 미확인 / 사유. */
+/** "프레임 W×H"(F24, FR-063). frameRect가 없는 줄(F24 전 전달, skip·violation)은 빈 문자열. */
+export function frameText(frameRect: Box | null | undefined): string {
+  return frameRect ? `프레임 ${Math.round(frameRect.w)}×${Math.round(frameRect.h)}` : '';
+}
+
+/** 바이트 · 원본의 n% · 이 기기에서 · 프레임 W×H · 수신 미확인 / 사유 · 프레임 W×H. */
 export function entryMeta(e: LogEntry, d: Delivery | null): string {
+  const frame = frameText(e.frameRect ?? d?.frameRect);
   if (e.kind !== 'deliver') {
     const by = e.enforcedBy === 'plugin-report' ? ' · 플러그인 자기 보고' : e.enforcedBy === 'host' ? ' · 호스트 감지' : '';
     const zero = e.kind === 'hold' || e.kind === 'skip' ? ' · 전달 0' : '';
-    return `${e.reason || '사유 없음'}${by}${zero}`;
+    return `${e.reason || '사유 없음'}${by}${zero}${frame ? ` · ${frame}` : ''}`;
   }
   if (!d) return '전달 기록이 밀려났습니다';
   const parts = [formatBytes(d.bytes), `원본의 ${percent(d.areaRatio)}`];
   if (d.branch === 'raw') parts.push('비교 모드 · 서버로 안 감');
   else parts.push('이 기기에서');
+  if (frame) parts.push(frame);
   if (d.sendStatus === 'failed') parts.push('전송 실패');
   else if (d.sendStatus === 'prepared') parts.push('보내는 중');
   else if (d.ackStatus === 'timeout') parts.push('수신 미확인');
@@ -69,4 +76,17 @@ export function entryCode(e: LogEntry): string | null {
   if (e.kind === 'skip') return 'skip';
   if (e.kind === 'violation') return e.enforcedBy === 'host' ? 'host' : 'report';
   return null;
+}
+
+/** performance.now() 기준 시각 at → 벽시계 'HH:MM:SS'. perfNow·dateNow는 같은 순간에 잰 값. */
+export function wallClock(at: number, perfNow: number, dateNow: number): string {
+  const d = new Date(dateNow - (perfNow - at));
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
+}
+
+/** F25 사용 기록 한 줄의 뒷부분: 시각 · 대상 · 바이트 · 프레임 W×H. 프레임이 null(F24 전 전달)이면 생략. */
+export function usageMeta(r: UsageRecord, clock: string): string {
+  const parts = [clock, objectName(r.objectLabel), formatBytes(r.bytes)];
+  if (r.frameW !== null && r.frameH !== null) parts.push(`프레임 ${r.frameW}×${r.frameH}`);
+  return parts.join(' · ');
 }

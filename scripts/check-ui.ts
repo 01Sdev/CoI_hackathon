@@ -2,7 +2,10 @@
 // 좌표 변환·시간 창·문구처럼 경계가 있는 함수만 확인한다(AGENTS.md "테스트").
 
 import assert from 'node:assert/strict';
-import { coverBox, faceWindowRemaining } from '../src/ui/geometry';
+import { CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE } from '../src/core/constants';
+import type { Box } from '../src/core/types';
+import { entryMeta, frameText, usageMeta, wallClock } from '../src/proof/format';
+import { coverBox, coverPointToSource, cornerPoint, dragCornerFromScreen, faceWindowRemaining, nudgeCorner } from '../src/ui/geometry';
 import { formatBytes, josa } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 
@@ -89,6 +92,73 @@ check('outwardView: 메시지 없음 pending, 5,000ms까지 live, 넘으면 stal
   assert.equal(outwardView(null, 0).state, 'pending');
   assert.equal(outwardView(m, 10_000 + OUTWARD_STALE_MS).state, 'live');
   assert.equal(outwardView(m, 10_000 + OUTWARD_STALE_MS + 1).state, 'stale');
+});
+
+const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+const frame0 = { ...CAPTURE_FRAME_DEFAULT };
+
+check('coverPointToSource: coverBox의 역(잘린 가로 영상에서도 같은 점으로 돌아온다)', () => {
+  const src = { w: 1280, h: 720 };
+  const dst = { w: 360, h: 640 };
+  for (const p of [{ x: 0.5, y: 0.5 }, { x: 0.31, y: 0.12 }, { x: 0.7, y: 0.95 }]) {
+    const r = coverBox({ x: p.x, y: p.y, w: 0, h: 0 }, src, dst);
+    const back = coverPointToSource({ x: r.left, y: r.top }, src, dst);
+    assert.ok(near(back.x, p.x) && near(back.y, p.y), `${p.x},${p.y} → ${back.x},${back.y}`);
+  }
+});
+
+// 꼭짓점 끌기 규칙(맞은편 고정·0~1·최소 0.1)은 core dragCorner이고 check-core가 본다. 여기는 화면 좌표·키보드 쪽만 본다.
+const srcV = { w: 720, h: 1280 }; // 세로 영상
+const dstP = { w: 375, h: 812 }; // 휴대폰 화면(좌우가 잘린다)
+const screenOf = (x: number, y: number) => {
+  const r = coverBox({ x, y, w: 0, h: 0 }, srcV, dstP);
+  return { x: r.left, y: r.top };
+};
+const sameBox = (a: Box, b: Box) => near(a.x, b.x) && near(a.y, b.y) && near(a.w, b.w) && near(a.h, b.h);
+
+check('dragCornerFromScreen: 화면에서 끈 점이 소스 좌표의 꼭짓점이 된다(잘린 cover 화면)', () => {
+  const f = dragCornerFromScreen(frame0, 'br', screenOf(0.9, 0.7), srcV, dstP);
+  assert.ok(sameBox(f, { x: 0.2, y: 0.2, w: 0.7, h: 0.5 }), JSON.stringify(f));
+  const g = dragCornerFromScreen(frame0, 'tl', screenOf(0.1, 0.3), srcV, dstP);
+  assert.ok(sameBox(g, { x: 0.1, y: 0.3, w: 0.7, h: 0.5 }), JSON.stringify(g));
+});
+
+check('dragCornerFromScreen: 맞은편 너머로 끌어도 최소 크기에서 멈추고, 화면 밖으로 끌면 0~1에서 멈춘다', () => {
+  const f = dragCornerFromScreen(frame0, 'tl', screenOf(0.95, 0.95), srcV, dstP);
+  assert.ok(sameBox(f, { x: 0.8 - CAPTURE_FRAME_MIN_SIDE, y: 0.8 - CAPTURE_FRAME_MIN_SIDE, w: CAPTURE_FRAME_MIN_SIDE, h: CAPTURE_FRAME_MIN_SIDE }), JSON.stringify(f));
+  const g = dragCornerFromScreen(frame0, 'bl', { x: -500, y: 5000 }, srcV, dstP);
+  assert.ok(sameBox(g, { x: 0, y: 0.2, w: 0.8, h: 0.8 }), JSON.stringify(g));
+});
+
+check('nudgeCorner·cornerPoint: 화살표 키 한 번이 그 꼭짓점만 옮기고 1에서 멈춘다', () => {
+  assert.deepEqual(cornerPoint(frame0, 'tr'), { x: 0.8, y: 0.2 });
+  const f = nudgeCorner(frame0, 'tr', 0.02, 0);
+  assert.ok(sameBox(f, { x: 0.2, y: 0.2, w: 0.62, h: 0.6 }), JSON.stringify(f));
+  const g = nudgeCorner({ x: 0.2, y: 0.2, w: 0.79, h: 0.6 }, 'br', 0.05, 0);
+  assert.ok(near(g.x + g.w, 1), '오른쪽 끝 1에서 멈춤');
+});
+
+check('frameText·entryMeta: deliver와 "프레임 밖" 줄에 프레임 W×H, 없으면 생략', () => {
+  assert.equal(frameText({ x: 0, y: 0, w: 120, h: 60 }), '프레임 120×60');
+  assert.equal(frameText(null), '');
+  const base = { id: 'l', sessionId: 's', pluginId: 'calorie', sceneDecisionId: null, deliveryId: null, branch: null, enforcedBy: null, at: 0 } as const;
+  assert.equal(
+    entryMeta({ ...base, kind: 'hold', reason: '프레임 밖', frameRect: { x: 10, y: 20, w: 60, h: 30 } }, null),
+    '프레임 밖 · 전달 0 · 프레임 60×30',
+  );
+  assert.equal(entryMeta({ ...base, kind: 'skip', reason: '선언하지 않은 장면(person)' }, null), '선언하지 않은 장면(person) · 전달 0');
+});
+
+check('usageMeta: 시각 · 대상 · 바이트 · 프레임, 프레임이 null이면 생략', () => {
+  const r = { at: 0, pluginId: 'calorie', deliveryId: 'd', objectLabel: 'pizza', bytes: 19_046, frameW: 432, frameH: 768 };
+  assert.equal(usageMeta(r, '21:43:05'), '21:43:05 · 피자 · 18.6KB · 프레임 432×768');
+  assert.equal(usageMeta({ ...r, frameW: null, frameH: null }, '21:43:05'), '21:43:05 · 피자 · 18.6KB');
+});
+
+check('wallClock: performance 시각을 같은 순간의 벽시계로 바꾼다', () => {
+  const dateNow = new Date(2026, 9, 31, 21, 43, 10).getTime();
+  assert.equal(wallClock(5_000, 10_000, dateNow), '21:43:05');
+  assert.equal(wallClock(10_000, 10_000, dateNow), '21:43:10');
 });
 
 console.log(`\n${passed}개 통과`);

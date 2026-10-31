@@ -1,6 +1,7 @@
 // 좌표 변환과 시간 창 계산. 경계가 있는 함수라 scripts/check-ui.ts가 확인한다.
 
 import { RECENT_WINDOW_MS } from '../core/constants';
+import { dragCorner, type FrameCorner } from '../core/frame';
 import type { Box, RecentFaceRecord } from '../core/types';
 
 export interface Size {
@@ -34,4 +35,41 @@ export function faceWindowRemaining(records: readonly RecentFaceRecord[], now: n
   for (const r of records) if (r.detectedFaces > 0 && now - r.at < RECENT_WINDOW_MS && r.at > last) last = r.at;
   if (last === -Infinity) return 0;
   return Math.max(0, Math.min(1, (last + RECENT_WINDOW_MS - now) / RECENT_WINDOW_MS));
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/** coverBox의 역: 화면 px 점 → 소스 프레임 기준 0~1(범위 밖이면 0~1 밖 값이 그대로 나온다). */
+export function coverPointToSource(p: Point, src: Size | null, dst: Size): Point {
+  const s = src && src.w > 0 && src.h > 0 ? src : dst;
+  const scale = Math.max(dst.w / s.w, dst.h / s.h);
+  const ox = (dst.w - s.w * scale) / 2;
+  const oy = (dst.h - s.h * scale) / 2;
+  return { x: (p.x - ox) / (s.w * scale), y: (p.y - oy) / (s.h * scale) };
+}
+
+/**
+ * 화면 px 점으로 꼭짓점을 끈다(F24a). 화면 → 소스 0~1은 coverPointToSource, 끌기 규칙(맞은편 고정·0~1 안·최소 0.1)은
+ * core dragCorner가 정한다. 결과는 setCaptureFrame에 그대로 넘긴다.
+ */
+export function dragCornerFromScreen(f: Box, corner: FrameCorner, p: Point, src: Size | null, dst: Size): Box {
+  const s = coverPointToSource(p, src, dst);
+  return dragCorner(f, corner, s.x, s.y);
+}
+
+/** 꼭짓점의 소스 0~1 위치. */
+export function cornerPoint(f: Box, corner: FrameCorner): Point {
+  return {
+    x: corner === 'tl' || corner === 'bl' ? f.x : f.x + f.w,
+    y: corner === 'tl' || corner === 'tr' ? f.y : f.y + f.h,
+  };
+}
+
+/** 화살표 키 한 번: 꼭짓점을 소스 0~1에서 (dx, dy)만큼 옮긴다. 규칙은 dragCorner와 같다. */
+export function nudgeCorner(f: Box, corner: FrameCorner, dx: number, dy: number): Box {
+  const p = cornerPoint(f, corner);
+  return dragCorner(f, corner, p.x + dx, p.y + dy);
 }
