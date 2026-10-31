@@ -8,6 +8,7 @@
 | 범위 | 서브시스템 경계, 메시지 6종(`init`·`delivery`·`ready`·`ack`·`result`·`violation`), `BroadcastChannel` 1종, `/api/calorie`, 매니페스트 형식, 공유 스토어 쓰기 권한. 상세 요구사항은 SRS |
 | 표기 | 보장 G1~G5, 기능 F# = PRD 번호. **[제안]** = PRD·추가결정에 없어 이 문서가 정한 것(팀 확정 필요). PRD에 없는 숫자는 "미정" |
 | 필드명 | ERD 7개 엔티티: Session, Plugin(Manifest 포함), SceneDecision, Detection, Delivery, LogEntry, Counter |
+| 용어 | 이 문서의 매니페스트, IF-01~08, 플러그인 SDK를 합쳐 **감각 접근 계약**이라 부른다(기술 용어, 발표·화면 문구에는 쓰지 않는다). 브라우저 안 격리 실행(iframe + blob Worker)은 이 계약의 첫 번째 연결 방식이다. 코드의 `Plugin` 이름은 그대로 둔다. 외부 서버에서 도는 앱의 연결은 같은 계약을 쓰는 확장 설계이며 이번에 구현하지 않는다(2026-10-31 결정) |
 
 ## 1. 서브시스템 분해와 신뢰 경계
 
