@@ -1,4 +1,4 @@
-# LensGate(가칭) SRS: 소프트웨어 요구사항 명세
+# famelet SRS: 소프트웨어 요구사항 명세
 
 문서 03-SRS v1.6 · 2026-10-31 · **요구사항의 유일한 원본**. 근거: ① PRD(Oct 31, 2026) ② `00-추가결정사항.md`(이하 **D§n**. PRD의 미정 값보다 우선하고, PRD 본문과 충돌하면 PRD를 따른 뒤 §8에 적는다) ③ SRD v0.2 중 FR/NFR에 대응이 없던 것 ④ 팀원 SSRD 초안의 채택 항목(이전 판 PRD 기준 내용은 제외). 독립 리뷰어 2명(Opus·Sonnet)의 지적을 반영했다.
 
@@ -56,7 +56,7 @@ PRD의 F1~F19와 G1~G5를 구현·시험 가능한 문장으로 바꾼다. 독�
 
 ### 2.4 보장의 한계 (발표에서 주장하는 범위)
 - G4는 **감지된 얼굴**에만 적용된다. 사람 검출기와 얼굴 검출기가 모두 놓친 얼굴은 막지 못한다. 그래서 20회 실측치(NFR-014)로 말한다. 얼굴 검출(short-range 모델)은 가까운 얼굴을 정밀하게 가리고, 먼 사람은 사람 검출로 머리 영역을 넓게 가리도록(2c·2d) 나눈 설계다. 출구 재검사는 같은 모델로 다시 보는 것이라 가림 실수를 찾을 뿐, 처음 놓친 얼굴을 독립적으로 찾지는 못한다.
-- 보장하지 않는 것: LensGate를 거치지 않는 다른 앱, 호스트 코드(신뢰 대상이며 오픈 코드·네트워크 탭으로 확인), 허용 서버(`/api/calorie`·외부 AI)에서의 사용, 조각 안에 든 카드번호 같은 민감정보(인식이 아니라 최소화로 줄인다, D§2).
+- 보장하지 않는 것: famelet을 거치지 않는 다른 앱, 호스트 코드(신뢰 대상이며 오픈 코드·네트워크 탭으로 확인), 허용 서버(`/api/calorie`·외부 AI)에서의 사용, 조각 안에 든 카드번호 같은 민감정보(인식이 아니라 최소화로 줄인다, D§2).
 
 ## 3. 외부 인터페이스와 기능 요구사항
 
@@ -65,9 +65,9 @@ PRD의 F1~F19와 G1~G5를 구현·시험 가능한 문장으로 바꾼다. 독�
 | --- | --- | --- |
 | EI-1 | 라우트 | `/`(휴대폰·데스크톱 모드), `/hud`(글래스 모드, `vercel.json` 경로 재작성), `/outward`(바깥 표시), `/api/calorie`(Vercel 함수). 휴대폰·데스크톱 모드는 화면 폭으로 고른다(768px 미만 = 휴대폰. D§4의 카메라 규칙을 모드 기준으로도 쓰는 것은 결정 A-9) |
 | EI-2 | 브라우저 입력 | `getUserMedia`(웹캠, 후면 `facingMode: environment`) 또는 mp4 → 같은 `<video playsInline muted autoplay>` |
-| EI-3 | 호스트↔플러그인 메시지 | 호스트→플러그인: `init`(매니페스트, `apiBase`), `delivery`(Blob, `scene`(food/person/none), `objectLabel`(banana 등)). 플러그인→호스트: `ready`, `ack`(SHA-256 해시), `result`(한 줄), `violation`. 호스트는 `event.source`를 검증하고 `ready`를 받은 뒤에만 전달한다. 격리 프레임의 Origin이 `"null"`이라 API 주소는 `init.apiBase`로 넘긴다. SDK `lensgate.onInit / onDelivery / result / reportViolation`. 해시는 `crypto.subtle` 우선, 없으면 순수 JS. 플러그인 메시지 상한 [시작값]: 초당 20건, 8KiB, text 200자, ID 128자, target 512자. 계약 세부는 02-SSRD IF-01·02·04 |
+| EI-3 | 호스트↔플러그인 메시지 | 호스트→플러그인: `init`(매니페스트, `apiBase`), `delivery`(Blob, `scene`(food/person/none), `objectLabel`(banana 등)). 플러그인→호스트: `ready`, `ack`(SHA-256 해시), `result`(한 줄), `violation`. 호스트는 `event.source`를 검증하고 `ready`를 받은 뒤에만 전달한다. 격리 프레임의 Origin이 `"null"`이라 API 주소는 `init.apiBase`로 넘긴다. SDK `famelet.onInit / onDelivery / result / reportViolation`. 해시는 `crypto.subtle` 우선, 없으면 순수 JS. 플러그인 메시지 상한 [시작값]: 초당 20건, 8KiB, text 200자, ID 128자, target 512자. 계약 세부는 02-SSRD IF-01·02·04 |
 | EI-4 | 매니페스트 | 필드: `scenes`(배열), `maxSide` 32–512, `quality` 0.5–0.92, `maxPerMinute` 1–30, `network`(https origin만, `$ORIGIN` 치환), `purpose`(40자 이하, 확인 화면 표시), `region`(`"target"`만 허용). 기본값은 `maxSide` 256(데모 6단계 시작값), `maxPerMinute` 6, `quality` 0.8(결정) |
-| EI-5 | `POST /api/calorie` | 요청 본문: `image/jpeg` 바이트, 선택 헤더 `x-label`. 600KB 초과 → 413, 이미지가 아니면 → 415, 상위 AI 8초 무응답 → 502, 요청 제한 초과 → 429(인스턴스별 보조 수단, 실제 상한은 Anthropic 콘솔 지출 한도). CORS `Access-Control-Allow-Origin: *`, 응답 헤더 `X-LensGate-Body-Bytes`(P1, `Expose-Headers`로 노출). `OPTIONS` → 204(+ `Allow-Methods: POST`, `Allow-Headers: Content-Type, x-label`). 응답 `<음식> 약 <숫자>kcal` 또는 `음식 아님`. 이미지 비저장 |
+| EI-5 | `POST /api/calorie` | 요청 본문: `image/jpeg` 바이트, 선택 헤더 `x-label`. 600KB 초과 → 413, 이미지가 아니면 → 415, 상위 AI 8초 무응답 → 502, 요청 제한 초과 → 429(인스턴스별 보조 수단, 실제 상한은 Anthropic 콘솔 지출 한도). CORS `Access-Control-Allow-Origin: *`, 응답 헤더 `X-Famelet-Body-Bytes`(P1, `Expose-Headers`로 노출). `OPTIONS` → 204(+ `Allow-Methods: POST`, `Allow-Headers: Content-Type, x-label`). 응답 `<음식> 약 <숫자>kcal` 또는 `음식 아님`. 이미지 비저장 |
 | EI-6 | 창 간 동기화 | 같은 브라우저 안의 창끼리 `BroadcastChannel`로 Counter 숫자만 보낸다. 다른 기기 사이에서는 동기화되지 않는다(M-21·29·32) |
 | EI-7 | (참고) Meta DAT 스트림 | 해상도 720×1280·504×896·360×640, 2/7/15/24/30fps. 대역폭 부족 시 해상도 먼저, fps는 15 밑으로 안 내림. 단일 프레임 캡처 가능(1단계 근거). 데모 미구현(M-21·29·32) |
 
@@ -124,7 +124,7 @@ PRD의 F1~F19와 G1~G5를 구현·시험 가능한 문장으로 바꾼다. 독�
 | --- | --- | --- | --- |
 | FR-026 | 중개기가 유일한 경로다. Delivery는 `prepared`(전송 직전 기록) → `dispatched` 또는 `failed`. `dispatched`만 전달 수·신호·카운터에 들어간다. 다시 보내면 새 항목 | P0 · F6, G5 | 정상 온라인 시험에서 로그 전달 수 = `ack` 수 = `/api/calorie` 요청 수. 비교 모드·권한 차단·오프라인에서는 API 0건이 정상. 전송 실패는 `failed`로 남고 수에 들지 않는다 |
 | FR-027 | 전달마다 로그: 썸네일, 바이트, 면적 비율(조각/원본), 분기, 가린 얼굴 수, 처리 위치(웹 데모는 "브라우저"). 해시(`ack`)는 상세 보기에만, 보장 근거로 쓰지 않음(§2.4). `ack` 2초 초과는 상태만 timeout, 해시 불일치는 차단 기록(`host`)으로도 남김(결정) | P0 · F6, G5, D§4 | 목록에 6개 항목, 해시는 상세에만. 호스트 해시 = `ack` 해시 |
-| FR-028 | 바이트·썸네일은 보낸 Blob에서 계산. 플러그인은 그 Blob을 그대로 `image/jpeg` 본문으로 보낸다 | P0 · F6, G5, D§5 | 주 증거: 서버 응답 `X-LensGate-Body-Bytes`(P1) = 로그 바이트. 보조: POST `Content-Length` |
+| FR-028 | 바이트·썸네일은 보낸 Blob에서 계산. 플러그인은 그 Blob을 그대로 `image/jpeg` 본문으로 보낸다 | P0 · F6, G5, D§5 | 주 증거: 서버 응답 `X-Famelet-Body-Bytes`(P1) = 로그 바이트. 보조: POST `Content-Length` |
 | FR-029 | 2d와 violation도 로그에 남기되 전달 수에는 넣지 않는다. 화면 로그는 모든 종류를 합쳐 최근 100건만 유지하고 밀려난 썸네일은 해제한다. 계산용 숫자(§4.3)는 로그와 따로 둬서 줄지 않는다. 같은 사유의 "전달 안 함"은 10초에 1번만 | P0 · F4, F5, F6, D§4 | 101번째 항목에서 가장 오래된 항목이 빠진다. 같은 사유 보류가 10초 안에 반복돼도 1건 |
 | FR-030 | 확인 화면: 플러그인별 "이 플러그인이 본 것은 이 사진 N장뿐" + 썸네일 그리드. N은 Counter의 전달 수에서 가져온다. 해제된 썸네일은 "외 k장"으로 표기 | P1 · F12, G5 | N = 로그 전달 수 = 썸네일 수 + k |
 | FR-052 | 세션 누적: 앱별 "블러 없는 얼굴이 담긴 전달물 수"(결정 A-8) | P1 · F8 카운터 표 | 비교 모드 전달마다 +1, 보호 모드에서는 0 유지 |
@@ -274,7 +274,7 @@ O = 사람 박스 ∩ 조각 > 조각 면적 5%. F = 얼굴 ≥ 0.5. P = (사람
 | TC-027 | F4 · S | 긴 변 256px 미만 조각 만들기 → 검출 입력이 256px, 검출 수 = 2단계 진입 수 | FR-014, N003 |
 | TC-028 | F4 · S | iPhone Safari에서 2b + `grep ctx.filter` → Safari에서 픽셀화가 보이고 grep 0건 | FR-015, 015 |
 | TC-030 | F5 · S | 콘솔에서 iframe 재로드 유발 → 플러그인 종료, violation, 이후 전달 0 | FR-022 |
-| TC-032 | F6 · S | 전달 10건(T): 로그 바이트와 응답 `X-LensGate-Body-Bytes`(보조: POST `Content-Length`) 비교 → 10건 모두 같다 | FR-028, N011 |
+| TC-032 | F6 · S | 전달 10건(T): 로그 바이트와 응답 `X-Famelet-Body-Bytes`(보조: POST `Content-Length`) 비교 → 10건 모두 같다 | FR-028, N011 |
 | TC-034 | F8 · M | 휴대폰·데스크톱·`/hud`에서 HUD 확인 → 같은 컴포넌트, 요소 ≤ 5, 24/40px, 검은 배경, 색 규칙 | FR-034, 036, N040, N041 |
 | TC-035 | F9 · M | 시작 버튼 → 전달 3건(T), 무음 모드 켬/끔 → 테두리 점멸 3 = 전달 3, 소리는 무음 해제 때만, Android 진동, iPhone은 진동 없이 오류 없음 | FR-039, 040 |
 | TC-037 | F11 · M | 문법 오류 JSON, `maxSide: 1000`, `http://` origin 저장 → 모두 거부, 기존 값·기존 iframe으로 전달 계속 | FR-043 |
@@ -340,5 +340,5 @@ P0 FR마다 TC가 하나 이상 있다. 데모 8단계(멘트)는 TC가 없다.
 - **M-28** **대상 선택**: 해소안 "가운데 60% 안에서 음식 우선"(FR-007) → PRD 문장 수정 [D·SRD v0.2·팀원 SSRD]
 - **M-21·29·32** **발표·원문**: `/outward`는 같은 브라우저 창만 동기화(심사위원 폰 상태는 안 나옴). DAT 15fps 하한과 PRD 2~7fps를 그림에서 구분. 음식 12종은 `AGENTS.md` 원문 확인 [SRS·SRD·D]
 - **M-31·33** **배포**: `/outward` 재작성 추가(로컬 http 예외는 결정됨) [D]
-- **M-23·34** **미정**: 0단계 fps 하한, 처리량 패널 갱신 주기, 카메라 `ideal` 해상도(실측으로), 제품명(팀이 직접), iOS 미제출 운영진 확인, 생태계 검증 [SRD·SRS]
+- **M-23·34** **미정**: 0단계 fps 하한, 처리량 패널 갱신 주기, 카메라 `ideal` 해상도(실측으로), iOS 미제출 운영진 확인, 생태계 검증 [SRD·SRS]
 - **M-35·39** **PRD 미기재 보완**: A-10, FR-013 재검출, FR-055, `ack` 2초, 429, 3초 폴백 → PRD 반영 결정 [SRS·팀원 SSRD]

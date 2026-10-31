@@ -1,4 +1,4 @@
-# LensGate(가칭) SSRD: 서브시스템 분해와 인터페이스 계약
+# famelet SSRD: 서브시스템 분해와 인터페이스 계약
 
 2026-10-31 · 근거: PRD, `00-추가결정사항.md`(§4·§5·§6), 팀원 SSRD v2(설계 제안 D1~D10, Worker 구성 Chrome 시험), iPhone Safari 실측 S1~S12(2026-10-31, 재현 페이지) · 짝 문서: 03-SRS(요구사항 원본, FR/NFR), 04-ERD(엔티티 7개) · 요구사항은 PRD F 번호로만 가리킨다. 팀원 SSRD v2의 제안을 어떻게 처리했는지는 §7에 있다. 외부 검토(2026-10-31)의 채택 항목을 반영했다: 해시를 `delivery`에서 뺌, 물체 라벨 분리, 전송 상태(`sendStatus`), 출구 재검사 P0와 검사 실패 시 보류, 실행 세대(`runtimeId`)와 전환 공통 절차, 권한 축소 실패 시 멈춤, 비교 모드 종료 후 카운터의 자연 감소, 서버가 받은 본문 확인 헤더, 메시지 상한
 
@@ -116,7 +116,7 @@ type PluginToHost =
 | IF-02 | `delivery` | A `broker` → `sendDelivery()` → 부트스트랩 → Worker | 필드는 같은 `deliveryId`의 Delivery·SceneDecision에서만 만든다. `blob`은 스토어 Delivery와 **같은 Blob 객체**(전송 바이트 = 로그 썸네일)이며 `canvas.toBlob`/`convertToBlob` 결과 그대로다(더 큰 버퍼를 잘라 만들지 않음 → 가리기 전 픽셀이 딸려 가지 않음). `bytes = blob.size`. Delivery·LogEntry를 스토어에 **먼저** 쓰되 `Delivery.sendStatus = 'prepared'`로 쓴다. `postMessage`까지 성공하면 `dispatched`, 거부·예외면 `failed`로 바꾼다. 전달 수·전달 신호·Counter에는 `dispatched`만 들어간다. 2d·주기 제한·`status≠ready`면 보내지 않는다. `scene`은 장면 분류(food/person/none), `objectLabel`은 물체 라벨(banana 등 COCO 영문)이다. `x-label`과 고정표에는 `objectLabel`을 쓴다. **출구 재검사(P0, 팀원 D2):** 보낼 Blob을 디코딩해 BlazeFace를 한 번 더 돌리고, 그 결과를 두 모드 모두 `Delivery.faceCheck = {status: 'checked', detectedFaces}`에 쓴다. M은 이 측정값에서 나온다. 보호 모드에서 1 이상이면 보내지 않고 LogEntry `hold`(reason "출구 재검사"). 검사가 오류로 끝나면(`status: 'error'`) 0으로 두지 않고 보내지 않는다(reason "검사 실패"). 비교 모드에서는 그대로 보내고 센다. 같은 모델로 다시 검사하는 것이라 가림 단계의 실수(좌표·인코딩)를 찾는 장치이지, 처음 검출이 놓친 얼굴을 독립적으로 찾아내는 장치는 아니다. `sendDelivery()`는 스토어에 없는 `deliveryId`, `bytes ≠ blob.size`, `manifestVersion ≠` 현재 iframe 버전, `runtimeId ≠` 포착 시작 때의 `runtimeId`, 전달 게이트가 닫힌 상태이면 거부한다. Delivery 1건당 전송은 최대 1번(재전송 없음) |
 | IF-03 | `ready` | Worker SDK → 호스트 | Worker가 `onInit`까지 끝낸 뒤 1번. 호스트가 `Plugin.status = ready` |
 | IF-04 | `ack` | SDK → 호스트 | `delivery`를 받으면 SDK가 받은 Blob으로 SHA-256을 계산해 응답한다. 호스트는 기대 해시를 메시지에 싣지 않고 자기 쪽에만 둔 채 비교한다. 해시를 함께 보내면 나쁜 플러그인이 계산 없이 그 값을 돌려줘도 일치로 나오기 때문이다. 그래도 `ack`는 플러그인이 보낸 값이라 독립된 수신 증명이 아니며, 협조하는 참조 플러그인의 전송 무결성 점검으로만 쓴다. Worker는 `crypto.subtle`을 먼저 쓰고, 없으면 순수 JS로 계산한다. iPhone Safari에서 순수 JS 경로를 강제로 탄 계약 재현(V10)은 match 2ms, 한 바이트 변조 시 mismatch 2ms, 응답 억제 시 timeout 2,001ms였다(제품 SDK 통합은 미검증). iPhone Safari 실측(S7)에서 HTTPS의 origin `null` Worker는 `isSecureContext = true`, `crypto.subtle`이 있었고 SHA-256 값도 표준과 같았다. 로컬 HTTP에서는 `crypto.subtle`이 없었다. 팀원 D4의 Chrome 관측("Worker에 `crypto.subtle` 없음")도 같은 이유로 보인다(미확인). 그래서 순수 JS 경로는 로컬 개발용으로 남기고, 강제로 그 경로를 타게 하는 시험을 따로 한 번 돌린다. B가 `Delivery.ackSha256`과 `Delivery.ackStatus: 'pending' | 'match' | 'mismatch' | 'timeout'`을 기록한다(보낼 때 `pending`, 2초 안에 `ack`가 없으면 `timeout`, 팀원 SSRD 제안). `mismatch`는 LogEntry `violation`(reason "해시 불일치", `enforcedBy: host`). `timeout`인 Delivery도 지우지 않고 C가 "수신 미확인"으로 표시한다(M은 보낸 시점 기준으로 이미 센다. 덜 세는 쪽보다 안전하다). 해시는 전송 무결성일 뿐 보장 근거가 아니다 |
-| IF-05 | `result` | SDK `lensgate.result()` → 호스트 | `text`는 C가 `textContent`로 결과 줄에 표시(200자까지) |
+| IF-05 | `result` | SDK `famelet.result()` → 호스트 | `text`는 C가 `textContent`로 결과 줄에 표시(200자까지) |
 | IF-06 | `violation` | SDK → 부트스트랩 → 호스트 | 플러그인이 `reportViolation()`으로 보낸 **자기 보고**다. B가 LogEntry(`kind: violation`, `reason` = `attempt` + `target`, `enforcedBy: plugin-report`)로 기록하고 UI는 "플러그인 내부 보고"로 표기 → HUD 빨강. 변조 4종 = 4줄. `fetch`·`script`이면 호스트가 `target`의 origin을 현재 매니페스트 `network`와 대조해 "허용 목록 밖" 또는 "허용 목록 안인데 실패"를 덧붙인다. 앱이 아는 정책 판단과 플러그인이 본 요청 실패를 구분해 적기 위해서다. CSP 위반 이벤트는 두 브라우저 모두에서 관측되지 않았다. 팀원 D6(Chrome)에서는 iframe 부트스트랩의 `securitypolicyviolation` 리스너에 Worker의 CSP 위반이 잡히지 않았다. iPhone Safari 실측(S4)에서는 Worker 안에 리스너를 먼저 설치해도 2초 동안 이벤트가 0건이었다(차단 자체는 됨). 그래서 플러그인이 받은 `TypeError`만으로 "브라우저가 CSP 차단을 확인했다"고 적지 않는다. 차단이 실제로 일어났다는 증거는 네트워크 탭의 "서버 도달 0건"이다. 호스트가 직접 감지하는 것은 둘뿐이다(`enforcedBy: host`): iframe 재로드(메시지 없이 감지 → 즉시 종료, reason "iframe 재로드")와 해시 불일치 |
 
 **transferable:** 쓰지 않는다 [제안]. Blob은 불변이라 같은 객체를 썸네일·`bytes`에 그대로 쓸 수 있다(ArrayBuffer transfer는 송신 측이 비어 로그용 사본이 따로 필요).
@@ -128,7 +128,7 @@ type PluginToHost =
 ### IF-07 `/outward` BroadcastChannel
 
 ```ts
-// 채널 'lensgate-outward'. 같은 브라우저·같은 origin 창끼리만. origin null 플러그인은 참여 불가
+// 채널 'famelet-outward'. 같은 브라우저·같은 origin 창끼리만. origin null 플러그인은 참여 불가
 type OutwardMessage = { type: 'outward'; apps: number; compareMode: boolean; at: number };
 // apps = Counter.outwardApps. 보내는 쪽: C 메인 창(Counter가 바뀔 때마다 재발행만, 직접 계산 금지)
 ```
@@ -143,10 +143,10 @@ type OutwardMessage = { type: 'outward'; apps: number; compareMode: boolean; at:
 | --- | --- |
 | 요청 | `POST {apiBase}/api/calorie`, `Content-Type: image/jpeg`, 본문 = `delivery.blob` **그대로**(base64·multipart·재인코딩 금지 → `Delivery.bytes` = 네트워크 탭 요청 본문 크기, F6), 선택 헤더 `x-label: <objectLabel>`(COCO 영문 물체 라벨. 장면 분류 `food`를 넣지 않는다) |
 | 응답 200 | 본문 한 줄 `<음식> 약 <숫자>kcal`(예: `바나나 약 105kcal`) 또는 `음식 아님`. `Content-Type: text/plain; charset=utf-8` [제안] |
-| 받은 본문 확인 (P1) | 서버가 실제로 읽은 요청 본문의 바이트 수와 SHA-256을 응답 헤더 `X-LensGate-Body-Bytes`, `X-LensGate-Body-SHA256`으로 돌려준다. 이미지는 저장하지 않는다. 데모 5단계에서 "서버가 받은 바이트 = 로그 바이트"를 보여 주는 근거로 쓴다. 네트워크 탭의 `Content-Length`는 HTTP/2에서 생략될 수 있어 보조 값으로만 쓴다. 이 대조는 브라우저→`/api/calorie` 구간까지이며, 서버가 AI 공급자로 보내는 요청까지 같다는 뜻은 아니다 |
+| 받은 본문 확인 (P1) | 서버가 실제로 읽은 요청 본문의 바이트 수와 SHA-256을 응답 헤더 `X-Famelet-Body-Bytes`, `X-Famelet-Body-SHA256`으로 돌려준다. 이미지는 저장하지 않는다. 데모 5단계에서 "서버가 받은 바이트 = 로그 바이트"를 보여 주는 근거로 쓴다. 네트워크 탭의 `Content-Length`는 HTTP/2에서 생략될 수 있어 보조 값으로만 쓴다. 이 대조는 브라우저→`/api/calorie` 구간까지이며, 서버가 AI 공급자로 보내는 요청까지 같다는 뜻은 아니다 |
 | 오류 | 600KB 초과 413, 이미지 아님 415, 요청 수 한도 초과 429, 8초 안에 상류 응답 없음 502. 오류 본문 형식 미정 |
 | 요청 제한 | CORS가 `*`라 아무 사이트나 직접 호출해 AI 비용을 쓸 수 있다. 실제 상한은 **Anthropic 콘솔의 지출 한도**로 건다. 서버 함수 안의 요청 수 제한(초과 시 429)은 인스턴스마다 따로 세므로 배포 전체의 제한이 아니며, 보조 수단으로만 둔다. Vercel WAF 요청 제한은 팀 계정에서 쉽게 켤 수 있을 때만 추가한다 |
-| CORS | 모든 응답 `Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: X-LensGate-Body-Bytes, X-LensGate-Body-SHA256`. `OPTIONS` → 204 + `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: content-type, x-label`. iPhone Safari 실측(S12): HTTPS Worker에서 `Origin: null`, `image/jpeg`, `x-label: banana`로 OPTIONS 뒤 POST가 도달해 200을 받았다(시험 서버는 Allow-Methods에 `GET, OPTIONS`도 넣었다. 실제 API·오류·요청 제한은 미검증). 전달 수는 POST만 센다 |
+| CORS | 모든 응답 `Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: X-Famelet-Body-Bytes, X-Famelet-Body-SHA256`. `OPTIONS` → 204 + `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: content-type, x-label`. iPhone Safari 실측(S12): HTTPS Worker에서 `Origin: null`, `image/jpeg`, `x-label: banana`로 OPTIONS 뒤 POST가 도달해 200을 받았다(시험 서버는 Allow-Methods에 `GET, OPTIONS`도 넣었다. 실제 API·오류·요청 제한은 미검증). 전달 수는 POST만 센다 |
 | 서버 | 이미지 저장·로깅 안 함. `ANTHROPIC_API_KEY`(클라이언트에 두지 않음), `CALORIE_MODEL`(기본 `claude-haiku-5-5`) |
 | 클라이언트 시간 제한 | 플러그인 SDK가 3초 안에 응답이 없으면 요청을 중단하고 고정표로 넘어간다 [제안, 팀원 D7]. 서버의 8초 502는 그대로 둔다. 무대에서 8초를 기다리지 않기 위해서다 |
 | 플러그인 폴백 | `apiBase: null`(비교 모드), 네트워크 오류·CSP 차단·3초 초과·413·415·429·502 등 비 200 → `objectLabel`로 고정표에서 `text` 생성, `source: 'fallback'`. 표(kcal): banana 바나나 105, apple 사과 95, orange 오렌지 62, donut 도넛 250, pizza 피자 285, sandwich 샌드위치 300, cake 케이크 350, hot dog 핫도그 290, broccoli 브로콜리 30, carrot 당근 25. 표에 없는 음식 라벨(`bowl`·`cup`)은 "음식(종류 미상)" [제안] |
@@ -189,7 +189,7 @@ iframe 문서 CSP(B가 생성해 `srcdoc`의 `<meta>`에 넣는다): `default-sr
 
 ### 검증 근거 (팀원 SSRD v2 + iPhone Safari 실측)
 
-두 시험 모두 지금 구성(sandbox iframe + `srcdoc` meta CSP + Blob URL Worker)을 따로 만든 재현 페이지에서 돌렸다. 실제 LensGate 앱에 통합한 상태의 검증은 아니다.
+두 시험 모두 지금 구성(sandbox iframe + `srcdoc` meta CSP + Blob URL Worker)을 따로 만든 재현 페이지에서 돌렸다. 실제 famelet 앱에 통합한 상태의 검증은 아니다.
 - **Chrome:** 팀원 v2. Chrome 156 헤드리스, localhost, `script-src 'unsafe-inline'`.
 - **iPhone Safari:** iPhone 16 Pro, iOS 27.2, HTTPS 임시 주소, `script-src` nonce, 2026-10-31 17:14~17:17 KST. Safari 확장이 켜진 실사용 환경이다. 상세 결과와 원시 증거는 `/Users/Kimdonggyun/Documents/Codex/2026-10-31/x20/outputs/iPhone-Safari-verification.ko.md`에 있다.
 
@@ -286,7 +286,7 @@ sequenceDiagram
 | 관문 | 시점 | 통과 기준 |
 | --- | --- | --- |
 | **M0** | 첫 1시간 직후, 배포 확인(V6)과 동시에 | hello 플러그인에 고정 테스트 JPEG Blob을 `delivery`로 보내고(해시는 싣지 않음), `ack.sha256` = 호스트가 들고 있는 `sha256`(`ackStatus: match`). 플러그인 쪽 바이트를 일부러 바꿔 `mismatch`, `ack`를 막아 `timeout`이 뜨는지도 본다(iPhone 계약 재현은 통과, V10). 같이 확인: iframe 속성(`sandbox="allow-scripts"`, `allow=""`), `ready` 전 전달 0건, 다른 `event.source` 메시지 무시, 다른 iframe에 보낸 `deliveryId`로 온 `ack` 거부, `sendDelivery` 거부 시 `sendStatus = failed`이고 전달 수에 안 들어감. 여기까지 되면 B는 실제 판정 없이, A는 실제 플러그인 없이 각자 진행 가능 |
-| **1차 통합** | 4~5h | 바나나 → Delivery 1건 → 칼로리 결과 한 줄 → 로그 1줄 + 테두리 점멸·효과음. 서버 응답의 `X-LensGate-Body-Bytes` = 로그 `bytes`(네트워크 탭 `Content-Length`는 보이면 보조로 확인). 판정 중 요청 0건. 안 붙으면 PRD 규칙대로 P2를 모두 취소하고 A·B에 집중 |
+| **1차 통합** | 4~5h | 바나나 → Delivery 1건 → 칼로리 결과 한 줄 → 로그 1줄 + 테두리 점멸·효과음. 서버 응답의 `X-Famelet-Body-Bytes` = 로그 `bytes`(네트워크 탭 `Content-Length`는 보이면 보조로 확인). 판정 중 요청 0건. 안 붙으면 PRD 규칙대로 P2를 모두 취소하고 A·B에 집중 |
 | **격리 재현** | 1차 통합 후 | 재현 페이지 기준 iPhone Safari는 끝났다(§3 표). 남은 것은 넷이다. ① 실제 앱에 통합한 상태에서 §3 표 6줄을 배포 URL(HTTPS)로 iPhone Safari·Android Chrome에서 다시 돌린다. ② SDK의 순수 JS 해시 경로를 강제로 타게 해 `ack`·2초 `timeout`이 맞는지 본다. ③ MediaPipe GPU 실패 시 CPU 대체와 0단계 5fps를 iPhone에서 잰다(S11 미검증). ④ 실제 `/api/calorie`의 CORS·413·415·429·502를 확인한다 |
 | **비교 모드·전환** | 2차 통합 | 켜진 동안 칼로리 iframe의 외부 요청 0건(네트워크 탭)이고 차단 기록(빨강)도 0건. 끄면 "보호 중"이 즉시 바뀌고 M·바깥 표시는 10초 안에 0. 새로고침하면 꺼진 상태로 시작. 포착 중에 켜고 끄면 그 포착은 버려진다. 권한을 지운 뒤 새 iframe이 `ready`를 보내지 않으면 `stopped`가 되고 옛 권한으로 돌지 않는다 |
 
@@ -295,7 +295,7 @@ sequenceDiagram
 | # | 위치 | 내용 |
 | --- | --- | --- |
 | 1 | F5 | CSP를 `default-src 'none'`으로만 적었는데, 이대로면 iframe 부트스트랩 스크립트와 blob Worker가 실행되지 않는다. `script-src`(nonce)와 `worker-src blob:`가 더 필요하다. iPhone Safari에서 이 구성과 호스트·iframe CSP 교집합을 확인했다(S1·S2). PRD F5에 두 지시어와 "호스트 페이지에는 `script-src` CSP를 두지 않는다"를 적어야 한다 |
-| 2 | F6·점검 지표 | "로그 바이트 = 요청 본문 크기"는 본문이 원본 바이트일 때만 성립한다(IF-08로 고정). 또 `image/jpeg`·`x-label` 요청은 CORS 사전 요청(OPTIONS)을 만들므로, 점검 지표 "전달 1건당 `/api/calorie` 요청 1건"은 POST만 센다고 적어야 한다. 네트워크 탭의 "Size" 열은 헤더를 포함한 전송 크기라 로그 바이트와 다르다. `Content-Length`는 HTTP/2에서 생략될 수 있으므로, 주 증거는 서버가 돌려주는 `X-LensGate-Body-Bytes`·`X-LensGate-Body-SHA256`(IF-08)로 하고 `Content-Length`는 보조로 쓴다. "로그 전달 수 = API 요청 수"는 협조하는 칼로리 플러그인의 정상 온라인 시험에만 성립한다. 비교 모드·권한 차단·오프라인에서는 API 0건이 정상이다 |
+| 2 | F6·점검 지표 | "로그 바이트 = 요청 본문 크기"는 본문이 원본 바이트일 때만 성립한다(IF-08로 고정). 또 `image/jpeg`·`x-label` 요청은 CORS 사전 요청(OPTIONS)을 만들므로, 점검 지표 "전달 1건당 `/api/calorie` 요청 1건"은 POST만 센다고 적어야 한다. 네트워크 탭의 "Size" 열은 헤더를 포함한 전송 크기라 로그 바이트와 다르다. `Content-Length`는 HTTP/2에서 생략될 수 있으므로, 주 증거는 서버가 돌려주는 `X-Famelet-Body-Bytes`·`X-Famelet-Body-SHA256`(IF-08)로 하고 `Content-Length`는 보조로 쓴다. "로그 전달 수 = API 요청 수"는 협조하는 칼로리 플러그인의 정상 온라인 시험에만 성립한다. 비교 모드·권한 차단·오프라인에서는 API 0건이 정상이다 |
 | 3 | 보장 1 · F17 | 비교 모드에서 칼로리 플러그인이 원본 전체를 `/api/calorie`로 보내면 서버가 가리지 않은 원본을 받아 보장 1의 "서버는 이미 가린 조각만"과 충돌한다. **이 문서는 팀원 D1로 해소했다:** 비교 모드 동안 칼로리 iframe의 `connect-src`를 비워 원본이 브라우저 밖으로 나가지 않는다. PRD F17과 시나리오 1단계에 "켜진 동안 통신 차단, 결과는 고정표"를 적어야 한다 |
 | 4 | F15 | `/outward` "얼굴을 본 앱 N개"의 집계 기간이 없다(ERD가 10초로 정함) |
 | 5 | 보장 2 | "선언한 영역만"이라고 하지만 매니페스트(추가결정 §4)에 영역 필드가 없다. 이 문서는 값이 하나뿐인 `region: "target"`(대상 박스 + 10%)을 두어 선언을 명시했다. 추가결정 §4의 매니페스트 필드 목록에 `region`·`purpose`를 더해야 한다 |
