@@ -16,7 +16,7 @@ import { createLensStore } from '../src/core/store';
 import { SCRIBE, WIDE_WARP } from '../src/input/config';
 import { runScribe, scribeUrl, type MicPipe, type ScribeDeps, type ScribeError, type SocketLike } from '../src/input/scribe';
 import { applyCpuMap, buildCpuMap, sourceBoxToWarped, sourceUv, warpedBoxToSource, warpedXY, warpOutputSize, warpParams, type WarpSettings } from '../src/input/warp';
-import { gazeHeld, matchBoxes, pickConsent, pickGazeTarget, stepGaze, stepTracks, type Track } from '../src/vision/track';
+import { gazeHeld, matchBoxes, matchByCenter, pickConsent, pickGazeTarget, stepGaze, stepTracks, type Track } from '../src/vision/track';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
@@ -72,13 +72,14 @@ check('가운데 60% 밖 음식은 none', () => {
   assert.equal(v.label, 'none');
 });
 
-check('5% 미만 사람만 있으면 none, N은 센다', () => {
-  // 640×360 = 230400, 5% = 11520. 100×110 = 11000.
-  const small = classifyScene([f('person', 270, 120, 100, 110)], 640, 360);
+check('사람 대상 하한 2%(personMinArea): 미만이면 none, N은 센다, 이상이면 person(멀리 선 사람)', () => {
+  // 640×360 = 230400, 2% = 4608. 60×76 = 4560, 60×77 = 4620.
+  const small = classifyScene([f('person', 290, 140, 60, 76)], 640, 360);
   assert.equal(small.label, 'none');
   assert.equal(small.peopleCount, 1);
-  const big = classifyScene([f('person', 270, 120, 100, 116)], 640, 360);
+  const big = classifyScene([f('person', 290, 140, 60, 77)], 640, 360);
   assert.equal(big.label, 'person');
+  assert.equal(VISION_CONFIG.personMinArea, 0.02);
 });
 
 check('같은 종류는 중심에 가까운 쪽', () => {
@@ -867,6 +868,34 @@ await checkAsync('받아쓰기 취소: 바로 닫고 그 뒤 메시지·콜백�
   assert.equal(f.timers.length, 0);
   assert.equal(await s.stop(), '');
   assert.equal(f.log.errors.length, 0);
+});
+
+check('응시 이어 가기: 0.18 원에서 시작한 사람은 0.4 원 안이면 유지, 다른 사람이 0.18 원에 들어오면 그 사람, 0.4 밖이면 없음', () => {
+  // 640×360: 시작 반지름 64.8px, 유지 반지름 144px. 중심 (320,180).
+  const full = b(0, 0, 1, 1);
+  const at = (cxPx: number, id: string): Track => ({ id, box: b((cxPx - 32) / 640, 0.3, 64 / 640, 0.4), score: 0.9, lastSeenAt: 0 });
+  const keep = { trackId: 'a', radius: VISION_CONFIG.gazeKeepRadius };
+  assert.equal(pickGazeTarget([at(320 + 140, 'a')], full, 640, 360, 0.18), null); // 처음이면 0.18 원 밖
+  assert.equal(pickGazeTarget([at(320 + 140, 'a')], full, 640, 360, 0.18, keep)?.id, 'a'); // 보고 있던 사람은 유지
+  assert.equal(pickGazeTarget([at(320 + 140, 'a'), at(330, 'b')], full, 640, 360, 0.18, keep)?.id, 'b'); // 다른 사람이 가운데
+  assert.equal(pickGazeTarget([at(320 + 150, 'a')], full, 640, 360, 0.18, keep), null); // 0.4 원 밖
+  assert.equal(pickGazeTarget([at(320 + 140, 'a')], b(0, 0, 0.5, 1), 640, 360, 0.18, keep), null); // 흰 틀과 안 겹침
+  assert.equal(VISION_CONFIG.gazeGraceMs, 800);
+});
+
+check('추적 이음 완화: IoU 0.3 미만으로 빨리 움직인 사람도 중심 거리(큰 변 × 0.6)·넓이 비 안이고 짝이 하나면 같은 trackId', () => {
+  // 폭 0.3 상자가 0.19만큼 움직임: IoU = 0.11/0.49 ≈ 0.22
+  const prev: Track[] = [{ id: 'p1', box: b(0.3, 0.2, 0.3, 0.6), score: 0.9, lastSeenAt: 0 }];
+  let n = 0;
+  const moved = stepTracks(prev, [{ box: b(0.49, 0.2, 0.3, 0.6), score: 0.9 }], 300, () => `n${++n}`);
+  assert.deepEqual(moved.visible.map((t) => t.id), ['p1']);
+  // 너무 멀리(중심 거리 0.4 > 0.6 × 0.6 = 0.36) 가면 새 사람
+  assert.deepEqual(stepTracks(prev, [{ box: b(0.7, 0.2, 0.3, 0.6), score: 0.9 }], 300, () => 'new').visible.map((t) => t.id), ['new']);
+  // 넓이가 두 배 넘게 다르면 잇지 않는다
+  assert.deepEqual(stepTracks(prev, [{ box: b(0.45, 0.2, 0.15, 0.3), score: 0.9 }], 300, () => 'new').visible.map((t) => t.id), ['new']);
+  // 근처에 이전 사람이 둘이면 잇지 않는다(동의가 옮겨 가지 않게)
+  const two = [b(0.3, 0.2, 0.3, 0.6), b(0.62, 0.2, 0.3, 0.6)];
+  assert.equal(matchByCenter([b(0.46, 0.2, 0.3, 0.6)], two, 0.6, new Set(), new Set()).size, 0);
 });
 
 console.log(`\n${passed}개 통과`);

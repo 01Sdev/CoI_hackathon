@@ -42,6 +42,36 @@ export function matchBoxes(a: readonly Box[], b: readonly Box[], minIou: number)
   return out;
 }
 
+/**
+ * IoU로 못 이은 상자를 중심 거리로 한 번 더 잇는다. 빠르게 움직이거나 0단계가 느리면(휴대폰) 틱 사이 겹침이 IoU 기준 아래로
+ * 떨어져 같은 사람이 새 trackId가 되고 응시 3초가 다시 시작됐다. 중심 거리 ≤ gate × 두 상자 중 큰 변, 넓이 비 0.5~2배일 때만,
+ * 그리고 양쪽 모두 그런 짝이 하나뿐일 때만 잇는다(사람이 둘 가까이 있으면 잇지 않는다: 동의가 옮겨 가지 않게).
+ */
+export function matchByCenter(
+  a: readonly Box[],
+  b: readonly Box[],
+  gate: number,
+  takenA: ReadonlySet<number>,
+  takenB: ReadonlySet<number>,
+): Map<number, number> {
+  const near = (x: Box, y: Box) => {
+    const cx = center(x);
+    const cy = center(y);
+    const ratio = area(x) / (area(y) || 1);
+    return Math.hypot(cx.cx - cy.cx, cx.cy - cy.cy) <= gate * Math.max(x.w, x.h, y.w, y.h) && ratio >= 0.5 && ratio <= 2;
+  };
+  const out = new Map<number, number>();
+  a.forEach((ab, i) => {
+    if (takenA.has(i)) return;
+    const cands = b.map((bb, j) => (near(ab, bb) ? j : -1)).filter((j) => j >= 0);
+    const j = cands[0];
+    if (cands.length !== 1 || j === undefined || takenB.has(j)) return;
+    const back = a.filter((x) => near(x, b[j] as Box)).length;
+    if (back === 1) out.set(i, j);
+  });
+  return out;
+}
+
 export interface Track {
   id: string;
   /** 마지막으로 본 상자. */
@@ -61,11 +91,11 @@ export function stepTracks(
   newId: () => string,
   cfg: VisionConfig = VISION_CONFIG,
 ): { tracks: Track[]; visible: Track[] } {
-  const match = matchBoxes(
-    people.map((p) => p.box),
-    prev.map((t) => t.box),
-    cfg.trackIouMin,
-  );
+  const boxes = people.map((p) => p.box);
+  const prevBoxes = prev.map((t) => t.box);
+  const match = matchBoxes(boxes, prevBoxes, cfg.trackIouMin);
+  const byCenter = matchByCenter(boxes, prevBoxes, cfg.trackCenterGate, new Set(match.keys()), new Set(match.values()));
+  for (const [i, j] of byCenter) match.set(i, j);
   const continued = new Set<number>();
   const visible = people.map((p, i) => {
     const j = match.get(i);
@@ -79,19 +109,34 @@ export function stepTracks(
 
 /**
  * 응시 대상: 상자 중심이 시야 가운데 원(짧은 변 × radius, px) 안이고 흰 틀(F24)과 겹치는 사람 중 가장 가운데.
- * 상자·frame은 0~1, width·height는 그 프레임의 px.
+ * keep이 있으면(이미 보고 있는 사람) 그 사람이 keep.radius 원 안이고 흰 틀과 겹치는 동안은 그대로 둔다. 단 다른 사람이
+ * radius 원 안에 있으면 그 사람으로 바뀐다(착용자가 다른 사람을 보고 있다). 상자·frame은 0~1, width·height는 그 프레임의 px.
  */
-export function pickGazeTarget(visible: readonly Track[], frame: Box, width: number, height: number, radius: number): Track | null {
-  const r = Math.min(width, height) * radius;
+export function pickGazeTarget(
+  visible: readonly Track[],
+  frame: Box,
+  width: number,
+  height: number,
+  radius: number,
+  keep?: { trackId: string; radius: number },
+): Track | null {
+  const short = Math.min(width, height);
+  const dist = (t: Track) => {
+    const c = center(t.box);
+    return Math.hypot((c.cx - 0.5) * width, (c.cy - 0.5) * height);
+  };
   let best: Track | null = null;
   let bestDist = Infinity;
   for (const t of visible) {
     if (area(intersect(t.box, frame)) <= 0) continue;
-    const c = center(t.box);
-    const d = Math.hypot((c.cx - 0.5) * width, (c.cy - 0.5) * height);
-    if (d > r || d >= bestDist) continue;
+    const d = dist(t);
+    if (d > short * radius || d >= bestDist) continue;
     best = t;
     bestDist = d;
+  }
+  if (keep && (!best || best.id === keep.trackId)) {
+    const cur = visible.find((t) => t.id === keep.trackId);
+    if (cur && area(intersect(cur.box, frame)) > 0 && dist(cur) <= short * keep.radius) return cur;
   }
   return best;
 }
