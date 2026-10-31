@@ -23,8 +23,10 @@
 - [x] 입력 어댑터(웹캠·후면·녹화 mp4), `mountPreview` — `track-a/runtime`
 - [x] 0단계 판정(EfficientDet-Lite0, 5fps, 1초 유지 확정) — `track-a/runtime`
 - [x] 앱 연결: C의 `Preview`가 찾는 `src/input/preview.ts`의 `mountPreview`가 `startRuntime()`도 부른다
-- [ ] 1단계 포착·2단계 가림·분기(2a~2d)·출구 재검사
-- [ ] 중개기 `sendDelivery` 경로와 Counter 기록
+- [x] 1단계 포착·2단계 가림·분기(2a~2d)·출구 재검사 — `track-a/capture`
+- [x] 중개기 `sendDelivery` 경로와 Counter 기록 — `track-a/capture`. B는 `connectPluginHost(sendDelivery)`로 붙는다(02-SSRD IF-02)
+- [ ] B 연결 확인: 실제 `plugins/host`의 `sendDelivery`로 M0·1차 통합(지금은 `/dev/` 목 호스트로만 확인)
+- [ ] V2·V3: 팀 얼굴 영상(`pizza-face-*.mp4`)으로 분기·손에 든 피자 실측. 사람 앞 피자는 겹침 50% 이상이라 옆얼굴이면 2d가 될 수 있음(설계 §4)
 
 ## 트랙 B 격리·플러그인 (`src/plugins/`, `api/`)
 
@@ -58,8 +60,8 @@
 | V1 | MediaPipe 속도·GPU→CPU 대체(Android) | 트랙 A 첫 PR(0단계) 뒤, 모델 파일이 정해지고 배포 주소가 생기면 | A | iPhone 통과(첫 추론 11~14초). 노트북 Chrome(M3 Pro, 제품 코드 `/dev/`): GPU, 0단계 5.0fps, 추론 평균 28ms·p95 36ms. Android 대기(배포 주소 없음) |
 | V4 | 큰 해상도 요청 시 실제 해상도·포착 시간(Android) | V1과 같이 | A | iPhone 통과. 노트북: 내장 브라우저 창이 카메라를 막아 못 잼(녹화 자동 전환은 확인). Android 대기 |
 | V8 | 녹화 mp4 재생 후 판정 | 트랙 A 입력 PR + `08-데모-소재.md`의 `pizza-alone.mp4` | A | iPhone 합성 영상 통과. 노트북 Chrome: 직접 만든 피자 그림 mp4(720×1280)로 `food·pizza` 확정(제품 코드). `pizza-alone.mp4` 없음, 실제 영상 대기 |
-| V2 | 먼·옆·잘린 얼굴의 분기 | 트랙 A 둘째 PR(포착·가림) + 얼굴 영상 3개 | A | 대기 |
-| V3 | 2c가 손에 든 피자를 가리는지 | V2와 같이 | A | 대기 |
+| V2 | 먼·옆·잘린 얼굴의 분기 | 트랙 A 둘째 PR(포착·가림) + 얼굴 영상 3개 | A | 대기(얼굴 영상 없음). 대신 그림 얼굴(이모지)+그린 피자로 2b 가림·출구 재검사 경로만 확인 |
+| V3 | 2c가 손에 든 피자를 가리는지 | V2와 같이 | A | 대기(영상 없음). 사람 앞 피자는 P(50%)로 2d가 될 위험을 설계에 적음 |
 | V5 | 칼로리 응답 시간·비용(피자 256px 10회, p50·p95, 토큰) | 트랙 B `/api/calorie` PR. 키가 있는 로컬에서 | B | 대기 |
 | V11 | 통합 상태 격리 6줄·전환·옛 iframe 메시지(iPhone·Android) | 1차 통합 뒤, 배포 주소에서 | B | 대기 |
 | V12 | 노트북 Chrome에서 데모 5단계 네트워크 탭 | 2차 통합 뒤 리허설 | C·발표자 | 대기 |

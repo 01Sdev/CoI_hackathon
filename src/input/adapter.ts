@@ -93,7 +93,10 @@ function waitForFrames(v: HTMLVideoElement): Promise<void> {
   });
 }
 
-async function openCamera(v: HTMLVideoElement, kind: 'webcam' | 'rear'): Promise<number> {
+/** 늦게 끝난 열기 요청. 그 스트림은 멈추고 <video>에는 붙이지 않는다. */
+class Superseded extends Error {}
+
+async function openCamera(v: HTMLVideoElement, kind: 'webcam' | 'rear', mySeq: number): Promise<number> {
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('getUserMedia 없음(HTTPS가 아니거나 지원하지 않는 브라우저)');
   const constraints: MediaStreamConstraints = {
     audio: false, // 마이크는 열지 않는다(C-8).
@@ -103,7 +106,12 @@ async function openCamera(v: HTMLVideoElement, kind: 'webcam' | 'rear'): Promise
       ...(kind === 'rear' ? { facingMode: { ideal: 'environment' } } : {}),
     },
   };
+  // 권한 창이 떠 있는 동안에는 시간 제한을 두지 않는다(사용자가 고르는 중). 그 사이 다른 요청이 오면 이 스트림은 버린다.
   const s = await navigator.mediaDevices.getUserMedia(constraints);
+  if (mySeq !== openSeq) {
+    for (const t of s.getTracks()) t.stop();
+    throw new Superseded();
+  }
   stream = s;
   v.removeAttribute('src');
   v.loop = false;
@@ -132,6 +140,10 @@ export async function openInput(kind: InputKind): Promise<InputSource | null> {
   const mySeq = ++openSeq;
   const v = ensureVideo();
   stopStream();
+  // 이전 입력을 바로 끊는다. 새 입력이 뜨기 전까지 옛 프레임이 판정·포착되지 않게 한다(stage0은 input이 null이면 쉰다).
+  v.pause();
+  v.srcObject = null;
+  v.removeAttribute('src');
   epoch += 1;
   lensStore.getState().setInput(null);
 
@@ -159,15 +171,12 @@ export async function openInput(kind: InputKind): Promise<InputSource | null> {
   }
 
   try {
-    const fps = await openCamera(v, kind);
-    if (mySeq !== openSeq) {
-      stopStream();
-      return null;
-    }
+    const fps = await openCamera(v, kind, mySeq);
+    if (mySeq !== openSeq) return null; // 이후 요청이 stopStream으로 이미 정리했다.
     return finish(source(kind, fps, null));
   } catch (e) {
+    if (e instanceof Superseded || mySeq !== openSeq) return null;
     console.warn(`[input] ${kind} 실패, 녹화 영상으로 전환`, e);
-    if (mySeq !== openSeq) return null;
     stopStream();
     try {
       const fps = await openFile(v, videoUrl);

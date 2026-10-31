@@ -78,9 +78,7 @@ export const VISION_CONFIG = {
   pixelGrid: 6,
 
   // ── 비교 모드(F17) ──
-  /** raw 전달의 긴 변. 명세 "축소 여부 미정"이라 0단계와 같은 640으로 둔다. */
-  rawLongSide: 640,
-  /** raw JPEG 품질. */
+  /** raw JPEG 품질. 해상도는 원본 그대로(05 결정 30). */
   rawQuality: 0.8,
 } as const;
 
