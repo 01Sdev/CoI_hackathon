@@ -33,7 +33,9 @@
 - [ ] `main.tsx` 배선: `startPluginHost()`와 `connectPluginHost((_id, msg) => { sendDelivery(msg.deliveryId); })` — 허브가 1차 통합 PR에서(02-SSRD "트랙 연결 기준")
 - [ ] 발표 노트북 Chrome 첫 로드에서 칼로리 iframe이 3초 안에 ready인지(부하가 높을 때 headless Chrome에서 iframe 7개가 모두 stopped인 실행이 있었다)
 - [x] hello·칼로리·변조 플러그인 — 트랙 B PR(plugin-host, calorie-tamper)
-- [ ] `/api/calorie`(Vercel 함수, 413/415/429/502, 받은 본문 헤더)
+- [x] `/api/calorie`(Vercel 함수, 413/415/429/502, 받은 본문 헤더) — 트랙 B PR(api-calorie). 개발 서버에서도 같은 함수가 `/api/calorie`로 열린다
+- [ ] V5 실측(키가 있는 곳에서 `scripts/measure-calorie.ts`)
+- [ ] 배포(V6) 뒤 실제 Vercel에서 `/api/calorie` 웹 표준 함수(`export function POST`) 동작 확인
 
 ## 트랙 C UI (`src/ui/`, `src/proof/`, `src/App.tsx`)
 
@@ -87,7 +89,7 @@
 | V8 | 녹화 mp4 재생 후 판정 | 트랙 A 입력 PR + `08-데모-소재.md`의 `pizza-alone.mp4` | A | iPhone 합성 영상 통과, 실제 영상 대기 |
 | V2 | 먼·옆·잘린 얼굴의 분기. F23 뒤에는 Selfie 가림이 박스·사각형보다 덜 가린 사례가 있는지(SRS FR-016a) | 트랙 A 둘째 PR(포착·가림) + 얼굴 영상 3개 | A | 대기 |
 | V3 | 2c가 손에 든 피자를 가리는지. F23 뒤에는 Selfie가 피자를 머리카락·피부로 보는지 | V2와 같이 | A | 대기 |
-| V5 | 칼로리 응답 시간·비용(피자 256px 10회, p50·p95, 토큰) | 트랙 B `/api/calorie` PR. 키가 있는 로컬에서 | B | 대기 |
+| V5 | 칼로리 응답 시간·비용(피자 256px 10회, p50·p95, 토큰) | 트랙 B `/api/calorie` PR. 키가 있는 로컬에서 | B | 대기(키 없음). 함수·502 경로·요청 모양은 가짜 상류로 확인 |
 | V11 | 통합 상태 격리 6줄·전환·옛 iframe 메시지(iPhone·Android) | 1차 통합 뒤, 배포 주소에서 | B | 대기 |
 | V12 | 노트북 Chrome에서 데모 5단계 네트워크 탭 | 2차 통합 뒤 리허설 | C·발표자 | 대기 |
 | V13 | Ray-Ban Display 시뮬레이터에서 `/hud` D-pad | 트랙 C `/hud` PR | C | 대기 |
