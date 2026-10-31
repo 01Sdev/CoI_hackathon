@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>범위 선택·인원 수 미리보기</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; background: #eeeae4; color: #272923; font: 14px/20px 'Pretendard Variable', Pretendard, sans-serif; }
+    main { max-width: 1440px; margin: auto; }
+    .selection-demo__tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .selection-demo__tools button { padding: 8px 12px; border: 1px solid #caccbf; border-radius: 8px; background: #fbfbf8; color: #272923; font: inherit; cursor: pointer; }
+    .selection-demo__scene { position: relative; height: 680px; overflow: hidden; border-radius: 16px; background: #aaa69a; }
+    .selection-demo__person { position: absolute; width: 40px; height: 88px; transform: translate(-50%, -18px); color: #53564b; }
+    .selection-demo__person svg { display: block; width: 100%; height: 100%; }
+    .selection-demo__note { margin: 12px 0; }
+    .selection-demo__value { font-variant-numeric: tabular-nums; }
+    @media (max-width: 680px) { body { padding: 12px; } .selection-demo__scene { height: 420px; } }
+  </style></head>
+<body><div id="root"></div><script type="module" src="./selection-frame.tsx"></script></body></html>
