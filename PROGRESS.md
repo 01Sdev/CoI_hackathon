@@ -30,8 +30,7 @@
 - [x] `plugins/host`: srcdoc iframe·CSP nonce·blob Worker·메시지 검증 — 트랙 B PR(plugin-host)
 - [x] 전환 공통 절차(게이트·runtimeId·3초 ready) — 같은 PR
 - [x] SDK 런타임·hello 플러그인·`/dev/m0.html` M0 페이지 — 같은 PR
-- [x] `main.tsx`에서 `startPluginHost()` 호출 — 트랙 B PR(calorie-tamper)
-- [ ] `main.tsx`에 `connectPluginHost(sendDeliveryMessage)`(트랙 A PR #11과 트랙 B PR이 둘 다 머지된 뒤)
+- [ ] `main.tsx` 배선: `startPluginHost()`와 `connectPluginHost((_id, msg) => { sendDelivery(msg.deliveryId); })` — 허브가 1차 통합 PR에서(02-SSRD "트랙 연결 기준")
 - [ ] 발표 노트북 Chrome 첫 로드에서 칼로리 iframe이 3초 안에 ready인지(부하가 높을 때 headless Chrome에서 iframe 7개가 모두 stopped인 실행이 있었다)
 - [x] hello·칼로리·변조 플러그인 — 트랙 B PR(plugin-host, calorie-tamper)
 - [ ] `/api/calorie`(Vercel 함수, 413/415/429/502, 받은 본문 헤더)

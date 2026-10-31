@@ -9,7 +9,8 @@ import { build } from 'esbuild';
 import { PLUGIN_MESSAGE_LIMITS } from '../src/core/constants';
 import { buildCsp, buildSrcdoc, safeConnectList } from '../src/plugins/host/csp';
 import { parsePluginMessage, violationReason } from '../src/plugins/host/validate';
-import { CALORIE_FALLBACK_TABLE, UNKNOWN_FOOD_TEXT, caloriePlugin } from '../src/plugins/calorie';
+import { CALORIE_TABLE, X_LABEL_MAX, X_LABEL_RE, fallbackText } from '../src/core/calorie';
+import { caloriePlugin } from '../src/plugins/calorie';
 import { pluginSourceFor } from '../src/plugins/registry';
 import { sha256Pure } from '../src/plugins/sdk/sha256';
 import { buildWorkerSource, pluginCall } from '../src/plugins/sdk/source';
@@ -277,7 +278,7 @@ async function runCalorie(apiBase: string | null, fetchImpl: (call: FetchCall, s
     return fetchImpl(call, init.signal);
   };
   // 시간 제한은 50ms로 줄여 넣는다(제품은 CALORIE_CLIENT_TIMEOUT_MS = 3초).
-  const src = buildWorkerSource(pluginCall(caloriePlugin, CALORIE_FALLBACK_TABLE, 50, UNKNOWN_FOOD_TEXT));
+  const src = buildWorkerSource(pluginCall(caloriePlugin, CALORIE_TABLE, X_LABEL_RE.source, X_LABEL_MAX, 50, fallbackText('')));
   const w = runWorker(src, true, { fetch: fetchMock, AbortController, Response });
   w.dispatch({ ...init, apiBase });
   await tick();
@@ -304,14 +305,11 @@ await check('칼로리: 비 200(502·429) → 고정표, 기록 없음', async (
     assert.deepEqual(r.posted.slice(1), [{ type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' }]);
   }
 });
-await check('칼로리: 요청 실패(CSP·네트워크) → violation fetch + 고정표', async () => {
+await check('칼로리: 요청 실패(CSP·네트워크) → 고정표, reportViolation 없음', async () => {
   const r = await runCalorie('https://h.example', async () => {
     throw new TypeError('Failed to fetch');
   });
-  assert.deepEqual(r.posted.slice(1), [
-    { type: 'violation', attempt: 'fetch', target: 'https://h.example/api/calorie' },
-    { type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' },
-  ]);
+  assert.deepEqual(r.posted.slice(1), [{ type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' }]);
 });
 await check('칼로리: 시간 초과(abort) → 고정표, 기록 없음', async () => {
   const r = await runCalorie('https://h.example', never);
@@ -322,10 +320,18 @@ await check('칼로리: apiBase null(비교 모드) → 요청 0, 고정표', as
   assert.equal(r.calls.length, 0);
   assert.deepEqual(r.posted.slice(1), [{ type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' }]);
 });
-await check('칼로리: 고정표 밖·헤더에 못 싣는 라벨 → 고정표 밖 문구, x-label 없음', async () => {
-  const r = await runCalorie('https://h.example', async () => new Response('x', { status: 502 }), 'Bowl!');
-  assert.deepEqual({ ...r.calls[0]!.headers }, { 'Content-Type': 'image/jpeg' });
-  assert.equal(r.posted[1]!.text, UNKNOWN_FOOD_TEXT);
+await check('칼로리: 규칙 밖 라벨(대문자·연속 공백·33자) → x-label 없음, 고정표 밖 문구', async () => {
+  for (const label of ['Bowl!', 'hot  dog', 'a'.repeat(33)]) {
+    const r = await runCalorie('https://h.example', async () => new Response('x', { status: 502 }), label);
+    assert.deepEqual({ ...r.calls[0]!.headers }, { 'Content-Type': 'image/jpeg' });
+    assert.equal(r.posted[1]!.text, '음식(종류 미상)');
+  }
+});
+await check('칼로리: Worker 고정표 문구 = core fallbackText(표 10종·표 밖·규칙 밖)', async () => {
+  for (const label of [...Object.keys(CALORIE_TABLE), 'bowl', 'cup', 'Pizza', 'pizza ', 'hot  dog', '']) {
+    const r = await runCalorie(null, async () => new Response('x'), label);
+    assert.equal(r.posted[1]!.text, fallbackText(label), JSON.stringify(label));
+  }
 });
 
 // ── 변조 플러그인(Worker처럼 document·navigator·importScripts가 없는 vm) ──

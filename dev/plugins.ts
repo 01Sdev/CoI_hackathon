@@ -1,6 +1,7 @@
 // 칼로리·변조 플러그인 시험 페이지(F7·F13·F14·F17, FR-024·025·031·032·047, TC-006·016). 개발 서버의 /dev/plugins.html.
 // 서버가 없으면(/api/calorie 404) 칼로리는 고정표로 끝난다. 서버가 있으면 source api 한 줄을 받는다.
 
+import { fallbackText } from '../src/core/calorie';
 import { PLUGIN_SEEDS, type PluginSeed } from '../src/core/plugins';
 import { createLensStore } from '../src/core/store';
 import { createPluginHost, sha256Hex } from '../src/plugins/host';
@@ -53,45 +54,37 @@ async function run() {
   const ok = await deliver(store, host, 'calorie', blob, sha);
   const okResult = await resultFor('calorie', ok.id);
   const okMs = Math.round(performance.now() - t0);
-  // 서버가 비 200을 주면 고정표, 기록 없음. /api/calorie가 아예 없으면(Vite 개발 서버만) Origin null 사전 요청이
-  // Vite CORS에서 막혀 요청 실패 → 고정표 + "허용 목록 안인데 실패" 1줄이 맞다.
+  // 서버가 비 200을 주거나(키 없음 502 등) 요청이 실패하면 고정표. 어느 쪽이든 기록은 남기지 않는다(02-SSRD "플러그인 SDK").
   const okLogs = violations('calorie');
   const okPass =
     ok.status === 'match' &&
     !!okResult &&
-    (okResult.source === 'api'
-      ? API_LINE.test(okResult.text) && okLogs.length === 0
-      : okResult.text === FALLBACK_PIZZA &&
-        (okLogs.length === 0 ||
-          (okLogs.length === 1 && okLogs[0]!.reason === `외부 요청(fetch) ${location.origin}/api/calorie · 허용 목록 안인데 실패`)));
+    (okResult.source === 'api' ? API_LINE.test(okResult.text) : okResult.text === FALLBACK_PIZZA) &&
+    okLogs.length === 0;
   record(
     '칼로리: 전달 → ack match → 결과 한 줄(서버 없으면 고정표)',
     okPass,
     `${okMs}ms · ack ${ok.status} · "${okResult?.text ?? '없음'}"(${okResult?.source ?? '-'}) · 기록 ${okLogs.map((l) => l.reason).join(' / ') || '0줄'}`,
   );
 
-  // 2. F14: network에서 도메인을 지운 iframe → CSP가 막는다 → 고정표 + "허용 목록 밖".
+  // 2. F14: network에서 도메인을 지운 iframe → CSP가 막는다 → 고정표. 칼로리는 차단을 자기 보고하지 않는다.
   const blocked = await deliver(store, host, 'calorie-blocked', blob, sha);
   const blockedResult = await resultFor('calorie-blocked', blocked.id);
-  await waitFor(() => violations('calorie-blocked').length > 0, 1_000);
+  await sleep(300);
   const bv = violations('calorie-blocked');
   record(
-    '도메인 삭제(F14): CSP 차단 → 고정표, "허용 목록 밖"(plugin-report)',
-    blockedResult?.text === FALLBACK_PIZZA &&
-      blockedResult.source === 'fallback' &&
-      bv.length === 1 &&
-      bv[0]!.enforcedBy === 'plugin-report' &&
-      bv[0]!.reason === `외부 요청(fetch) ${location.origin}/api/calorie · 허용 목록 밖`,
-    `"${blockedResult?.text ?? '없음'}"(${blockedResult?.source ?? '-'}) · ${bv.map((l) => `${l.reason}(${l.enforcedBy})`).join(' / ')}`,
+    '도메인 삭제(F14): CSP 차단 → 고정표, 기록 없음',
+    blockedResult?.text === FALLBACK_PIZZA && blockedResult.source === 'fallback' && bv.length === 0,
+    `"${blockedResult?.text ?? '없음'}"(${blockedResult?.source ?? '-'}) · 기록 ${bv.length}줄`,
   );
 
   // 3. 고정표에 없는 라벨.
   const bowl = await deliver(store, host, 'calorie-blocked', blob, sha, { objectLabel: 'bowl' });
   const bowlResult = await resultFor('calorie-blocked', bowl.id);
   record(
-    '고정표 밖 라벨(bowl) → "음식(칼로리 정보 없음)", 같은 차단은 다시 기록 안 함',
-    bowlResult?.text === '음식(칼로리 정보 없음)' && violations('calorie-blocked').length === 1,
-    `"${bowlResult?.text ?? '없음'}" · 차단 기록 ${violations('calorie-blocked').length}줄`,
+    '고정표 밖 라벨(bowl) → "음식(종류 미상)"(core fallbackText)',
+    bowlResult?.text === fallbackText('bowl') && bowlResult.text === '음식(종류 미상)' && violations('calorie-blocked').length === 0,
+    `"${bowlResult?.text ?? '없음'}" · 기록 ${violations('calorie-blocked').length}줄`,
   );
 
   // 4. 비교 모드(F17): 칼로리 iframe을 connect-src 'none', apiBase null로 다시 만든다 → raw도 받고, 요청·차단 기록 0.
