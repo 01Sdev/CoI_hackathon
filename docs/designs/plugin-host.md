@@ -39,7 +39,7 @@
 3. `event.ports`가 있으면 형식 오류.
 4. `parsePluginMessage(data)`(`host/validate.ts`, 순수 함수). **형식을 먼저, 한도를 나중에** 본다.
    - 형식: 일반 객체가 아님, 문자열이 아닌 값(Blob 등), 모르는 `type`, 키가 정확히 그 type의 키가 아님(빠짐·남음), `ack.sha256`이 16진 64자(대소문자 무관)가 아님, `result.source`가 `api`·`fallback`이 아님, `violation.attempt`가 4종이 아님.
-   - 한도: `JSON.stringify(data)`의 UTF-8 바이트 > 8KiB, `pluginId`·`deliveryId` > 128, `text` > 200, `target` > 512. 길이는 **코드 포인트**로 센다(SDK도 코드 포인트로 자른다. 이모지 200개는 통과).
+   - 한도: `JSON.stringify(data)`의 UTF-8 바이트 > 8KiB, `pluginId`·`deliveryId` > 128, `text` > 200, `target` > 512. 길이는 **UTF-16 길이**(`String.length`)로 센다. SDK도 `slice(0, 200)`·`slice(0, 512)`로 같은 기준에 맞춰 자른다(02-SSRD "플러그인 SDK", 2026-10-31 명세 정리).
 5. `ack`·`result`의 `deliveryId`가 그 runtime에 보낸 것이 아니면 형식 오류.
 6. 같은 runtime의 두 번째 `ready`, 같은 `deliveryId`의 두 번째 `ack`·`result`, 같은 `attempt`·`target`의 두 번째 `violation`은 조용히 버린다. 서로 다른 `violation`이 8건을 넘으면 종료("한도 초과: 위반 보고 8건"). 변조 플러그인은 4건이다. 자기 보고로 로그 100건을 밀어내 다른 플러그인의 전달·썸네일을 지우지 못하게 한다.
 
@@ -51,7 +51,7 @@
 | --- | --- |
 | `ready` | 2.4의 5번 |
 | `ack` | ack 타이머 해제, `setAck(deliveryId, sha256)`(스토어가 소문자로 비교, 불일치면 "해시 불일치" host) |
-| `result` | `setResult(pluginId, { deliveryId, text, source, at: performance.now() })` |
+| `result` | `setResult(pluginId, { deliveryId, text, source, at: performance.now() })`. 스토어가 dispatched 전달의 첫 결과만 받는다(`false`면 버린 것) |
 | `violation` | `addLog(violation, reason, 'plugin-report')`. reason = `<시도 이름(attempt)> <target>`이고, `fetch`·`script`이면 target의 origin을 **그 iframe의 실제 `connect-src` 목록**(= `network` ∩ `HOST_ALLOWED_ORIGINS`, 비교 모드면 빈 목록)과 대조해 "· 허용 목록 밖" 또는 "· 허용 목록 안인데 실패". URL이 아니면 "허용 목록 밖". 02-SSRD IF-06 문구를 같은 PR에서 이렇게 고쳤다(`network`에 있지만 호스트가 허용하지 않은 주소는 실제로 막힌 이유가 "목록 밖"이기 때문) |
 
 ### 2.4 조정기: 플러그인마다 `selectDesiredRuntime` 구독 하나
@@ -64,7 +64,7 @@
 2. 게이트가 열려 있으면 닫고(`setPluginRuntime({ gateOpen: false })`), 지금 runtime을 뗀다(iframe 제거 → Worker 종료, 창 매핑 삭제).
 3. 플러그인이 없으면 끝. `enabled`가 false면 `runtimeId`·`runtimePolicy`를 null로 하고 상태는 **`stopped`면 그대로, 아니면 `terminated`**(이미 그 값이면 쓰지 않는다). `stopped`·`terminated`로 바꾸면 스토어가 `enabled = false`로 만들어 구독이 한 번 더 불리는데, 이 규칙 덕분에 `stopped`가 `terminated`로 덮이지 않는다.
 4. 켜져 있으면 새 runtime을 만들고 `{ status: 'loading', runtimeId, runtimePolicy, gateOpen: false }`를 마지막에 쓴다. 코드가 없거나(`sourceFor`가 null) 속성 확인이 실패하면 `stopped`를 마지막에 쓴다.
-5. `ready`가 오면, 그 runtime이 아직 지금 runtime이고 그 `desired`가 지금 `selectDesiredRuntime`과 shallow로 같을 때만 `{ status: 'ready', runtimeId, runtimePolicy, gateOpen: true }`.
+5. `ready`가 오면, 그 runtime이 아직 지금 runtime이고 그 `desired`가 지금 `selectDesiredRuntime`과 shallow로 같을 때만 `{ status: 'ready', runtimeId, runtimePolicy, gateOpen: true, desired }`. 스토어도 `desired`를 한 번 더 대조해 다르면 게이트를 닫아 둔다.
 
 `runtimeId`·`runtimePolicy`는 만들 때 스토어에 쓴다(`loading` 동안은 `selectCanSend`가 false라 보낼 수 없다). 큐는 없다. 만드는 중에 값이 바뀌면 그 runtime을 버리고 다시 만든다. 모든 비동기 콜백(load, ready 타이머, 메시지)은 "이 runtime이 아직 지금 runtime인가"를 먼저 본다.
 
@@ -75,8 +75,8 @@
 ### 2.6 SDK 런타임 규칙(02-SSRD "플러그인 SDK" 그대로)
 
 - `onInit`·`onDelivery`는 마지막 등록이 이긴다. `init`은 처음 1번만. 핸들러 Promise가 2.5초 안에 끝나면 `ready`, 예외·시간 초과면 보내지 않는다. 핸들러가 없으면 바로 `ready`.
-- `ready` 전 `delivery`는 버린다. `delivery`마다 Blob을 읽어 `crypto.subtle` → 실패하면 `sha256Pure`로 해시를 만들고 **핸들러보다 먼저** `ack`. 핸들러 예외는 삼킨다.
-- `result`: 받은 `deliveryId`에만, 1번만, `text`는 200자(코드 포인트)로 자름, `source`는 `api`·`fallback`만. `reportViolation`: `attempt` 4종만, 같은 `attempt`·`target` 1번, `target` 512자. `ready` 전에도 보낼 수 있다.
+- `ready` 전 `delivery`는 버린다. 메시지마다 따로 `해시 → ack → 핸들러`를 돌리고 핸들러를 기다려 다음 전달을 막지 않는다. Blob을 읽어 `crypto.subtle` → 실패하면 `sha256Pure`로 해시를 만들고(소문자 16진) **핸들러보다 먼저** `ack`. Blob 읽기·해시가 실패하면 ack도 핸들러 호출도 없다. 핸들러 예외는 삼킨다.
+- `result`: 받은 `deliveryId`에만, 1번만, `String(text).slice(0, 200)`, `source`는 `api`·`fallback`만. `reportViolation`: `attempt` 4종만, `String(target).slice(0, 512)`, 같은 `attempt + '\n' + 자른 target`은 1번. `ready` 전에도 보낼 수 있다.
 - SDK는 시작할 때 `scope.postMessage`를 붙잡아 쓰고, `self.famelet`은 고칠 수 없는 속성(얼린 객체)이다. 플러그인이 같은 Worker에서 이것을 우회할 수 있다는 점은 02-SSRD "지킬 수 없는 것" 그대로다.
 - 시험용 옵션(`forcePureHash`, `testAckMode: 'corrupt'`(받은 바이트의 `byte[0] ^= 0xff` 뒤 해시) `| 'suppress'`(ack 없음))은 호스트 옵션 `sdkTestOptionsFor`로만 넣는다. 제품 코드에서 넣는 곳은 없고 `/dev` 시험 페이지만 쓴다. 플러그인은 원래 같은 Worker에서 무엇이든 할 수 있으므로 이 옵션이 새 권한을 주지 않는다.
 
@@ -137,7 +137,7 @@
 
 ## 5. 확인 방법
 
-- `npm run check:plugins`(`scripts/check-plugins.ts`) 29개: `sha256Pure` 표준 벡터·무작위 길이·600KB·M0 JPEG, 메시지 검증기 경계(200/201자, 이모지, 128·512자, 크기, 모르는 키, Blob 값, 빈 프로토타입), CSP 생성과 주입 거부, srcdoc 순서, violation reason 대조, 칼로리(가짜 fetch: 200·비 200·요청 실패·시간 초과·apiBase null·헤더 규칙), 변조 4종, SDK를 원본·축소판으로 `vm`에서 돌려 ready·ack·result·violation·순수 JS·corrupt·suppress·onInit 예외·hello 결과 줄.
+- `npm run check:plugins`(`scripts/check-plugins.ts`) NN개: `sha256Pure` 표준 벡터·무작위 길이·600KB·M0 JPEG, 메시지 검증기 경계(200/201자, UTF-16 이모지, 128·512자, 크기, 모르는 키, Blob 값, 빈 프로토타입), CSP 생성과 주입 거부, srcdoc 순서, violation reason 대조, 칼로리(가짜 fetch: 200·비 200·요청 실패·시간 초과·apiBase null·헤더 규칙·core `fallbackText`와 같은 문구), 변조 4종, SDK를 원본·축소판으로 `vm`에서 돌려 ready·ack·result·violation·순수 JS·corrupt·suppress·해시 실패·느린 핸들러와 다음 ack·onInit 예외·hello 결과 줄.
 - 개발 서버 `/dev/m0.html` M0 페이지 15줄, `/dev/plugins.html` 9줄(칼로리 정상·도메인 삭제·고정표 밖 라벨·비교 모드 켜기/끄기·변조 4종·변조 조각 외부 전송·apiSends).
 
 ## 6. 리뷰 기록
