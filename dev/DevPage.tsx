@@ -152,7 +152,7 @@ function Throughput() {
     <div style={box}>
       <b>처리량(직전 60초)</b>
       <div style={mono}>
-        {`0단계 ${t.stage0Runs} · 얼굴 ${t.faceDetectRuns} · 소스 프레임 ${t.sourceFrames} · 전달 ${t.deliveries} · 보류 ${t.holds}\n비율 ${n(t.ratio, 3)}\n0단계 실측 ${n(st.fps)}fps · 추론 평균 ${n(st.meanInferMs)}ms · p95 ${n(st.p95InferMs)}ms`}
+        {`0단계 ${t.stage0Runs} · 얼굴 ${t.faceDetectRuns} · 소스 프레임 ${t.sourceFrames} · 전달 ${t.deliveries} · 보류 ${t.holds}\n비율 ${n(t.ratio, 3)}\n0단계 실측 ${n(st.fps)}fps · 추론 평균 ${n(st.meanInferMs)}ms · p95 ${n(st.p95InferMs)}ms\n첫 판정 ${n(st.firstInferenceAt, 0)}ms(페이지 시작부터)`}
       </div>
     </div>
   );

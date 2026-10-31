@@ -49,18 +49,22 @@ export interface Stage0Stats {
   meanInferMs: number | null;
   /** 최근 추론 p95(ms). */
   p95InferMs: number | null;
+  /** 첫 0단계 추론이 끝난 시각(performance.now, 페이지 시작 기준). 아직이면 null. NFR-001 "첫 판정" 실측용. */
+  firstInferenceAt: number | null;
 }
+
+let firstInferenceAt: number | null = null;
 
 export function getStage0Stats(): Stage0Stats {
   const n = recentTicks.length;
   const first = recentTicks[0];
   const last = recentTicks[n - 1];
   const fps = n >= 2 && first !== undefined && last !== undefined && last > first ? ((n - 1) * 1000) / (last - first) : null;
-  if (recentInferMs.length === 0) return { fps, meanInferMs: null, p95InferMs: null };
+  if (recentInferMs.length === 0) return { fps, meanInferMs: null, p95InferMs: null, firstInferenceAt };
   const sorted = [...recentInferMs].sort((a, b) => a - b);
   const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
   const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] ?? null;
-  return { fps, meanInferMs: mean, p95InferMs: p95 };
+  return { fps, meanInferMs: mean, p95InferMs: p95, firstInferenceAt };
 }
 
 const pushRecent = (arr: number[], v: number) => {
@@ -129,6 +133,7 @@ function runTick(v: HTMLVideoElement) {
       found = detectObjects(m, canvas);
       if (!engineReady) {
         engineReady = true;
+        firstInferenceAt = performance.now();
         reportEngine({ status: 'ready', detail: null });
       }
       pushRecent(recentInferMs, performance.now() - t0);
