@@ -8,6 +8,7 @@ import { ORIGIN_TOKEN } from '../core/constants';
 import { selectEvictedCount, selectPluginTotals } from '../core/selectors';
 import { useLensStore } from '../core/store';
 import { MANIFEST_SCENE_LABEL, PLUGIN_NAME } from '../ui/labels';
+import { sanitizeAppText } from '../ui/sanitize';
 
 export function ConfirmScreen({ onClose }: { onClose?: () => void }) {
   const ids = useLensStore(
@@ -89,7 +90,7 @@ function RequestGrant({ pluginId }: { pluginId: string }) {
       if (!x) return null;
       const m = x.manifest;
       return {
-        purpose: m.purpose,
+        purpose: sanitizeAppText(m.purpose),
         network: m.network.join('\n'),
         allowed: x.allowedOrigins.join('\n'),
         connectNone: x.runtimePolicy?.connect === 'none',

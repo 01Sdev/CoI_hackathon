@@ -16,6 +16,7 @@ import { coverBox, faceWindowRemaining, type Size } from './geometry';
 import { ago } from '../proof/format';
 import { appResultLine, deliverySignalLines, INPUT_LABEL, objectName, PLUGIN_ICON, PLUGIN_NAME, SCENE_LABEL } from './labels';
 import { OrbStack } from './OrbStack';
+import { sanitizeAppText } from './sanitize';
 import { useDeliverySignal, useHoldSignal, useRecent } from './useSignals';
 
 export type HudVariant = 'phone' | 'desktop' | 'hud';
@@ -224,7 +225,10 @@ interface AppResult {
   fallback: boolean;
 }
 
-/** 켜져 있는 앱의 마지막 결과(앱마다 1줄, pluginOrder 순). "고정표"는 칼로리의 미리 정한 표라 칼로리에만 붙인다. */
+/**
+ * 켜져 있는 앱의 마지막 결과(앱마다 1줄, pluginOrder 순). 문자열은 sanitizeAppText로 거르고, 거른 뒤 비면 카드를 두지 않는다.
+ * "고정표"는 칼로리의 미리 정한 표라 칼로리에만 붙인다.
+ */
 function useAppResults(): AppResult[] {
   const results = useLensStore((s) => s.results);
   const plugins = useLensStore((s) => s.plugins);
@@ -233,8 +237,9 @@ function useAppResults(): AppResult[] {
   for (const id of order) {
     const p = plugins[id];
     const r = results[id];
-    if (!p?.enabled || !r) continue;
-    out.push({ pluginId: id, kind: p.kind, name: PLUGIN_NAME[p.kind], text: r.text, fallback: p.kind === 'calorie' && r.source === 'fallback' });
+    const text = p?.enabled && r ? sanitizeAppText(r.text) : '';
+    if (!p || !r || !text) continue;
+    out.push({ pluginId: id, kind: p.kind, name: PLUGIN_NAME[p.kind], text, fallback: p.kind === 'calorie' && r.source === 'fallback' });
   }
   return out;
 }

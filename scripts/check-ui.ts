@@ -4,10 +4,11 @@
 import assert from 'node:assert/strict';
 import { APP_NAME, CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE } from '../src/core/constants';
 import type { Box } from '../src/core/types';
-import { entryMeta, frameText, usageMeta, wallClock } from '../src/proof/format';
+import { entryMeta, frameText, logReason, usageMeta, wallClock } from '../src/proof/format';
 import { coverBox, coverPointToSource, cornerPoint, dragCornerFromScreen, faceWindowRemaining, nudgeCorner } from '../src/ui/geometry';
 import { appResultLine, deliverySignalLines, formatBytes, josa } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
+import { APP_TEXT_MAX, sanitizeAppText } from '../src/ui/sanitize';
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -172,6 +173,46 @@ check('deliverySignalLines: 첫 줄은 "{APP_NAME} → 앱 이름", 둘째 줄�
   assert.equal(deliverySignalLines('칼로리', { ...d, branch: '2a', facesMasked: 0 }, '방금')[1], '사진 1장 · 18.6KB · 가릴 사람 없음 · 방금');
   assert.equal(deliverySignalLines('칼로리', { ...d, branch: 'raw', facesMasked: 0 }, '3초 전')[1], '원본 전체 · 18.6KB · 비교 모드라 가리지 않음 · 3초 전');
   assert.ok(!deliverySignalLines('장면 기록', d, '방금')[0].endsWith('앱'), '이름 뒤에 "앱"을 붙이지 않는다');
+});
+
+// 보이지 않는 문자는 소스에 그대로 쓰지 않고 코드 포인트로 만든다.
+const cp = (...n: number[]) => String.fromCodePoint(...n);
+
+check('sanitizeAppText: 그림 문자·방향·제어 문자를 지우고 줄바꿈은 공백으로', () => {
+  assert.equal(sanitizeAppText('피자 약 285kcal'), '피자 약 285kcal');
+  assert.equal(sanitizeAppText(`${cp(0x1f7e2)} 피자 ${cp(0x1f355)}`), '피자');
+  assert.equal(sanitizeAppText(`${cp(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467)} 가족 ${cp(0x1f1f0, 0x1f1f7)}`), '가족');
+  assert.equal(sanitizeAppText(`${cp(0x202e)}evil${cp(0x202c)} ${cp(0x2066)}x${cp(0x2069)}${cp(0x200f)}`), 'evil x');
+  assert.equal(sanitizeAppText(`a${cp(0)}b${cp(0x1b)}[31mc${cp(0x85)}d`), 'ab[31mc d');
+  assert.equal(sanitizeAppText('한 줄\n두 줄\r\n세 줄\t끝'), '한 줄 두 줄 세 줄 끝');
+});
+
+check('sanitizeAppText: APP_NAME과 보호 카운터 문구를 지운다(대소문자·전각·사이 공백·겹침 포함)', () => {
+  assert.equal(sanitizeAppText(`${cp(0x1f7e2)} 보호됨 · 앱에 반영된 사람 0명`), '0명');
+  assert.equal(sanitizeAppText(`${APP_NAME} 공식 결과`), '공식 결과');
+  assert.equal(sanitizeAppText(`${APP_NAME.toUpperCase()} 확인`), '확인');
+  assert.equal(sanitizeAppText(Array.from(APP_NAME).map((c) => String.fromCodePoint(c.codePointAt(0)! + 0xfee0)).join('')), '');
+  assert.equal(sanitizeAppText('보 호 됨 ok'), 'ok');
+  assert.equal(sanitizeAppText(`${APP_NAME.slice(0, 3)}${APP_NAME}${APP_NAME.slice(3)} x`), 'x');
+});
+
+check('sanitizeAppText: 60자에서 자른다(코드 포인트 기준, 마지막은 …)', () => {
+  assert.equal(APP_TEXT_MAX, 60);
+  const long = sanitizeAppText('가'.repeat(80));
+  assert.equal(Array.from(long).length, 60);
+  assert.ok(long.endsWith('…'));
+  assert.equal(sanitizeAppText('가'.repeat(60)), '가'.repeat(60));
+});
+
+check('logReason: 위반 자기 보고는 앱이 보낸 target만 거르고 앞뒤 문구는 둔다', () => {
+  const v = { kind: 'violation', enforcedBy: 'plugin-report' } as const;
+  assert.equal(
+    logReason({ ...v, reason: `외부 요청(fetch) https://evil.example/${cp(0x1f7e2)}보호됨 · 허용 목록 밖` }),
+    '외부 요청(fetch) https://evil.example/ · 허용 목록 밖',
+  );
+  assert.equal(logReason({ ...v, reason: `카메라 접근(camera) ${cp(0x202e)}${APP_NAME}` }), '카메라 접근(camera) (빈 값)');
+  assert.equal(logReason({ kind: 'hold', enforcedBy: null, reason: '프레임 밖' }), '프레임 밖');
+  assert.equal(logReason({ kind: 'violation', enforcedBy: 'host', reason: `형식 오류: ${cp(0x1f7e2)}x` }), '형식 오류: x');
 });
 
 console.log(`\n${passed}개 통과`);

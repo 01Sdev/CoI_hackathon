@@ -9,6 +9,7 @@ import { validateManifest, type Manifest } from '../core/manifest';
 import { useLensStore } from '../core/store';
 import type { VersionedManifest } from '../core/types';
 import { josa, PLUGIN_NAME, PLUGIN_STATUS } from './labels';
+import { sanitizeAppText } from './sanitize';
 
 function manifestJson(m: VersionedManifest): string {
   const { version: _version, ...rest } = m;
@@ -36,7 +37,7 @@ function PluginRow({ id, picked, onPick }: { id: string; picked: boolean; onPick
   const p = useLensStore(
     useShallow((s) => {
       const x = s.plugins[id];
-      return { kind: x?.kind, status: x?.status ?? 'terminated', enabled: x?.enabled ?? false, purpose: x?.manifest.purpose ?? '' };
+      return { kind: x?.kind, status: x?.status ?? 'terminated', enabled: x?.enabled ?? false, purpose: sanitizeAppText(x?.manifest.purpose ?? '') };
     }),
   );
   const blocked = useLensStore((s) => s.logs.reduce((n, l) => n + (l.kind === 'violation' && l.pluginId === id ? 1 : 0), 0));

@@ -1,9 +1,11 @@
 // 증명 로그 한 줄의 문구(F6, FR-027). 숫자는 모두 Delivery·LogEntry 값 그대로다. 해시는 상세에만 둔다.
-// reason은 A·B 호스트가 쓴 문자열이고, 플러그인 문자열이 아니다.
+// reason은 A·B 호스트가 쓴 문자열이지만, 위반 줄에는 앱이 보낸 문자열이 섞인다(B violationReason이 앱의 target을
+// 그대로 붙인다). 그래서 위반 줄의 사유는 logReason으로 걸러서 보인다.
 
 import type { Box, Delivery, LogEntry, PluginKind, UsageRecord } from '../core/types';
 import { formatBytes, objectName, PLUGIN_NAME } from '../ui/labels';
 import type { Tone } from '../ui/OrbStack';
+import { sanitizeAppText } from '../ui/sanitize';
 
 /** 방금 · 14초 전 · 3분 전 · 1시간 전. */
 export function ago(ms: number): string {
@@ -45,6 +47,20 @@ export function entryTitle(e: LogEntry, d: Delivery | null, kind: PluginKind | u
   }
 }
 
+// B violationReason의 모양: "{시도}({영문}) {target}"에 fetch·script면 " · 허용 목록 밖|안인데 실패".
+const REPORT_REASON = /^(\S.*?\([A-Za-z]+\)) ([\s\S]*?)( · 허용 목록 (?:밖|안인데 실패))?$/;
+
+/**
+ * 기록 사유를 화면 문구로. 위반 줄은 앱 문자열이 섞이므로 거른다. 자기 보고는 앱이 보낸 target 부분만 거르고
+ * framelet이 붙인 앞뒤는 그대로 둔다. 모양이 다르거나 호스트 감지 줄이면 사유 전체를 거른다.
+ */
+export function logReason(e: Pick<LogEntry, 'kind' | 'reason' | 'enforcedBy'>): string {
+  if (e.kind !== 'violation') return e.reason;
+  const m = e.enforcedBy === 'plugin-report' ? REPORT_REASON.exec(e.reason) : null;
+  if (!m) return sanitizeAppText(e.reason);
+  return `${m[1] ?? ''} ${sanitizeAppText(m[2] ?? '') || '(빈 값)'}${m[3] ?? ''}`;
+}
+
 /** "프레임 W×H"(F24, FR-063). frameRect가 없는 줄(F24 전 전달, skip·violation)은 빈 문자열. */
 export function frameText(frameRect: Box | null | undefined): string {
   return frameRect ? `프레임 ${Math.round(frameRect.w)}×${Math.round(frameRect.h)}` : '';
@@ -56,7 +72,7 @@ export function entryMeta(e: LogEntry, d: Delivery | null): string {
   if (e.kind !== 'deliver') {
     const by = e.enforcedBy === 'plugin-report' ? ' · 플러그인 자기 보고' : e.enforcedBy === 'host' ? ' · 호스트 감지' : '';
     const zero = e.kind === 'hold' || e.kind === 'skip' ? ' · 전달 0' : '';
-    return `${e.reason || '사유 없음'}${by}${zero}${frame ? ` · ${frame}` : ''}`;
+    return `${logReason(e) || '사유 없음'}${by}${zero}${frame ? ` · ${frame}` : ''}`;
   }
   if (!d) return '전달 기록이 밀려났습니다';
   const parts = [formatBytes(d.bytes), `원본의 ${percent(d.areaRatio)}`];
