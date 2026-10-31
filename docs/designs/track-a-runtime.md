@@ -30,6 +30,8 @@
 - `<video>`와 MediaStream은 스토어에 넣지 않는다. `<video>`의 `object-fit`은 A가 정하지 않는다(C의 CSS가 정하고, 박스 겹치기도 그 매핑을 따른다). `getVideo()`는 `vision/`만 import한다.
 - 시작점은 `startRuntime()`(`vision/index.ts`) 하나다. 여러 번 불러도 구독과 반복은 하나만 돈다(HMR·StrictMode 대비).
 - C는 `import.meta.glob('/src/input/preview.ts')`로 `mountPreview`를 찾는다(track-c/screens). `input/preview.ts`의 `mountPreview`는 처음 불릴 때 `startRuntime()`도 부른다. 그래서 `main.tsx`를 고치지 않아도 미리보기가 붙으면 판정이 돈다.
+- 미리보기를 떼어도(`mountPreview`가 돌려준 함수) 판정은 이어진다. 문서에서 뗀 `<video>`는 브라우저가 잠시 뒤 멈추므로 그 뒤에 다시 재생한다(muted).
+- `connectPluginHost` 연결 없이 전달을 시도하면 `console.error`를 한 번 남기고(연결될 때까지 다시 남기지 않음) 그 전달은 `failed`가 된다. 연결 누락이 조용히 "전달 0건"으로 묻히지 않게 하기 위해서다(02-SSRD "트랙 연결 기준").
 
 ### 2.2 입력(F1·F10)
 
