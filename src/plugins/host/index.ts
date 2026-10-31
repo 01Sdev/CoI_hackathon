@@ -1,9 +1,9 @@
 // 플러그인 호스트: iframe·Worker 생성, 메시지 검증, 전환 조정기, sendDelivery.
 // 계약: docs/specs/02-SSRD.md §3·§4, docs/designs/core-store.md §2.2·§2.3. 설계: docs/designs/plugin-host.md.
-// iframe으로의 postMessage는 이 파일의 sendInit(첫 load)과 sendDelivery에만 있다(02-SSRD §1 코드 규칙).
+// iframe으로의 postMessage는 이 파일의 sendInit(첫 load)·sendDelivery·sendQuestion(코디 스캔 IF-09)에만 있다(02-SSRD §1 코드 규칙).
 
 import { shallow } from 'zustand/vanilla/shallow';
-import { ACK_TIMEOUT_MS, PLUGIN_MESSAGE_LIMITS, READY_TIMEOUT_MS } from '../../core/constants';
+import { ACK_TIMEOUT_MS, OUTFIT_ANSWER_TIMEOUT_MS, PLUGIN_MESSAGE_LIMITS, READY_TIMEOUT_MS } from '../../core/constants';
 import type { HostToPlugin, PluginToHost } from '../../core/messages';
 import { selectCanSend, selectDesiredRuntime, type DesiredRuntime } from '../../core/selectors';
 import { lensStore, newId, type LensStore } from '../../core/store';
@@ -13,7 +13,7 @@ import { sha256Pure } from '../sdk/sha256';
 import { NAME_HELPER_SHIM, buildWorkerSource, type SdkTestOptions } from '../sdk/source';
 import { iframeBootstrap } from './bootstrap';
 import { buildCsp, buildSrcdoc, makeNonce, safeConnectList } from './csp';
-import { parsePluginMessage, violationReason } from './validate';
+import { cleanAnswerText, parsePluginMessage, violationReason } from './validate';
 
 export interface PluginHostOptions {
   /** 기본 lensStore. */
@@ -28,6 +28,8 @@ export interface PluginHostOptions {
   sdkTestOptionsFor?: (pluginId: string) => SdkTestOptions | undefined;
   readyTimeoutMs?: number;
   ackTimeoutMs?: number;
+  /** 코디 스캔 answer를 기다리는 시간. 기본 OUTFIT_ANSWER_TIMEOUT_MS. */
+  answerTimeoutMs?: number;
   /** 메시지 초당 한도용 시계. 기본 performance.now(). */
   now?: () => number;
 }
@@ -57,6 +59,9 @@ interface Runtime {
   acked: Set<string>;
   resulted: Set<string>;
   reported: Set<string>;
+  /** 이 iframe에 보낸 questionId(= turnId). answer는 여기 있는 것만, 한 번 받는다. */
+  asked: Set<string>;
+  answered: Set<string>;
   msgTimes: number[];
   formatErrors: number;
   onLoad: () => void;
@@ -85,6 +90,7 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
   const sourceFor = opts.sourceFor ?? ((p: Plugin) => pluginSourceFor(p.kind));
   const readyTimeoutMs = opts.readyTimeoutMs ?? READY_TIMEOUT_MS;
   const ackTimeoutMs = opts.ackTimeoutMs ?? ACK_TIMEOUT_MS;
+  const answerTimeoutMs = opts.answerTimeoutMs ?? OUTFIT_ANSWER_TIMEOUT_MS;
   const now = opts.now ?? (() => performance.now());
   const ownContainer = !opts.container;
   const container = opts.container ?? document.createElement('div');
@@ -97,6 +103,10 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
   const current = new Map<string, Runtime>();
   const byWindow = new Map<Window, Runtime>();
   const ackTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** turnId → answer 기다리는 타이머. */
+  const answerTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** 한 번 처리한(보냈거나 실패로 끝낸) turnId. */
+  const handledTurns = new Set<string>();
   let stopped = false;
 
   const act = () => store.getState();
@@ -111,6 +121,14 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
     rt.readyTimer = null;
     rt.iframe.removeEventListener('load', rt.onLoad);
     rt.iframe.remove();
+    // 이 iframe이 답하지 못한 질문은 바로 끝낸다(Worker가 사라졌다).
+    for (const turnId of rt.asked) {
+      if (rt.answered.has(turnId)) continue;
+      const timer = answerTimers.get(turnId);
+      if (timer) clearTimeout(timer);
+      answerTimers.delete(turnId);
+      act().failTurn(turnId, 'iframe이 사라져 답을 받지 못함');
+    }
   };
 
   /**
@@ -176,6 +194,8 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
       acked: new Set(),
       resulted: new Set(),
       reported: new Set(),
+      asked: new Set(),
+      answered: new Set(),
       msgTimes: [],
       formatErrors: 0,
       onLoad: () => {
@@ -309,6 +329,17 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
         act().setResult(rt.pluginId, { deliveryId: msg.deliveryId, text: msg.text, source: msg.source, at: now() });
         return;
       }
+      case 'answer': {
+        if (!rt.asked.has(msg.questionId)) return formatError(rt, '이 iframe에 보내지 않은 questionId의 answer');
+        if (rt.answered.has(msg.questionId)) return;
+        rt.answered.add(msg.questionId);
+        const timer = answerTimers.get(msg.questionId);
+        if (timer) clearTimeout(timer);
+        answerTimers.delete(msg.questionId);
+        // 스토어는 asking인 turn에만 받는다(이미 시간 초과면 false).
+        act().recordAnswer(msg.questionId, cleanAnswerText(msg.text), msg.source);
+        return;
+      }
       case 'violation': {
         const key = `${msg.attempt}\n${msg.target}`;
         if (rt.reported.has(key)) return;
@@ -390,6 +421,36 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
     return true;
   };
 
+  /**
+   * IF-09. 스토어의 asking turn을 그 플러그인의 지금 iframe에 보낸다(새 픽셀은 싣지 않는다).
+   * 그 iframe이 준비되지 않았거나 그 조각을 받은 iframe이 아니면 바로 failTurn. 답이 없으면 answerTimeoutMs 뒤 failTurn.
+   */
+  const sendQuestions = () => {
+    for (const turn of act().outfitTurns) {
+      if (turn.status !== 'asking' || handledTurns.has(turn.id)) continue;
+      handledTurns.add(turn.id);
+      const rt = current.get(turn.pluginId);
+      if (!rt || !rt.ready || !rt.win) {
+        act().failTurn(turn.id, '플러그인이 준비되지 않음');
+        continue;
+      }
+      if (!turn.deliveryId || !rt.sent.has(turn.deliveryId)) {
+        act().failTurn(turn.id, '이 iframe에 보낸 조각이 아님');
+        continue;
+      }
+      const msg: HostToPlugin = { type: 'question', questionId: turn.id, deliveryId: turn.deliveryId, text: turn.question };
+      rt.asked.add(turn.id);
+      rt.win.postMessage(msg, '*');
+      answerTimers.set(
+        turn.id,
+        setTimeout(() => {
+          answerTimers.delete(turn.id);
+          act().failTurn(turn.id, `답 시간 초과(${Math.round(answerTimeoutMs / 1000)}초)`);
+        }, answerTimeoutMs),
+      );
+    }
+  };
+
   window.addEventListener('message', onMessage);
   // fireImmediately는 리스너를 등록하기 전에 불린다. 그 안에서 stopped로 바뀌면 리스너가 낡은 값을 들고 있어
   // 나중에 다시 켜도 불리지 않는다. 그래서 먼저 구독하고 나서 직접 한 번씩 돈다.
@@ -398,6 +459,8 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
     store.subscribe((s) => selectDesiredRuntime(s, id), () => reconcile(id), { equalityFn: shallow }),
   );
   for (const id of ids) reconcile(id);
+  unsubs.push(store.subscribe((s) => s.outfitTurns, sendQuestions));
+  sendQuestions();
 
   return {
     sendDelivery,
@@ -408,6 +471,8 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
       for (const u of unsubs) u();
       for (const timer of ackTimers.values()) clearTimeout(timer);
       ackTimers.clear();
+      for (const timer of answerTimers.values()) clearTimeout(timer);
+      answerTimers.clear();
       for (const rt of [...current.values()]) {
         detach(rt);
         act().setPluginRuntime(rt.pluginId, { status: 'loading', runtimeId: null, runtimePolicy: null });

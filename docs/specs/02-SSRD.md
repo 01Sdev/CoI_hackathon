@@ -59,7 +59,7 @@ flowchart LR
 | --- | --- |
 | `drawImage(video…)`·`getImageData`·`getUserMedia`·`srcObject`·`captureStream`·`createImageBitmap`·`toBlob` | `input/`, `vision/` (`toBlob`은 `vision/`·`broker/`) |
 | `sendDelivery()` 호출(플러그인에 바이트를 보내는 유일한 함수) | `broker/` 한 곳 |
-| iframe으로의 `postMessage` | `plugins/host` 안 `sendInit`·`sendDelivery`만 |
+| iframe으로의 `postMessage` | `plugins/host` 안 `sendInit`·`sendDelivery`·`sendQuestions`(코디 스캔 IF-09)만 |
 | 호스트 코드의 `fetch`·`XMLHttpRequest`·`WebSocket` | 없음(모델·WASM 정적 로드 제외). **라이브러리가 몰래 보내는 요청도 막는다(P0, 2026-10-31 추가):** MediaPipe tasks-vision 1.2.0이 `https://odml.pa.googleapis.com/v1/log`로 POST를 시도한다(독립 데모 실측, 본문 미확인). 막는 방법은 아래 "호스트 페이지 CSP"와 V15 |
 | 플러그인이 보낸 문자열 렌더링 | `textContent`만(`innerHTML` 금지. 호스트 XSS는 곧 원본 접근이다) |
 | 카메라 미리보기 | A가 `mountPreview(container)`를 export하고 C는 컨테이너만 넘긴다. `<video>`·MediaStream 참조는 스토어에 넣지 않는다. 미리보기는 좌우 반전하지 않는다 [제안]. HUD 대상 위치(`liveObservation.targetBox`, 소스 프레임 기준 0~1. 확정 전 후보도 따라 움직인다)를 그대로 겹치기 위해서다. HUD "장면"은 `liveObservation.label`(확정 장면)이다. C는 `src/input/preview.ts`의 `mountPreview`를 쓰며, 처음 붙일 때 A 런타임이 시작된다 |
@@ -223,7 +223,7 @@ framelet.answer(questionId: string, text: string, source: 'api' | 'fallback'): v
 | 호스트 검증 | `answer` 키는 `type·questionId·text·source`, `text` ≤ `PLUGIN_MESSAGE_LIMITS.answerText`. 화면에 넣기 전 제어·방향 문자를 거르고 줄바꿈은 남긴다. `textContent`로만 넣는다 |
 | 기록 | B가 `recordAnswer(turnId, text, source)`. `OUTFIT_ANSWER_TIMEOUT_MS`(20초) 안에 답이 없으면 `failTurn` |
 
-**IF-11 `/api/outfit`.** `POST`, 본문 JSON `{ image: string /* base64 JPEG */, question: string }` → `200 { answer: string }`. 서버 환경 변수 `GEMINI_API_KEY`(Google Gemini). 15초 안에 답이 없거나 키가 없으면 대체 문구. 사람의 신원·나이·인종·건강은 추측하지 않고, 브랜드는 로고·글자가 보일 때만 말한다. 받는 곳은 framelet 서버 → Google이므로 규약 보기에 적는다.
+**IF-11 `/api/outfit`.** `POST`, 본문 JSON `{ image: string /* base64 JPEG */, question: string }` → `200 { answer: string }`. 서버 환경 변수 `GEMINI_API_KEY`(Google Gemini). 15초 안에 답이 없거나 키가 없으면 대체 문구. 사람의 신원·나이·인종·건강은 추측하지 않고, 브랜드는 로고·글자가 보일 때만 말한다. 받는 곳은 framelet 서버 → Google이므로 규약 보기에 적는다. **B 결정(2026-11-01, `api/outfit.ts`):** 응답은 `200 { answer, source: 'api' | 'fallback' }`(대체 문구도 200, 문구는 `OUTFIT_FALLBACK_TEXT`). 판정은 OPTIONS 204(`Allow-Headers: content-type`) → 405 → 429(인스턴스 고정 창 60초 30건) → 413(본문 1MB, 디코드한 JPEG 600KiB) → 415(JSON 아님·JPEG 아님) → 400(JSON·질문 1~300자·base64). 모델은 Gemini 문서의 안정판 중 가장 빠른 `gemini-3.5-flash-lite`(이미지 입력, 생각 기본 minimal, `OUTFIT_MODEL`로 바꿈), REST `v1beta/models/<모델>:generateContent`(`x-goog-api-key`, `systemInstruction`, 이미지 → 질문 순, `maxOutputTokens` 512). 서버 상태를 남기는 Interactions API는 쓰지 않는다. 답은 생각 조각을 빼고 1,000자로 자른다. 로그는 `outfit fallback <이유>` 한 줄만(이미지·질문·답·키 없음). 플러그인은 받은 조각을 deliveryId별로 최근 4개만 들고 있고, 요청부터 본문까지 18초 안에 끝나지 않으면 대체 문구로 답한다.
 
 ### IF-07 `/outward` BroadcastChannel
 

@@ -1,4 +1,4 @@
-// api/calorie assertion 스크립트. 실행: npm run check:api
+// api/calorie·api/outfit assertion 스크립트. 실행: npm run check:api
 // 실제 @anthropic-ai/sdk를 가짜 상류(로컬 HTTP 서버)에 붙여 판정 순서·요청 모양·시간 제한·재시도 없음·응답 처리·502 로그를 본다(TC-053).
 // 진짜 모델 호출(V5)은 키가 있을 때 scripts/measure-calorie.ts로 따로 잰다.
 
@@ -16,6 +16,13 @@ import {
   UPSTREAM_TIMEOUT_MS,
   createCalorieHandler,
 } from '../api/calorie';
+import {
+  DEFAULT_MODEL as OUTFIT_DEFAULT_MODEL,
+  OPTIONS as outfitOptions,
+  SYSTEM_INSTRUCTION as OUTFIT_SYSTEM,
+  createOutfitHandler,
+} from '../api/outfit';
+import { OUTFIT_FALLBACK_TEXT } from '../src/plugins/outfit';
 
 let passed = 0;
 async function check(name: string, fn: () => void | Promise<void>) {
@@ -264,6 +271,103 @@ await check('응답 처리 4~7: 음식 아님, 이름 공백 정리·12자, 빈 
     assert.equal(await r.text(), expected);
     assert.equal(r.headers.get('x-framelet-kcal-clamped'), clamped ? '1' : null, expected);
   }
+});
+
+// ── /api/outfit(IF-11, Gemini generateContent) ──
+const gemini = (text: string | null, extra: Record<string, unknown> = {}) => ({
+  candidates: [{ finishReason: 'STOP', content: { role: 'model', parts: text === null ? [] : [{ text }] } }],
+  ...extra,
+});
+const outfitHandler = createOutfitHandler({ baseURL, apiKey: 'test-key-not-real', rateLimit: big, timeoutMs: 300 });
+const jpegB64 = Buffer.from(jpeg).toString('base64');
+const ask = (body: unknown, headers: Record<string, string> = { 'content-type': 'application/json' }, h = outfitHandler) =>
+  h(new Request('http://localhost/api/outfit', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body), headers }));
+const outfitBody = (r: Response) => r.json() as Promise<{ answer?: string; source?: string; error?: string }>;
+
+await check('outfit: OPTIONS 204·CORS, 405, 정상 → 200 {answer, source: api}', async () => {
+  const pre = outfitOptions();
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get('access-control-allow-origin'), '*');
+  assert.equal(pre.headers.get('access-control-allow-methods'), 'POST');
+  assert.equal(pre.headers.get('access-control-allow-headers'), 'content-type');
+  const get = await outfitHandler(new Request('http://localhost/api/outfit', { method: 'GET' }));
+  assert.equal(get.status, 405);
+  behave = { message: gemini('흰 셔츠에 데님 재킷을 겹친 캐주얼 차림이에요.') };
+  seen.length = 0;
+  const r = await ask({ image: jpegB64, question: '이 옷 어디 거야?' });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('access-control-allow-origin'), '*');
+  assert.equal(r.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await outfitBody(r), { answer: '흰 셔츠에 데님 재킷을 겹친 캐주얼 차림이에요.', source: 'api' });
+});
+await check(`outfit: Gemini 요청 모양(${OUTFIT_DEFAULT_MODEL}, generateContent, x-goog-api-key, 시스템 지시, 이미지 먼저)`, async () => {
+  const s = seen.at(-1)!;
+  assert.equal(s.path, `/v1beta/models/${OUTFIT_DEFAULT_MODEL}:generateContent`);
+  assert.equal(s.headers['x-goog-api-key'], 'test-key-not-real');
+  assert.deepEqual(s.body.systemInstruction, { parts: [{ text: OUTFIT_SYSTEM }] });
+  const parts = (s.body.contents as { role: string; parts: Record<string, unknown>[] }[])[0]!;
+  assert.equal(parts.role, 'user');
+  assert.deepEqual(parts.parts[0], { inlineData: { mimeType: 'image/jpeg', data: jpegB64 } });
+  assert.deepEqual(parts.parts[1], { text: '착용자의 질문: 이 옷 어디 거야?' });
+  assert.deepEqual(s.body.generationConfig, { maxOutputTokens: 512 });
+  // 시스템 지시: 해요체·옷만·신상 추측 금지·브랜드는 보일 때만.
+  for (const word of ['해요체', '나이·성별·인종', '건강', '로고나 글자가 사진에 또렷이 보일 때만']) assert.ok(OUTFIT_SYSTEM.includes(word), word);
+});
+await check('outfit: 판정(415 JSON 아님, 400 잘못된 JSON·빈 질문·301자·base64 아님, 415 JPEG 아님, 413) → 상류 요청 0건', async () => {
+  seen.length = 0;
+  assert.equal((await ask('x', { 'content-type': 'text/plain' })).status, 415);
+  assert.equal((await ask('{', { 'content-type': 'application/json' })).status, 400);
+  assert.equal((await ask({ image: jpegB64, question: '  ' })).status, 400);
+  assert.equal((await ask({ image: jpegB64, question: 'a'.repeat(301) })).status, 400);
+  assert.equal((await ask({ image: jpegB64, question: 'a'.repeat(300) })).status, 200);
+  assert.equal((await ask({ image: '!!!', question: '무슨 옷?' })).status, 400);
+  assert.equal((await ask({ image: Buffer.from('not jpeg').toString('base64'), question: '무슨 옷?' })).status, 415);
+  assert.equal((await ask({ image: Buffer.alloc(614_401, 0xff).toString('base64'), question: '무슨 옷?' })).status, 413);
+  assert.equal((await ask('x'.repeat(1_000_001))).status, 413);
+  assert.equal(seen.length, 1); // 300자 통과 1건만
+});
+await check('outfit: 키 없음·시간 초과·상류 429·막힘·빈 답 → 200 대체 문구(source fallback), 로그 한 줄에 내용 없음', async () => {
+  logs.length = 0;
+  seen.length = 0;
+  const noKey = createOutfitHandler({ baseURL, apiKey: '', rateLimit: big });
+  const prev = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  const q = { image: jpegB64, question: '이 바지 핏 어때?' };
+  assert.deepEqual(await outfitBody(await ask(q, undefined, noKey)), { answer: OUTFIT_FALLBACK_TEXT, source: 'fallback' });
+  if (prev !== undefined) process.env.GEMINI_API_KEY = prev;
+  assert.equal(seen.length, 0);
+  behave = { delayMs: 2_000, message: gemini('늦은 답') };
+  const t0 = Date.now();
+  assert.deepEqual(await outfitBody(await ask(q)), { answer: OUTFIT_FALLBACK_TEXT, source: 'fallback' });
+  assert.ok(Date.now() - t0 < 1_500, `시간 제한(300ms)에 끊음: ${Date.now() - t0}ms`);
+  behave = { status: 429 };
+  assert.equal((await outfitBody(await ask(q))).source, 'fallback');
+  behave = { message: { promptFeedback: { blockReason: 'SAFETY' } } };
+  assert.equal((await outfitBody(await ask(q))).source, 'fallback');
+  behave = { message: gemini(null) };
+  assert.equal((await outfitBody(await ask(q))).source, 'fallback');
+  assert.deepEqual(
+    logs.filter((l) => l.startsWith('outfit')),
+    [
+      'outfit fallback no-key',
+      'outfit fallback timeout',
+      'outfit fallback upstream=429 status=unknown',
+      'outfit fallback blocked=SAFETY',
+      'outfit fallback format=no-text finish=STOP',
+    ],
+  );
+  assert.ok(logs.every((l) => !l.includes('바지') && !l.includes('test-key') && !l.includes(jpegB64.slice(0, 20))));
+});
+await check('outfit: 생각(thought) 조각은 빼고, 1,000자로 자른다. 고정 창 30건', async () => {
+  behave = { message: { candidates: [{ content: { parts: [{ text: '속으로 생각', thought: true }, { text: '니트예요.' }] } }] } };
+  assert.equal((await outfitBody(await ask({ image: jpegB64, question: '무슨 옷?' }))).answer, '니트예요.');
+  behave = { message: gemini('가'.repeat(1_500)) };
+  assert.equal((await outfitBody(await ask({ image: jpegB64, question: '무슨 옷?' }))).answer!.length, 1_000);
+  behave = { message: gemini('네') };
+  const small = createOutfitHandler({ baseURL, apiKey: 'test-key-not-real', rateLimit: { count: 2, windowMs: 60_000 } });
+  const codes = [];
+  for (let i = 0; i < 3; i++) codes.push((await ask({ image: jpegB64, question: '무슨 옷?' }, undefined, small)).status);
+  assert.deepEqual(codes, [200, 200, 429]);
 });
 
 upstream.close();
