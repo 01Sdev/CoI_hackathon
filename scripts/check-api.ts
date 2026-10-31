@@ -1,4 +1,4 @@
-// api/calorie·api/outfit assertion 스크립트. 실행: npm run check:api
+// api/calorie·api/outfit·api/scribe-token assertion 스크립트. 실행: npm run check:api
 // 실제 @anthropic-ai/sdk를 가짜 상류(로컬 HTTP 서버)에 붙여 판정 순서·요청 모양·시간 제한·재시도 없음·응답 처리·502 로그를 본다(TC-053).
 // 진짜 모델 호출(V5)은 키가 있을 때 scripts/measure-calorie.ts로 따로 잰다.
 
@@ -22,6 +22,7 @@ import {
   SYSTEM_INSTRUCTION as OUTFIT_SYSTEM,
   createOutfitHandler,
 } from '../api/outfit';
+import { ERROR_TEXT as SCRIBE_ERRORS, TOKEN_TYPE, createScribeTokenHandler } from '../api/scribe-token';
 import { OUTFIT_FALLBACK_TEXT } from '../src/plugins/outfit';
 
 let passed = 0;
@@ -368,6 +369,110 @@ await check('outfit: 생각(thought) 조각은 빼고, 1,000자로 자른다. �
   const codes = [];
   for (let i = 0; i < 3; i++) codes.push((await ask({ image: jpegB64, question: '무슨 옷?' }, undefined, small)).status);
   assert.deepEqual(codes, [200, 200, 429]);
+});
+
+// ── /api/scribe-token(IF-12, ElevenLabs 일회용 토큰) ──
+// 상류는 주입한 fetch로 대신한다. 키는 시험용 가짜 값이고 응답·로그 어디에도 나오면 안 된다.
+const SCRIBE_KEY = 'test-eleven-key-not-real';
+interface ScribeCall {
+  url: string;
+  method: string;
+  key: string | null;
+  body: unknown;
+}
+const scribeCalls: ScribeCall[] = [];
+let scribeReply: () => Promise<Response> = async () => new Response(JSON.stringify({ token: 'sutkn_1234567890' }));
+const fakeTokenApi: typeof fetch = async (input, init) => {
+  scribeCalls.push({ url: String(input), method: init?.method ?? 'GET', key: new Headers(init?.headers).get('xi-api-key'), body: init?.body ?? null });
+  const signal = init?.signal;
+  return Promise.race([
+    scribeReply(),
+    new Promise<Response>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason))),
+  ]);
+};
+const scribe = createScribeTokenHandler({ apiKey: SCRIBE_KEY, baseURL: 'https://eleven.test', rateLimit: big, timeoutMs: 200, fetch: fakeTokenApi });
+const sameOrigin = { origin: 'https://framelet-demo.vercel.app', host: 'framelet-demo.vercel.app', 'sec-fetch-site': 'same-origin' };
+const mint = (headers: Record<string, string> = sameOrigin, h = scribe, method = 'POST') =>
+  h(new Request('https://framelet-demo.vercel.app/api/scribe-token', { method, headers }));
+
+await check(`scribe-token: 같은 출처 POST → ElevenLabs single-use-token/${TOKEN_TYPE}(xi-api-key, 본문 없음) → 200 {token}만`, async () => {
+  scribeCalls.length = 0;
+  const r = await mint();
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('cache-control'), 'no-store');
+  assert.equal(r.headers.get('access-control-allow-origin'), null);
+  const text = await r.text();
+  assert.deepEqual(JSON.parse(text), { token: 'sutkn_1234567890' });
+  assert.ok(!text.includes(SCRIBE_KEY));
+  assert.deepEqual(scribeCalls, [{ url: 'https://eleven.test/v1/single-use-token/realtime_scribe', method: 'POST', key: SCRIBE_KEY, body: null }]);
+});
+await check('scribe-token: 다른 출처·Origin 없음·sec-fetch-site cross-site → 403, GET → 405, 상류 0건', async () => {
+  scribeCalls.length = 0;
+  assert.equal((await mint({ origin: 'https://evil.example', host: 'framelet-demo.vercel.app' })).status, 403);
+  assert.equal((await mint({ host: 'framelet-demo.vercel.app' })).status, 403);
+  assert.equal((await mint({ ...sameOrigin, 'sec-fetch-site': 'cross-site' })).status, 403);
+  assert.equal((await mint({ origin: 'not a url', host: 'framelet-demo.vercel.app' })).status, 403);
+  assert.equal((await mint(sameOrigin, scribe, 'GET')).status, 405);
+  assert.equal(scribeCalls.length, 0);
+  // 개발 서버: Origin http://localhost:5187 = Host localhost:5187. sec-fetch-site 없음(옛 브라우저)도 Origin이 맞으면 통과.
+  assert.equal((await mint({ origin: 'http://localhost:5187', host: 'localhost:5187' })).status, 200);
+});
+await check('scribe-token: 키 없음·상류 401·403·422·429·500·시간 초과·JSON 아님·토큰 이상 → 503 {error}, 키·토큰은 응답·로그에 없음', async () => {
+  logs.length = 0;
+  scribeCalls.length = 0;
+  const prev = process.env.ELEVENLABS_API_KEY;
+  delete process.env.ELEVENLABS_API_KEY;
+  const noKey = await mint(sameOrigin, createScribeTokenHandler({ apiKey: '', fetch: fakeTokenApi }));
+  if (prev !== undefined) process.env.ELEVENLABS_API_KEY = prev;
+  assert.deepEqual([noKey.status, await noKey.json()], [503, { error: SCRIBE_ERRORS.unavailable }]);
+  assert.equal(scribeCalls.length, 0);
+  const cases: [() => Promise<Response>, string][] = [
+    [async () => new Response('{"detail":"invalid key"}', { status: 401 }), SCRIBE_ERRORS.auth],
+    [async () => new Response('{}', { status: 403 }), SCRIBE_ERRORS.auth],
+    [async () => new Response('{"detail":[]}', { status: 422 }), SCRIBE_ERRORS.invalid],
+    [async () => new Response('{}', { status: 429 }), SCRIBE_ERRORS.rate],
+    [async () => new Response('x', { status: 500 }), SCRIBE_ERRORS.upstream],
+    [() => new Promise<Response>(() => {}), SCRIBE_ERRORS.unavailable],
+    [async () => new Response('not json'), SCRIBE_ERRORS.unavailable],
+    [async () => new Response(JSON.stringify({ token: '' })), SCRIBE_ERRORS.unavailable],
+    [async () => new Response(JSON.stringify({ token: 'a b"c' })), SCRIBE_ERRORS.unavailable],
+    [async () => new Response(JSON.stringify({})), SCRIBE_ERRORS.unavailable],
+  ];
+  for (const [reply, error] of cases) {
+    scribeReply = reply;
+    const r = await mint();
+    const text = await r.text();
+    assert.deepEqual([r.status, JSON.parse(text)], [503, { error }]);
+    assert.ok(!text.includes(SCRIBE_KEY));
+  }
+  assert.deepEqual(
+    logs.filter((l) => l.startsWith('scribe-token')),
+    [
+      'scribe-token 503 no-key',
+      'scribe-token 503 upstream=401',
+      'scribe-token 503 upstream=403',
+      'scribe-token 503 upstream=422',
+      'scribe-token 503 upstream=429',
+      'scribe-token 503 upstream=500',
+      'scribe-token 503 timeout',
+      'scribe-token 503 format=json',
+      'scribe-token 503 format=no-token',
+      'scribe-token 503 format=no-token',
+      'scribe-token 503 format=no-token',
+    ],
+  );
+  scribeReply = async () => new Response(JSON.stringify({ token: 'sutkn_secret_token_value' }));
+  await mint();
+  assert.ok(logs.every((l) => !l.includes(SCRIBE_KEY) && !l.includes('sutkn_')));
+});
+await check('scribe-token: 고정 창(시험 2건) 넘으면 429, 상류 요청 없음', async () => {
+  scribeReply = async () => new Response(JSON.stringify({ token: 'sutkn_1' }));
+  const small = createScribeTokenHandler({ apiKey: SCRIBE_KEY, baseURL: 'https://eleven.test', fetch: fakeTokenApi, rateLimit: { count: 2, windowMs: 60_000 } });
+  scribeCalls.length = 0;
+  const codes = [];
+  for (let i = 0; i < 3; i++) codes.push((await mint(sameOrigin, small)).status);
+  assert.deepEqual(codes, [200, 200, 429]);
+  assert.equal(scribeCalls.length, 2);
 });
 
 upstream.close();
