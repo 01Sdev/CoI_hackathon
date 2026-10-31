@@ -1,6 +1,6 @@
 // 화면 문구. 플러그인이 보낸 문자열은 여기 없다(그건 React 텍스트 노드 = textContent로만 넣는다).
 
-import type { InputKind, PluginKind, SceneLabel } from '../core/types';
+import type { InputKind, PluginKind, PluginStatus, SceneLabel } from '../core/types';
 
 export const INPUT_LABEL: Record<InputKind, string> = {
   webcam: '웹캠',
@@ -19,6 +19,14 @@ export const PLUGIN_NAME: Record<PluginKind, string> = {
   calorie: '칼로리',
   tamper: '변조',
   hello: '장면 기록',
+};
+
+/** 플러그인 상태 글자와 톤. 전환 중 = 적용 중, stopped = 멈춤(사용자가 다시 켜야 함). */
+export const PLUGIN_STATUS: Record<PluginStatus, [string, 'safe' | 'hold']> = {
+  loading: ['적용 중', 'hold'],
+  ready: ['준비됨', 'safe'],
+  stopped: ['멈춤', 'hold'],
+  terminated: ['꺼짐', 'hold'],
 };
 
 export const MANIFEST_SCENE_LABEL: Record<'food' | 'person', string> = {
