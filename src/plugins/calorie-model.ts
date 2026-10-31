@@ -117,8 +117,8 @@ export function calorieModelWorker(
   let ort: OrtLike | null = null;
   let session: Awaited<ReturnType<OrtLike['InferenceSession']['create']>> | null = null;
 
-  const fetchOk = async (url: string) => {
-    const res = await fetch(url);
+  const fetchOk = async (url: string, init?: RequestInit) => {
+    const res = await fetch(url, init);
     if (!res.ok) throw new Error(`${res.status} ${url}`);
     return res;
   };
@@ -151,7 +151,8 @@ export function calorieModelWorker(
 
   const load = async (ortBase: string, modelBase: string, budgetMs: number) => {
     const t0 = performance.now();
-    const s = parseSpec(await (await fetchOk(`${modelBase}model.json`)).json());
+    // /models/*는 1년 immutable 캐시다. 이름이 그대로인 model.json만 매번 다시 확인한다(조각은 이름을 바꿔 교체).
+    const s = parseSpec(await (await fetchOk(`${modelBase}model.json`, { cache: 'no-cache' })).json());
     let gpu = false;
     try {
       gpu = Boolean(scope.navigator.gpu && (await scope.navigator.gpu.requestAdapter()));
@@ -193,7 +194,8 @@ export function calorieModelWorker(
     await infer(zeros);
     const t3 = performance.now();
     if (!Number.isFinite(first)) throw new Error('준비 실행 출력이 숫자가 아님');
-    if (t3 - t2 > budgetMs) throw new Error(`느림: 실행 ${Math.round(t3 - t2)}ms > ${budgetMs}ms`);
+    // 디코드·전처리·메시지 몫으로 20%를 남긴다.
+    if (t3 - t2 > 0.8 * budgetMs) throw new Error(`느림: 실행 ${Math.round(t3 - t2)}ms > ${0.8 * budgetMs}ms`);
     scope.postMessage({
       type: 'loaded',
       ep,

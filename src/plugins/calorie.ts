@@ -30,16 +30,27 @@ export function caloriePlugin(
   let modelReady = false;
   let busy = false;
   let busySince = 0;
-  let timeouts = 0;
+  // 연달아 실패한 횟수(시간 초과·출력 없음·5~5000 밖). 2번이면 이 iframe에서는 끈다.
+  let failures = 0;
   let seq = 0;
-  const waiting = new Map<number, (kcal: number | null) => void>();
-  const stopModel = () => {
+  const waiting = new Map<number, { timer: ReturnType<typeof setTimeout>; resolve: (kcal: number | null) => void }>();
+  const stopModel = (why: string) => {
+    // 개발자 도구에만 남긴다(호스트 기록·reportViolation 아님). 이 iframe에서는 API로 간다.
+    console.warn(`[calorie] 기기 안 모델 끔: ${why}`);
     model?.terminate();
     model = null;
     modelReady = false;
     busy = false;
-    for (const done of waiting.values()) done(null);
+    const pending = [...waiting.values()];
     waiting.clear();
+    for (const w of pending) {
+      clearTimeout(w.timer);
+      w.resolve(null);
+    }
+  };
+  const fail = (why: string) => {
+    failures += 1;
+    if (failures >= 2) stopModel(`연달아 ${failures}번 실패(${why})`);
   };
   const startModel = (base: string) => {
     if (!onDevice) return;
@@ -53,19 +64,26 @@ export function caloriePlugin(
       const m = e.data as Record<string, unknown> | null;
       if (typeof m !== 'object' || m === null) return;
       if (m.type === 'loaded') modelReady = true;
-      else if (m.type === 'failed') {
-        // 개발자 도구에만 남긴다(호스트 기록·reportViolation 아님). 이 iframe에서는 API로 간다.
-        console.warn(`[calorie] 기기 안 모델 끔: ${String(m.reason)}`);
-        stopModel();
-      }
+      else if (m.type === 'failed') stopModel(String(m.reason));
       else if (m.type === 'out' && typeof m.id === 'number') {
         busy = false;
-        const done = waiting.get(m.id);
+        const w = waiting.get(m.id);
+        if (!w) return; // 시간 초과 뒤 늦은 답: 실행 중 표시만 푼다.
         waiting.delete(m.id);
-        done?.(typeof m.kcal === 'number' ? m.kcal : null);
+        clearTimeout(w.timer);
+        const kcal = typeof m.kcal === 'number' ? m.kcal : null;
+        // 5~5000 밖은 단위·정규화가 어긋난 출력으로 보고 API로 넘긴다(그럴듯한 틀린 숫자를 내지 않게).
+        if (kcal === null || !(kcal >= 5 && kcal <= 5000)) {
+          w.resolve(null);
+          fail(kcal === null ? '출력 없음' : `범위 밖 ${kcal}`);
+          return;
+        }
+        failures = 0;
+        // 서버와 같은 표시 범위(10~3000).
+        w.resolve(Math.min(3000, Math.max(10, Math.round(kcal))));
       }
     });
-    model.addEventListener('error', stopModel);
+    model.addEventListener('error', () => stopModel('하위 Worker 오류'));
     model.postMessage({
       type: 'load',
       ortBase: `${base}${onDevice.ortPath}`,
@@ -75,7 +93,7 @@ export function caloriePlugin(
   };
   const onDeviceKcal = (blob: Blob): Promise<number | null> => {
     // 한 실행이 제한의 2배를 넘게 끝나지 않으면 멈춘 것으로 보고 끈다.
-    if (onDevice && busy && Date.now() - busySince > 2 * onDevice.timeoutMs) stopModel();
+    if (onDevice && busy && Date.now() - busySince > 2 * onDevice.timeoutMs) stopModel('실행이 끝나지 않음');
     if (!onDevice || model === null || !modelReady || busy) return Promise.resolve(null);
     const worker = model;
     const id = (seq += 1);
@@ -84,19 +102,10 @@ export function caloriePlugin(
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         if (!waiting.delete(id)) return;
-        // 늦은 out이 오면 busy만 푼다. 연달아 두 번 넘으면 이 기기에서는 끈다.
-        timeouts += 1;
-        if (timeouts >= 2) stopModel();
         resolve(null);
+        fail('시간 초과');
       }, onDevice.timeoutMs);
-      waiting.set(id, (kcal) => {
-        clearTimeout(timer);
-        // 5~5000 밖은 단위·정규화가 어긋난 출력으로 보고 API로 넘긴다(그럴듯한 틀린 숫자를 내지 않게).
-        if (kcal === null || !(kcal >= 5 && kcal <= 5000)) return resolve(null);
-        timeouts = 0;
-        // 서버와 같은 표시 범위(10~3000).
-        resolve(Math.min(3000, Math.max(10, Math.round(kcal))));
-      });
+      waiting.set(id, { timer, resolve });
       worker.postMessage({ type: 'run', id, blob });
     });
   };

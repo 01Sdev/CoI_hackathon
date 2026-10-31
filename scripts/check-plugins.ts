@@ -477,17 +477,36 @@ await check('기기 안: 준비 전 → API, 이름은 0단계 라벨(표 밖은
     assert.equal(r.results().at(-1)!.source, 'on-device');
   }
 });
-await check('기기 안: 실패 값(null·NaN·0 이하)과 5~5000 밖(단위 어긋남) → API', async () => {
-  const r = await onDeviceWorker('https://h.example');
-  r.model!.emit({ type: 'loaded', ep: 'wasm' });
-  for (const [i, kcal] of [null, Number.NaN, 0, -5, 'x', 0.42, 4.9, 5_001].entries()) {
-    r.w.dispatch(delivery(`d${i}`));
+await check('기기 안: 실패 값(null·NaN·0 이하)과 5~5000 밖(단위 어긋남) → API, 연달아 2번이면 끈다', async () => {
+  for (const kcal of [null, Number.NaN, 0, -5, 'x', 0.42, 4.9, 5_001]) {
+    const r = await onDeviceWorker('https://h.example');
+    r.model!.emit({ type: 'loaded', ep: 'wasm' });
+    r.w.dispatch(delivery('d1'));
     await tick();
     answer(r.model!, kcal);
     await tick();
     assert.equal(r.results().at(-1)!.source, 'api', String(kcal));
+    assert.equal(r.model!.terminated, false, String(kcal));
   }
+  // 성공이 끼면 다시 센다. 실패가 연달아 2번이면 끈다.
+  const r = await onDeviceWorker('https://h.example');
+  r.model!.emit({ type: 'loaded', ep: 'wasm' });
+  for (const [id, kcal] of [['d1', 0.4], ['d2', 300], ['d3', 0.4]] as const) {
+    r.w.dispatch(delivery(id));
+    await tick();
+    answer(r.model!, kcal);
+    await tick();
+  }
+  assert.deepEqual(r.results().map((m) => m.source), ['api', 'on-device', 'api']);
   assert.equal(r.model!.terminated, false);
+  r.w.dispatch(delivery('d4'));
+  await tick();
+  answer(r.model!, 9_000);
+  await tick();
+  assert.equal(r.model!.terminated, true);
+  await r.send('d5');
+  assert.equal(r.model!.runs().length, 4);
+  assert.equal(r.results().at(-1)!.source, 'api');
 });
 await check('기기 안: 시간 초과 → API, 실행 중 전달은 바로 API, 연달아 2번 넘으면 끈다', async () => {
   const r = await onDeviceWorker('https://h.example');
@@ -549,6 +568,7 @@ async function runModelWorker(
   const imported: string[] = [];
   const created: { bytes: Uint8Array; eps: string[] }[] = [];
   const draws: number[][] = [];
+  const fetches: { url: string; cache: string | undefined }[] = [];
   const feeds: { name: string; dims: number[]; data: Float32Array }[] = [];
   const parts: Record<string, Uint8Array> = { 'a.0': new Uint8Array([1, 2, 3]), 'a.1': new Uint8Array([4, 5]) };
   const spec = {
@@ -587,7 +607,8 @@ async function runModelWorker(
       ctx.ort = ort;
     },
     navigator: opts.gpu ? { gpu: { requestAdapter: async () => ({}) } } : {},
-    fetch: async (url: string) => {
+    fetch: async (url: string, init?: { cache?: string }) => {
+      fetches.push({ url, cache: init?.cache });
       if (url.endsWith('model.json')) return new Response(JSON.stringify(spec), { status: opts.specStatus ?? 200 });
       const name = url.slice(url.lastIndexOf('/') + 1);
       const part = parts[name];
@@ -619,11 +640,17 @@ async function runModelWorker(
   const send = (data: unknown) => listeners.forEach((l) => l({ data }));
   send({ type: 'load', ortBase: 'https://h.example/ort/', modelBase: 'https://h.example/models/calorie-lens/', budgetMs: opts.budgetMs ?? 2_500 });
   await tick(30 + 2 * (opts.runMs ?? 0));
-  return { posted, imported, created, draws, feeds, ort, send };
+  return { posted, imported, created, draws, feeds, fetches, ort, send };
 }
 await check('하위 Worker: wasm 판 불러오기, 단일 스레드, 조각 이어 붙이기, 첫 실행 뒤 loaded', async () => {
   const m = await runModelWorker({});
   assert.deepEqual(m.imported, ['https://h.example/ort/ort.wasm.min.js']);
+  // model.json만 다시 확인(/models/*는 immutable 캐시), 조각은 캐시 그대로.
+  assert.deepEqual(m.fetches.map((f) => [f.url.slice(f.url.lastIndexOf('/') + 1), f.cache]), [
+    ['model.json', 'no-cache'],
+    ['a.0', undefined],
+    ['a.1', undefined],
+  ]);
   assert.equal(m.ort.env.wasm.numThreads, 1);
   assert.equal(m.ort.env.wasm.proxy, false);
   assert.deepEqual({ ...(m.ort.env.wasm.wasmPaths as object) }, {
@@ -658,10 +685,10 @@ await check('하위 Worker: WebGPU면 webgpu 판·asyncify, 세션 실패 시 wa
   assert.deepEqual(f.created.map((c) => [...c.eps]), [['webgpu', 'wasm'], ['wasm']]);
   assert.equal(f.posted[0]!.ep, 'wasm');
 });
-await check('하위 Worker: 두 번째 준비 실행이 제한을 넘는 기기는 failed(느림)', async () => {
+await check('하위 Worker: 두 번째 준비 실행이 제한의 80%를 넘는 기기는 failed(느림)', async () => {
   const m = await runModelWorker({ runMs: 40, budgetMs: 20 });
   assert.equal(m.posted[0]!.type, 'failed');
-  assert.match(String(m.posted[0]!.reason), /느림: 실행 \d+ms > 20ms/);
+  assert.match(String(m.posted[0]!.reason), /느림: 실행 \d+ms > 16ms/); // 제한의 80%
 });
 await check('하위 Worker: model.json 404·출력 index 밖 → failed·out null', async () => {
   const m = await runModelWorker({ specStatus: 404 });
