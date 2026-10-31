@@ -2,9 +2,10 @@
 // 좌표 변환·시간 창·문구처럼 경계가 있는 함수만 확인한다(AGENTS.md "테스트").
 
 import assert from 'node:assert/strict';
-import { APP_NAME, CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE } from '../src/core/constants';
+import { APP_NAME, CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE, ORIGIN_TOKEN } from '../src/core/constants';
 import type { Box } from '../src/core/types';
 import { entryMeta, frameText, logReason, usageMeta, wallClock } from '../src/proof/format';
+import { GUARANTEES, protocolRows, receiverText } from '../src/proof/protocol';
 import { coverBox, coverPointToSource, cornerPoint, dragCornerFromScreen, faceWindowRemaining, nudgeCorner } from '../src/ui/geometry';
 import { appResultLine, deliverySignalLines, formatBytes, josa } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
@@ -213,6 +214,36 @@ check('logReason: 위반 자기 보고는 앱이 보낸 target만 거르고 앞�
   assert.equal(logReason({ ...v, reason: `카메라 접근(camera) ${cp(0x202e)}${APP_NAME}` }), '카메라 접근(camera) (빈 값)');
   assert.equal(logReason({ kind: 'hold', enforcedBy: null, reason: '프레임 밖' }), '프레임 밖');
   assert.equal(logReason({ kind: 'violation', enforcedBy: 'host', reason: `형식 오류: ${cp(0x1f7e2)}x` }), '형식 오류: x');
+});
+
+check('receiverText: $ORIGIN은 "{APP_NAME} 서버", 다른 주소는 호스트 이름, 빈 목록은 "밖으로 안 보냄"', () => {
+  const self = 'https://framelet-demo.vercel.app';
+  assert.deepEqual(receiverText([ORIGIN_TOKEN], [self], self, false), {
+    requested: `${APP_NAME} 서버`,
+    allowed: `${APP_NAME} 서버만`,
+    viaServer: true,
+  });
+  assert.deepEqual(receiverText([], [], self, false), { requested: '밖으로 안 보냄', allowed: '밖으로 안 보냄', viaServer: false });
+  assert.deepEqual(receiverText(['https://evil.example:8443'], [], self, false), {
+    requested: 'evil.example',
+    allowed: 'evil.example 허용 안 함',
+    viaServer: false,
+  });
+  assert.equal(receiverText([ORIGIN_TOKEN, 'https://x.com'], [self], self, false).allowed, `${APP_NAME} 서버, x.com 허용 안 함`);
+  assert.equal(receiverText([ORIGIN_TOKEN], [], self, true).allowed, '지금은 막음 · 비교 모드');
+});
+
+check('protocolRows: 칼로리 시드 값이면 설계 §3.2 표 문구가 나온다', () => {
+  const rows = protocolRows({ scenes: ['food'], maxSide: 256, maxPerMinute: 6 }, receiverText([ORIGIN_TOKEN], ['o'], 'o', false));
+  assert.deepEqual(rows, [
+    ['장면', '음식', '음식 앞에 있을 때만'],
+    ['영역', '대상 하나', '흰 틀 안의 대상 하나'],
+    ['크기', '긴 변 256px', '긴 변 256px까지'],
+    ['빈도', '분당 6장', '분당 6장까지'],
+    ['받는 곳', `${APP_NAME} 서버`, `${APP_NAME} 서버만`],
+  ]);
+  assert.equal(GUARANTEES.length, 4);
+  assert.ok(!GUARANTEES.some((g) => g.includes('모든 얼굴')), '얼굴 검출은 놓칠 수 있어 "모든 얼굴"이라고 쓰지 않는다');
 });
 
 console.log(`\n${passed}개 통과`);

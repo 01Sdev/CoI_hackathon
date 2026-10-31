@@ -36,7 +36,8 @@ export function ConfirmScreen({ onClose }: { onClose?: () => void }) {
   );
 }
 
-function ConfirmBody({ pluginId }: { pluginId: string }) {
+/** 앱 하나의 묶음. 규약 보기(ProtocolView)는 요청/허용 표를 자기 문구로 그리므로 showGrant=false로 쓴다. */
+export function ConfirmBody({ pluginId, showGrant = true }: { pluginId: string; showGrant?: boolean }) {
   const kind = useLensStore((s) => s.plugins[pluginId]?.kind);
   const totals = useLensStore(useShallow((s) => selectPluginTotals(s, pluginId)));
   const evicted = useLensStore((s) => selectEvictedCount(s, pluginId));
@@ -73,7 +74,7 @@ function ConfirmBody({ pluginId }: { pluginId: string }) {
         <p className="fm-empty fm-readout">이 세션에서 이 플러그인에 보낸 사진이 없습니다.</p>
       )}
       <div className="fm-readout">얼굴이 담긴 전달 {totals.faceDeliveries}건(세션 누적)</div>
-      <RequestGrant pluginId={pluginId} />
+      {showGrant && <RequestGrant pluginId={pluginId} />}
     </article>
   );
 }
