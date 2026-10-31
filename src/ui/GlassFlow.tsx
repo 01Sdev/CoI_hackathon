@@ -5,13 +5,14 @@
 // 플러그인은 런처에서 고를 때 그 하나만 켜고, 런처·홈으로 돌아오면 끈다(setPluginEnabled). 앱 화면은 기존 글래스 HUD(Hud)다.
 // 홈 알약(화면 아래 가운데)은 비전 프로 디지털 크라운 역할: 앱 → 런처, 런처 → 홈.
 
-import { useEffect, useReducer, useRef, useState, type CSSProperties } from 'react';
+import { useContext, useEffect, useReducer, useRef, useState, type CSSProperties } from 'react';
 import { APP_NAME } from '../core/constants';
 import { lensStore, useLensStore } from '../core/store';
 import type { InputKind } from '../core/types';
 import { FrameletMark, HOME_ICON_BG, HomeIcon, LAUNCHER_BG, LauncherIcon } from './GlassIcons';
 import { cameraFor, enabledKind, glassReduce, homeApps, homeRows, type GlassScreen, type LauncherApp } from './glassHome';
 import { Hud } from './Hud';
+import { PreviewMountContext } from './Preview';
 import { unlockAudio } from './signal';
 import { EngineGate, Stage } from './Stage';
 import type { LayoutMode } from './useLayoutMode';
@@ -35,6 +36,11 @@ export function GlassFlow({ layout, autostart = false }: { layout: LayoutMode; a
   useEffect(() => {
     if (cameraFailed) dispatch({ type: 'camera-off' });
   }, [cameraFailed]);
+  // 녹화 영상까지 못 열면(배포본에 /demo 영상이 없을 때) A는 입력을 null로 두고 fallbackFrom을 남기지 않는다.
+  // 그래서 권한 창 거부는 브라우저 권한 상태로도 본다. 카메라를 고른 뒤에만 보고, 가짜 런타임(미리보기를 붙이지 않음)에서는 보지 않는다.
+  const realPreview = useContext(PreviewMountContext);
+  const askedCamera = useLensStore((s) => s.session.inputRequest !== null && s.session.inputRequest.kind !== 'video');
+  useCameraDenied(realPreview && askedCamera && screen.name !== 'no-camera', () => dispatch({ type: 'camera-off' }));
 
   useEffect(() => {
     if (!toast) return;
@@ -98,6 +104,36 @@ export function GlassFlow({ layout, autostart = false }: { layout: LayoutMode; a
       </Stage>
     </div>
   );
+}
+
+/** 브라우저 카메라 권한이 거부(denied)이거나 거부로 바뀌면 부른다. 권한 API가 없거나 camera를 모르면 아무것도 하지 않는다. */
+function useCameraDenied(active: boolean, onDenied: () => void) {
+  const cb = useRef(onDenied);
+  cb.current = onDenied;
+  useEffect(() => {
+    const perms = typeof navigator !== 'undefined' ? navigator.permissions : undefined;
+    if (!active || !perms?.query) return;
+    let alive = true;
+    let status: PermissionStatus | null = null;
+    const check = () => {
+      if (alive && status?.state === 'denied') cb.current();
+    };
+    perms
+      .query({ name: 'camera' as PermissionName })
+      .then((st) => {
+        if (!alive) return;
+        status = st;
+        st.addEventListener('change', check);
+        check();
+      })
+      .catch(() => {
+        /* camera 권한 조회를 모르는 브라우저 */
+      });
+    return () => {
+      alive = false;
+      status?.removeEventListener('change', check);
+    };
+  }, [active]);
 }
 
 /** 지금 화면에서 켜 둘 플러그인만 켜고 나머지는 끈다. 런처에서 고를 때 실행되고, 런처·홈으로 돌아오면 멈춘다. */
