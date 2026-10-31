@@ -2,6 +2,7 @@
 // 그 사람 상자 위쪽 바깥에 "마스크 해제" 칩 하나를 띄운다. 누르거나 Enter(글래스 물리 버튼 대용) → grantConsent(trackId).
 // 동의는 그 사람의 몸(옷)을 코디 스캔에 보내도 된다는 착용자의 허락이고, 얼굴은 동의해도 계속 가린다.
 // 사람 상자·테두리·점은 그리지 않는다(사용자 결정). 이미 동의한 사람이면 칩을 띄우지 않는다.
+// 동의는 코디 스캔에만 쓰이므로 코디 스캔이 켜진 앱에서만 띄운다(A는 어느 앱에서나 응시를 세운다).
 
 import { useEffect } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -12,7 +13,8 @@ import { isGlassButtonKey } from './glassKeys';
 export function GazeChip({ size }: { size: Size }) {
   const v = useLensStore(
     useShallow((s) => {
-      const g = s.gaze && !s.consents[s.gaze.trackId] ? s.gaze : null;
+      const outfitOn = s.pluginOrder.some((id) => s.plugins[id]?.kind === 'outfit' && s.plugins[id]?.enabled);
+      const g = outfitOn && s.gaze && !s.consents[s.gaze.trackId] ? s.gaze : null;
       return {
         trackId: g?.trackId ?? null,
         box: g?.box ?? null,

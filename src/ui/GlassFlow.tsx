@@ -136,7 +136,10 @@ function useCameraDenied(active: boolean, onDenied: () => void) {
   }, [active]);
 }
 
-/** 지금 화면에서 켜 둘 플러그인만 켜고 나머지는 끈다. 런처에서 고를 때 실행되고, 런처·홈으로 돌아오면 멈춘다. */
+/**
+ * 지금 화면에서 켜 둘 플러그인만 켜고 나머지는 끈다. 런처에서 고를 때 실행되고, 런처·홈으로 돌아오면 멈춘다.
+ * 코디 스캔에서 나오면 동의도 모두 끈다. 동의는 코디 스캔 안에서만 쓰여, 다른 앱 흰 틀의 사람 수에 남지 않게 한다.
+ */
 function usePluginsFor(screen: GlassScreen) {
   const want = enabledKind(screen);
   useEffect(() => {
@@ -147,6 +150,7 @@ function usePluginsFor(screen: GlassScreen) {
       const on = p.kind === want;
       if (p.enabled !== on) s.setPluginEnabled(id, on);
     }
+    if (want !== 'outfit') for (const id of Object.keys(s.consents)) s.revokeConsent(id);
   }, [want]);
 }
 

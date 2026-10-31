@@ -24,6 +24,7 @@ import {
 } from '../src/ui/geometry';
 import { cameraFor, enabledKind, glassReduce, HOME_CENTER, HOME_ROWS, homeApps, homeRows, type GlassScreen } from '../src/ui/glassHome';
 import { isGlassButtonKey } from '../src/ui/glassKeys';
+import { closedOnEnter, outfitPanelOpen } from '../src/ui/outfitView';
 import { joinScribe, scribeFinalText, STT_NOTICE } from '../src/ui/scribe';
 import { calorieView, formatBytes, josa, parseCalorieLine } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
@@ -430,6 +431,23 @@ check('scribeFinalText·joinScribe: 멈춘 뒤 stop() 글자, 없으면 확정 �
   assert.equal(joinScribe('저 사람 ', ' 상의 브랜드'), '저 사람 상의 브랜드');
   assert.equal(joinScribe('', '상의'), '상의');
   assert.ok(STT_NOTICE.endsWith('요'), '해요체');
+});
+
+check('outfitPanelOpen·closedOnEnter: 칼로리에서는 코디 스캔 패널이 없고, 닫은 뒤 다시 들어와도 닫혀 있다', () => {
+  // 코디 스캔에서 질문 t1 → 패널 열림
+  assert.equal(outfitPanelOpen(true, 't1', closedOnEnter(null)), true);
+  // 칼로리 앱(코디 스캔 꺼짐): 지난 질문이 store에 남아 있어도 패널 없음
+  assert.equal(outfitPanelOpen(false, 't1', null), false);
+  assert.equal(outfitPanelOpen(false, 't1', 't1'), false);
+  // ×로 닫음 → 닫힘
+  assert.equal(outfitPanelOpen(true, 't1', 't1'), false);
+  // 칼로리를 거쳐 코디 스캔을 다시 열면 지난 대화는 닫힌 채로 시작(닫았든 안 닫았든)
+  const reentered = closedOnEnter('t1');
+  assert.equal(outfitPanelOpen(true, 't1', reentered), false);
+  // 새 질문 t2가 생기면 열린다
+  assert.equal(outfitPanelOpen(true, 't2', reentered), true);
+  // 질문이 하나도 없으면 없음
+  assert.equal(outfitPanelOpen(true, null, closedOnEnter(null)), false);
 });
 
 console.log(`\n${passed}개 통과`);
