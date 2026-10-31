@@ -11,7 +11,11 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { createStore } from 'zustand/vanilla';
 import {
   CAPTURE_FRAME_DEFAULT,
+  CONSENT_MAX_MS,
   LOG_LIMIT,
+  OUTFIT_QUESTION_MAX,
+  OUTFIT_TURNS_LIMIT,
+  PLUGIN_MESSAGE_LIMITS,
   RECENT_WINDOW_MS,
   SKIP_DEDUP_MS,
   THROUGHPUT_WINDOW_MS,
@@ -20,17 +24,20 @@ import {
 import { clampFrame, containsBox } from './frame';
 import { resolveAllowedOrigins, validateManifest, type ManifestResult } from './manifest';
 import { PLUGIN_SEEDS, type PluginSeed } from './plugins';
-import { selectCanSend, selectDesiredRuntime, type DesiredRuntime } from './selectors';
+import { consentAlive, selectCanSend, selectDesiredRuntime, type DesiredRuntime } from './selectors';
 import type {
   Box,
+  Consent,
   Counter,
   Delivery,
   Detection,
   EngineState,
+  GazeCandidate,
   InputKind,
   InputSource,
   LiveObservation,
   LogEntry,
+  OutfitTurn,
   Plugin,
   ResultLine,
   SceneDecision,
@@ -72,6 +79,12 @@ export interface LensState {
   lastSkipAt: Record<string, number>;
   /** F25 pluginId → 대표 조각(오래된 것이 앞, 최대 USAGE_SAMPLES_PER_PLUGIN). raw는 넣지 않는다. */
   usageSamples: Record<string, UsageSample[]>;
+  /** 코디 스캔 응시 대상(A가 씀). 이미 동의한 사람은 다시 대상이 되지 않는다. */
+  gaze: GazeCandidate | null;
+  /** trackId → 살아 있는 동의. tick이 만료·놓친 것을 지운다. 만료 판정은 selectConsentCount도 직접 한다. */
+  consents: Record<string, Consent>;
+  /** 코디 스캔 대화(오래된 것이 앞, 최대 OUTFIT_TURNS_LIMIT). */
+  outfitTurns: OutfitTurn[];
 
   // ── C(UI) ──
   /** 부를 때마다 inputRequest.seq가 오른다. 같은 입력을 다시 눌러도 A가 처리한다. */
@@ -88,8 +101,17 @@ export interface LensState {
   setCaptureFrame(frame: Box): void;
   /** 새 session.id. 로그·전달·판정·결과·Counter를 비우고 compareMode·paused를 false로, 모든 게이트를 닫는다. 플러그인 행·매니페스트·enabled는 유지. */
   startNewSession(): void;
-  /** C가 1초마다 부른다. 10초·60초 창에서 지난 기록을 뺀다. */
+  /** C가 1초마다 부른다. 10초·60초 창에서 지난 기록을 빼고, 끝난 동의(CONSENT_MAX_MS·CONSENT_LOST_MS)를 지운다. */
   tick(): void;
+  /** 응시 칩을 누르거나 Enter. 지금 응시 대상(gaze.trackId)일 때만 동의를 만들고 true. 만들면 gaze를 비운다. */
+  grantConsent(trackId: string): boolean;
+  /** 사람 수를 눌러 끄기. 없는 trackId면 아무것도 하지 않는다. */
+  revokeConsent(trackId: string): void;
+  /**
+   * 말로 물은 것을 보낸다. 그 플러그인에 dispatched된 가장 최근 전달이 없거나 질문이 비면 null(보내지 않음).
+   * 질문은 앞뒤 공백을 지우고 OUTFIT_QUESTION_MAX로 자른다. 만든 turn은 asking이고 B가 IF-09로 보낸다.
+   */
+  askPlugin(pluginId: string, question: string): string | null;
 
   // ── A(런타임) ──
   setInput(input: InputSource | null): void;
@@ -115,6 +137,10 @@ export interface LensState {
   ): { delivery: Delivery; log: LogEntry } | null;
   /** 증가분을 받는다. faceDetectRuns는 여기로만 센다(가림 1 + 재검사 1). */
   recordRuns(runs: { stage0Runs?: number; faceDetectRuns?: number; sourceFrames?: number }): void;
+  /** 응시 대상. 이미 동의한 trackId면 null로 바꿔 넣는다(칩을 다시 띄우지 않는다). */
+  setGazeCandidate(c: GazeCandidate | null): void;
+  /** 동의한 사람이 이번 틱에 보였다. 상자와 lastSeenAt을 갱신한다. 동의가 없으면 아무것도 하지 않는다. */
+  touchConsent(trackId: string, box: Box): void;
 
   // ── B(격리·플러그인) ──
   /**
@@ -135,6 +161,10 @@ export interface LensState {
    * 받은 결과의 source가 api면 counter.apiSends +1(플러그인 자기 보고 기준).
    */
   setResult(pluginId: string, line: ResultLine): boolean;
+  /** IF-10 답. asking인 turn에만 받고 true. 글자는 B가 거른 뒤 넘기고, 스토어는 1,000자로 한 번 더 자른다. */
+  recordAnswer(turnId: string, text: string, source: 'api' | 'fallback'): boolean;
+  /** 보내지 못했거나 OUTFIT_ANSWER_TIMEOUT_MS 안에 답이 없을 때. asking인 turn만. */
+  failTurn(turnId: string, reason: string): void;
 }
 
 export interface LensStoreOptions {
@@ -298,6 +328,9 @@ export function createLensStore(opts: LensStoreOptions = {}) {
         results: {},
         lastSkipAt: {},
         usageSamples: {},
+        gaze: null,
+        consents: {},
+        outfitTurns: [],
 
         // ── C ──
         selectInput: (kind) =>
@@ -383,19 +416,74 @@ export function createLensStore(opts: LensStoreOptions = {}) {
               results: {},
               lastSkipAt: {},
               usageSamples: {},
+              gaze: null,
+              consents: {},
+              outfitTurns: [],
             };
           }),
 
         tick: () =>
           set((s) => {
             const now = clock();
+            const patch: Partial<LensState> = {};
             const recent10s = s.counter.recent10s.filter((r) => now - r.at < RECENT_WINDOW_MS);
             const window60s = s.counter.window60s.filter((r) => now - r.at < THROUGHPUT_WINDOW_MS);
-            if (recent10s.length === s.counter.recent10s.length && window60s.length === s.counter.window60s.length) {
-              return {};
+            if (recent10s.length !== s.counter.recent10s.length || window60s.length !== s.counter.window60s.length) {
+              patch.counter = { ...s.counter, recent10s, window60s };
             }
-            return { counter: { ...s.counter, recent10s, window60s } };
+            const alive = Object.values(s.consents).filter((c) => consentAlive(c, now));
+            if (alive.length !== Object.keys(s.consents).length) {
+              patch.consents = Object.fromEntries(alive.map((c) => [c.trackId, c]));
+            }
+            return patch;
           }),
+
+        grantConsent: (trackId) => {
+          const now = clock();
+          const g = get().gaze;
+          if (!g || g.trackId !== trackId) return false;
+          set((s) => ({
+            gaze: null,
+            consents: {
+              ...s.consents,
+              [trackId]: { trackId, box: g.box, grantedAt: now, lastSeenAt: now, expiresAt: now + CONSENT_MAX_MS },
+            },
+          }));
+          return true;
+        },
+
+        revokeConsent: (trackId) =>
+          set((s) => {
+            if (!s.consents[trackId]) return {};
+            const consents = { ...s.consents };
+            delete consents[trackId];
+            return { consents };
+          }),
+
+        askPlugin: (pluginId, question) => {
+          const text = question.trim().slice(0, OUTFIT_QUESTION_MAX);
+          if (!text) return null;
+          const s = get();
+          // deliveries는 넣은 순서를 지킨다. 그 플러그인에 실제로 보낸 가장 최근 조각을 고른다.
+          const latest = Object.values(s.deliveries)
+            .filter((d) => d.pluginId === pluginId && d.sendStatus === 'dispatched')
+            .at(-1);
+          if (!latest) return null;
+          const turn: OutfitTurn = {
+            id: newId('turn'),
+            pluginId,
+            deliveryId: latest.id,
+            question: text,
+            answer: null,
+            status: 'asking',
+            source: null,
+            failReason: null,
+            askedAt: clock(),
+            answeredAt: null,
+          };
+          set((st) => ({ outfitTurns: [...st.outfitTurns, turn].slice(-OUTFIT_TURNS_LIMIT) }));
+          return turn.id;
+        },
 
         // ── A ──
         setInput: (input) => set((s) => ({ session: { ...s.session, input } })),
@@ -467,6 +555,20 @@ export function createLensStore(opts: LensStoreOptions = {}) {
           set((s) => ({
             counter: { ...s.counter, window60s: [...s.counter.window60s, throughput(clock(), runs)] },
           })),
+
+        setGazeCandidate: (c) =>
+          set((s) => {
+            const next = c && !s.consents[c.trackId] ? c : null;
+            if (next === s.gaze) return {};
+            return { gaze: next };
+          }),
+
+        touchConsent: (trackId, box) =>
+          set((s) => {
+            const c = s.consents[trackId];
+            if (!c) return {};
+            return { consents: { ...s.consents, [trackId]: { ...c, box, lastSeenAt: clock() } } };
+          }),
 
         // ── B ──
         setPluginRuntime: (pluginId, patch) =>
@@ -568,6 +670,29 @@ export function createLensStore(opts: LensStoreOptions = {}) {
           }));
           return true;
         },
+
+        recordAnswer: (turnId, text, source) => {
+          const t = get().outfitTurns.find((x) => x.id === turnId);
+          if (!t || t.status !== 'asking') return false;
+          const answer = text.slice(0, PLUGIN_MESSAGE_LIMITS.answerText);
+          set((s) => ({
+            outfitTurns: s.outfitTurns.map((x) =>
+              x.id === turnId ? { ...x, answer, source, status: 'answered' as const, answeredAt: clock() } : x,
+            ),
+          }));
+          return true;
+        },
+
+        failTurn: (turnId, reason) =>
+          set((s) => {
+            const t = s.outfitTurns.find((x) => x.id === turnId);
+            if (!t || t.status !== 'asking') return {};
+            return {
+              outfitTurns: s.outfitTurns.map((x) =>
+                x.id === turnId ? { ...x, status: 'failed' as const, failReason: reason, answeredAt: clock() } : x,
+              ),
+            };
+          }),
       };
     }),
   );

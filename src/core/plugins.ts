@@ -31,6 +31,22 @@ export const PLUGIN_SEEDS: readonly PluginSeed[] = [
     enabledByDefault: true,
   },
   {
+    id: 'outfit',
+    kind: 'outfit',
+    // 두 번째 앱 "코디 스캔"(docs/designs/outfit-pipelines.md). 착용자가 3초 응시 뒤 허락한 사람만, 얼굴은 가린 채 받는다.
+    // 말로 물으면(IF-09) 받은 조각과 질문을 /api/outfit(Gemini)에 보내 답(IF-10)을 돌려준다.
+    manifestJson: json({
+      purpose: '코디 스캔',
+      scenes: ['person'],
+      region: 'target',
+      maxSide: 512,
+      quality: 0.8,
+      maxPerMinute: 6,
+      network: ['$ORIGIN'],
+    }),
+    enabledByDefault: false,
+  },
+  {
     id: 'tamper',
     kind: 'tamper',
     // 아무 주소도 요청하지 않는다. 변조 시도(외부 fetch·script)는 모두 "허용 목록 밖"으로 기록된다.

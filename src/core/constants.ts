@@ -35,11 +35,28 @@ export const READY_TIMEOUT_MS = 3_000;
 /** IF-08: 칼로리 플러그인이 fetch 전부터 res.text()까지 기다리는 시간. 넘으면 고정표. 서버의 상류 제한은 2.2초. */
 export const CALORIE_CLIENT_TIMEOUT_MS = 3_000;
 
-/** 플러그인에서 받는 메시지 한도(02-SSRD "플러그인 입력 위생"). */
+/** 플러그인에서 받는 메시지 한도(02-SSRD "플러그인 입력 위생"). answerText는 코디 스캔 answer(줄바꿈 허용). */
 export const PLUGIN_MESSAGE_LIMITS = {
   perSecond: 20,
   maxSerializedBytes: 8 * 1024,
   text: 200,
+  answerText: 1_000,
   id: 128,
   target: 512,
 } as const;
+
+// ── 코디 스캔(docs/designs/outfit-pipelines.md) ──
+/** 이만큼 시야 가운데 원에 머문 사람을 응시 대상으로 본다. */
+export const GAZE_DWELL_MS = 3_000;
+/** 시야 가운데 원의 반지름 = 프레임 짧은 변 × 이 값. */
+export const GAZE_CENTER_RADIUS = 0.18;
+/** 동의는 허락한 뒤 이 시간이 지나면 끝난다. */
+export const CONSENT_MAX_MS = 60_000;
+/** 동의한 사람이 이 시간 넘게 안 보이면 동의가 끝난다. */
+export const CONSENT_LOST_MS = 2_000;
+/** 스토어에 남기는 코디 스캔 대화 수(오래된 것부터 버림). */
+export const OUTFIT_TURNS_LIMIT = 20;
+/** 질문 글자 수 상한(받아쓰기 포함). */
+export const OUTFIT_QUESTION_MAX = 300;
+/** 호스트가 answer를 기다리는 시간. 넘으면 failTurn. /api/outfit 서버 제한(15초)보다 길다. */
+export const OUTFIT_ANSWER_TIMEOUT_MS = 20_000;
