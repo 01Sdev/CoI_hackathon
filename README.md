@@ -44,6 +44,8 @@ npm run check:api
 npm run check:ui
 npm run check:runtime
 npm run check:boot
+npm run check:outfit
+npm run check:selection-frame
 ```
 
 `npm ci`는 MediaPipe WASM을 `public/wasm/`에, ORT wasm을 `public/ort/`에 복사한다. 서버 키는 `.env.example`을 `.env.local`로 복사한 뒤 이름 세 개만 채운다. 값은 저장소에 넣지 않는다.
