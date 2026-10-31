@@ -428,7 +428,10 @@ export function startPluginHost(): () => void {
   };
 }
 
-/** IF-02. A broker만 부른다. 호스트가 없으면 failed. */
+/**
+ * IF-02. A broker가 부른다. 허브가 main.tsx에서 `connectPluginHost((_id, msg) => { sendDelivery(msg.deliveryId); })`로
+ * 잇는다(02-SSRD "트랙 연결 기준"). 안에서 markDelivery를 쓰므로 A의 요구(돌아오기 전 기록)를 지킨다. 호스트가 없으면 failed.
+ */
 export function sendDelivery(deliveryId: string): boolean {
   if (defaultHost) return defaultHost.sendDelivery(deliveryId);
   const s = lensStore.getState();
