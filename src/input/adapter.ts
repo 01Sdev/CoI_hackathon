@@ -67,7 +67,13 @@ export function mountPreview(container: HTMLElement): () => void {
   // DOM에 옮겨 붙이면 일부 브라우저가 재생을 멈춘다.
   void v.play().catch(() => undefined);
   return () => {
-    if (v.parentElement === container) container.removeChild(v);
+    if (v.parentElement !== container) return;
+    container.removeChild(v);
+    // 문서에서 떼면 브라우저가 잠시 뒤(안정 상태에서) 재생을 멈춘다. 미리보기가 없는 화면에서도 판정은 이어져야 하므로
+    // 그 뒤에 다시 재생한다(muted라 허용). 그 사이 다른 곳에 다시 붙었으면 mountPreview가 이미 재생했다.
+    setTimeout(() => {
+      if (!v.isConnected && v.paused) void v.play().catch(() => undefined);
+    }, 0);
   };
 }
 

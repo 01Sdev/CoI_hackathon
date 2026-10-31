@@ -14,6 +14,8 @@ export type DeliveryMessage = Extract<HostToPlugin, { type: 'delivery' }>;
 export type SendDelivery = (pluginId: string, msg: DeliveryMessage) => void;
 
 let host: SendDelivery | null = null;
+/** 연결 없이 전달을 시도했다고 이미 알렸는가. 연결 누락이 조용히 "전달 0건"으로 묻히지 않게 한 번은 error로 남긴다. */
+let missingHostReported = false;
 
 /**
  * B가 시작할 때 한 번 부른다. 연결은 하나뿐이다: 이미 연결돼 있으면 거부하고(경고) 아무것도 하지 않는 함수를 돌려준다.
@@ -25,6 +27,7 @@ export function connectPluginHost(send: SendDelivery): () => void {
     return () => undefined;
   }
   host = send;
+  missingHostReported = false;
   return () => {
     if (host === send) host = null;
   };
@@ -73,7 +76,10 @@ export async function deliver(input: DeliverInput, log: { sceneDecisionId: strin
     blob,
   };
   if (!host) {
-    console.warn('[broker] 연결된 플러그인 호스트 없음, failed로 기록', d.id);
+    if (!missingHostReported) {
+      missingHostReported = true;
+      console.error('[broker] connectPluginHost 연결 없이 전달을 시도함. 이 전달과 이후 전달은 failed로 기록된다(B가 시작할 때 connectPluginHost(sendDelivery)를 불러야 한다)', d.id);
+    }
     store.markDelivery(d.id, 'failed');
     return d;
   }
