@@ -18,12 +18,12 @@ const KEYS: Record<PluginToHost['type'], readonly string[]> = {
 const ATTEMPTS: readonly string[] = ['camera', 'hostDom', 'fetch', 'script'] satisfies ViolationAttempt[];
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
 
-/** 길이는 코드 포인트로 센다. SDK도 코드 포인트로 자른다. */
-export const codePoints = (s: string) => Array.from(s).length;
+/** 길이는 UTF-16 길이(String.length)로 센다. SDK도 같은 기준으로 자른다(02-SSRD "플러그인 SDK"). */
+const len = (s: string) => s.length;
 
 const format = (reason: string): ParseResult => ({ ok: false, kind: 'format', reason });
 const limit = (reason: string): ParseResult => ({ ok: false, kind: 'limit', reason });
-const short = (s: string) => (codePoints(s) > 32 ? `${Array.from(s).slice(0, 32).join('')}…` : s);
+const short = (s: string) => (len(s) > 32 ? `${s.slice(0, 32)}…` : s);
 
 /**
  * 형식 검사를 먼저 하고(모양·키·열거값), 그다음 한도(크기·길이)를 본다.
@@ -46,10 +46,10 @@ export function parsePluginMessage(data: unknown, limits: Limits = PLUGIN_MESSAG
   const size = new TextEncoder().encode(JSON.stringify(rec)).length;
   if (size > limits.maxSerializedBytes) return limit(`크기 ${size}B`);
   for (const k of ['pluginId', 'deliveryId'] as const) {
-    if (typeof rec[k] === 'string' && codePoints(rec[k]) > limits.id) return limit(`ID ${limits.id}자`);
+    if (typeof rec[k] === 'string' && len(rec[k]) > limits.id) return limit(`ID ${limits.id}자`);
   }
-  if (type === 'result' && codePoints(rec.text as string) > limits.text) return limit(`text ${limits.text}자`);
-  if (type === 'violation' && codePoints(rec.target as string) > limits.target) return limit(`target ${limits.target}자`);
+  if (type === 'result' && len(rec.text as string) > limits.text) return limit(`text ${limits.text}자`);
+  if (type === 'violation' && len(rec.target as string) > limits.target) return limit(`target ${limits.target}자`);
   return { ok: true, msg: rec as unknown as PluginToHost };
 }
 

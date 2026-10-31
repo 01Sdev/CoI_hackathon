@@ -71,10 +71,11 @@ await check('검증: 형식 오류(모양·키·열거값·Blob)', () => {
   bad({ type: 'result', deliveryId: 'd', text: new Blob(['x']), source: 'api' }, 'format');
   bad(Object.assign(Object.create(null), { type: 'ready', pluginId: 'x' }), 'format');
 });
-await check('검증: text 200자 통과, 201자 한도(코드 포인트, 이모지 200개 통과)', () => {
+await check('검증: text 200 통과, 201 한도(UTF-16 길이: 이모지 100개 = 200 통과, 101개 한도)', () => {
   ok({ type: 'result', deliveryId: 'd', text: 'a'.repeat(L.text), source: 'api' });
-  ok({ type: 'result', deliveryId: 'd', text: '🍕'.repeat(L.text), source: 'api' });
+  ok({ type: 'result', deliveryId: 'd', text: '🍕'.repeat(L.text / 2), source: 'api' });
   bad({ type: 'result', deliveryId: 'd', text: 'a'.repeat(L.text + 1), source: 'api' }, 'limit');
+  bad({ type: 'result', deliveryId: 'd', text: '🍕'.repeat(L.text / 2 + 1), source: 'api' }, 'limit');
 });
 await check('검증: ID 128자·target 512자·8KiB', () => {
   ok({ type: 'ready', pluginId: 'p'.repeat(L.id) });
@@ -82,7 +83,7 @@ await check('검증: ID 128자·target 512자·8KiB', () => {
   bad({ type: 'ack', deliveryId: 'd'.repeat(L.id + 1), sha256: hex64 }, 'limit');
   ok({ type: 'violation', attempt: 'script', target: 't'.repeat(L.target) });
   bad({ type: 'violation', attempt: 'script', target: 't'.repeat(L.target + 1) }, 'limit');
-  // 길이 한도 안이지만 직렬화가 8KiB를 넘는 경우: 512자 × 4바이트(이모지) ≈ 2KiB라 크기 한도는 따로 만든다.
+  // 길이 한도 안에서는 직렬화가 8KiB에 닿지 않으므로 크기 한도는 따로 줄여 본다.
   const big = parsePluginMessage({ type: 'result', deliveryId: 'd', text: 'a', source: 'api' }, { ...L, maxSerializedBytes: 40 });
   assert.equal(big.ok, false);
   if (!big.ok) assert.equal(big.kind, 'limit');
@@ -189,7 +190,7 @@ async function sdkSuite(label: string, make: (plugin: string, test?: Parameters<
     await tick(50);
     assert.deepEqual(w.posted[1], { type: 'ack', deliveryId: 'd1', sha256: M0_SHA256 });
     assert.equal(w.posted[2]!.type, 'result');
-    assert.equal((w.posted[2]!.text as string).length, 200);
+    assert.equal((w.posted[2]!.text as string).length, 200); // String.slice(0, 200)
     assert.deepEqual(w.posted[3], { type: 'violation', attempt: 'fetch', target: 'https://evil.example/' });
     assert.equal(w.posted.length, 4);
   });
@@ -218,6 +219,28 @@ async function sdkSuite(label: string, make: (plugin: string, test?: Parameters<
     s.dispatch(delivery('d1'));
     await tick(50);
     assert.equal(s.posted.length, 1);
+  });
+  await check(`${label}: 해시 실패(Blob 읽기 실패) → ack·핸들러 없음`, async () => {
+    class BrokenBlob extends Blob {
+      override arrayBuffer(): Promise<ArrayBuffer> {
+        return Promise.reject(new Error('read failed'));
+      }
+    }
+    const w = runWorker(make(probePlugin), true);
+    w.dispatch(init);
+    await tick();
+    w.dispatch({ ...delivery('d1'), blob: new BrokenBlob([fixture]) });
+    await tick(50);
+    assert.equal(w.posted.length, 1);
+  });
+  await check(`${label}: 느린 핸들러가 다음 전달의 ack를 막지 않는다`, async () => {
+    const w = runWorker(make('famelet.onDelivery(function () { return new Promise(function (r) { setTimeout(r, 400); }); });'), true);
+    w.dispatch(init);
+    await tick();
+    w.dispatch(delivery('d1'));
+    w.dispatch(delivery('d2'));
+    await tick(80);
+    assert.deepEqual(w.posted.filter((m) => m.type === 'ack').map((m) => m.deliveryId).sort(), ['d1', 'd2']);
   });
   await check(`${label}: onInit 예외 → ready 없음`, async () => {
     const w = runWorker(make("famelet.onInit(function () { throw new Error('x'); });"), true);

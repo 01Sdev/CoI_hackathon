@@ -281,11 +281,13 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
         rt.readyTimer = null;
         const desired = selectDesiredRuntime(act(), rt.pluginId);
         if (!desired || !shallow(desired, rt.desired)) return;
+        // desired도 넘긴다: 스토어가 한 번 더 대조해, 지금 값과 다르면 게이트를 열지 않는다.
         act().setPluginRuntime(rt.pluginId, {
           status: 'ready',
           runtimeId: rt.runtimeId,
           runtimePolicy: rt.policy,
           gateOpen: true,
+          desired: rt.desired,
         });
         return;
       }
@@ -303,6 +305,7 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
         if (!rt.sent.has(msg.deliveryId)) return formatError(rt, '이 iframe에 보내지 않은 deliveryId의 result');
         if (rt.resulted.has(msg.deliveryId)) return;
         rt.resulted.add(msg.deliveryId);
+        // 스토어가 dispatched 전달의 첫 결과만 받는다. false면 버린 것이다.
         act().setResult(rt.pluginId, { deliveryId: msg.deliveryId, text: msg.text, source: msg.source, at: now() });
         return;
       }
