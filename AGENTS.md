@@ -46,7 +46,8 @@
 ## 구현 규칙
 
 - **스택:** Vite, React 18, TypeScript strict, zustand, `@mediapipe/tasks-vision`, Vercel 함수. UI 라이브러리는 쓰지 않는다.
-- **모델·WASM:** CDN이 아니라 `public/`에 둔다.
+- **모델·WASM:** CDN이 아니라 `public/`에 둔다. 모델 파일을 넣으면 같은 PR에서 `THIRD_PARTY_NOTICES.md` 4절에 출처 URL과 라이선스를 적는다.
+- **외부 구성요소:** 라이브러리·모델·폰트·외부 서비스를 새로 쓰면 `THIRD_PARTY_NOTICES.md`에 추가한다. GPL·AGPL은 쓰지 않는다.
 - **비밀값:** API 키(`ANTHROPIC_API_KEY`)는 서버 환경 변수에만 둔다. 레포와 클라이언트 코드에 넣지 않는다. 빌드 결과물 `dist`에서 키 문자열이 나오지 않는지 확인한다.
 - **원본 픽셀 접근:** 원본 프레임에 닿는 API(`getUserMedia`, `drawImage(video)` 등)는 A 트랙 디렉터리에서만 쓴다. 자세한 허용 위치는 `02-SSRD.md` §1을 따른다.
 - **플러그인 문자열:** 플러그인이 보낸 문자열은 `textContent`로만 화면에 넣는다.
