@@ -13,8 +13,9 @@ import { selectActiveConsents } from '../src/core/selectors';
 import { sha256HexSync } from '../src/broker/sha256';
 import { blendMasked, dilate, dilateRadius, shapeMask } from '../src/vision/shape';
 import { createLensStore } from '../src/core/store';
-import { WIDE_WARP } from '../src/input/config';
+import { SCRIBE, WIDE_WARP } from '../src/input/config';
 import { openWithFallback, type OpenIo } from '../src/input/adapter';
+import { runScribe, scribeUrl, type MicPipe, type ScribeDeps, type ScribeError, type SocketLike } from '../src/input/scribe';
 import { applyCpuMap, buildCpuMap, sourceBoxToWarped, sourceUv, warpedBoxToSource, warpedXY, warpOutputSize, warpParams, type WarpSettings } from '../src/input/warp';
 import { gazeHeld, matchBoxes, pickConsent, pickGazeTarget, stepGaze, stepTracks, type Track } from '../src/vision/track';
 import { createHash } from 'node:crypto';
@@ -678,12 +679,13 @@ check('uncoveredFaces: 조각 밖 얼굴은 무시, 사각형 하나로 50% 이�
   assert.equal(uncoveredFaces([fc], [{ x: 40, y: 40, w: 8, h: 20 }, { x: 52, y: 40, w: 8, h: 20 }], crop2).length, 1);
 });
 
-// ── 입력 열기 실패(session.inputError). 카메라 → 대체 녹화 영상까지 실패하면 C가 받을 신호가 남아야 한다 ──
 async function checkAsync(name: string, fn: () => Promise<void>) {
   await fn();
   passed += 1;
   console.log(`ok  ${name}`);
 }
+
+// ── 입력 열기 실패(session.inputError). 카메라 → 대체 녹화 영상까지 실패하면 C가 받을 신호가 남아야 한다 ──
 const io = (o: { camera?: boolean; file?: boolean; current?: () => boolean } = {}): OpenIo & { cleaned: number } => {
   const x = {
     cleaned: 0,
@@ -735,6 +737,192 @@ check('session.inputError: setInput(null, 오류)로 남고, 열기 시작(setIn
   st.getState().setInput(null, { kind: 'video', fallbackFrom: 'webcam' });
   st.getState().setInput({ kind: 'webcam', width: 1280, height: 720, fps: 30, fallbackFrom: null }, { kind: 'video', fallbackFrom: 'webcam' });
   assert.equal(st.getState().session.inputError, null); // 입력이 열리면 오류는 없다
+});
+
+// ── 실시간 받아쓰기(src/input/scribe.ts). 토큰·마이크·소켓·타이머를 가짜로 바꿔 상태 전환·자동 정지·실패 경로를 본다 ──
+const tick = () => new Promise((r) => setTimeout(r, 0));
+function fakeScribe(opts: { token?: boolean; mic?: boolean } = {}) {
+  let t = 0;
+  const timers: { fn: () => void; at: number; id: number }[] = [];
+  let nextId = 1;
+  const log = { partial: [] as string[], committed: [] as string[], errors: [] as ScribeError[], recording: [] as boolean[], micClosed: 0, flushes: 0 };
+  const sent: { message_type: string; audio_base_64: string; commit: boolean; sample_rate: number }[] = [];
+  let url = '';
+  const socket: SocketLike & { emit(m: object): void; readyState: number } = {
+    readyState: 1,
+    bufferedAmount: 0,
+    send: (d) => sent.push(JSON.parse(d)),
+    close: () => {
+      socket.readyState = 3;
+    },
+    onmessage: null,
+    onerror: null,
+    onclose: null,
+    emit: (m) => socket.onmessage?.({ data: JSON.stringify(m) }),
+  };
+  const mic: MicPipe = {
+    onChunk: null,
+    flush: async () => {
+      log.flushes += 1;
+      mic.onChunk?.(new ArrayBuffer(100)); // 워크릿에 남아 있던 꼬리
+    },
+    close: () => {
+      log.micClosed += 1;
+    },
+  };
+  const deps: ScribeDeps = {
+    fetchToken: async () => {
+      if (opts.token === false) throw new Error('HTTP 500');
+      return 'tok-1';
+    },
+    openMic: async () => {
+      if (opts.mic === false) throw Object.assign(new Error('denied'), { name: 'NotAllowedError' });
+      return mic;
+    },
+    connect: (u) => {
+      url = u;
+      return socket;
+    },
+    setTimer: (fn, ms) => {
+      const id = nextId++;
+      timers.push({ fn, at: t + ms, id });
+      return id;
+    },
+    clearTimer: (h) => {
+      const i = timers.findIndex((x) => x.id === h);
+      if (i >= 0) timers.splice(i, 1);
+    },
+    onRecording: (on) => log.recording.push(on),
+  };
+  const handlers = {
+    onPartial: (x: string) => log.partial.push(x),
+    onCommitted: (x: string) => log.committed.push(x),
+    onError: (e: ScribeError) => log.errors.push(e),
+  };
+  const advance = async (ms: number) => {
+    t += ms;
+    for (const x of timers.filter((y) => y.at <= t)) {
+      timers.splice(timers.indexOf(x), 1);
+      x.fn();
+    }
+    await tick();
+  };
+  return { start: () => runScribe(handlers, deps), log, sent, socket, mic, advance, url: () => url, timers };
+}
+const audioBytes = (b64: string) => Buffer.from(b64, 'base64').length;
+
+check('받아쓰기 연결 주소: 토큰 쿼리 + scribe_v2_realtime·pcm_16000·ko·vad(SAI 검증값)', () => {
+  const u = new URL(scribeUrl('tok-1'));
+  assert.equal(`${u.protocol}//${u.host}${u.pathname}`, 'wss://api.elevenlabs.io/v1/speech-to-text/realtime');
+  assert.equal(u.searchParams.get('token'), 'tok-1');
+  assert.equal(u.searchParams.get('model_id'), 'scribe_v2_realtime');
+  assert.equal(u.searchParams.get('audio_format'), 'pcm_16000');
+  assert.equal(u.searchParams.get('language_code'), 'ko');
+  assert.equal(u.searchParams.get('commit_strategy'), 'vad');
+  assert.equal(u.searchParams.get('vad_silence_threshold_secs'), '2');
+});
+
+await checkAsync('받아쓰기 상태: 시작 전 오디오는 쌓았다가 session_started 뒤 보내고, 부분·확정 글자를 넘기고, stop()이 꼬리·commit 뒤 확정 글자 전체를 준다', async () => {
+  const f = fakeScribe();
+  const s = await f.start();
+  assert.deepEqual(f.log.recording, [true]);
+  assert.match(f.url(), /token=tok-1/);
+  f.mic.onChunk?.(new ArrayBuffer(8192));
+  assert.equal(f.sent.length, 0); // 아직 session_started 전
+  f.socket.emit({ message_type: 'session_started', session_id: 's', config: {} });
+  assert.equal(f.sent.length, 1);
+  assert.deepEqual({ ...f.sent[0], audio_base_64: audioBytes(f.sent[0]?.audio_base_64 ?? '') }, { message_type: 'input_audio_chunk', audio_base_64: 8192, commit: false, sample_rate: 16000 });
+  f.socket.emit({ message_type: 'partial_transcript', text: '이 옷' });
+  f.socket.emit({ message_type: 'committed_transcript', text: '이 옷 어디 거야' });
+  assert.deepEqual(f.log.partial, ['이 옷', '']);
+  assert.deepEqual(f.log.committed, ['이 옷 어디 거야']);
+  const done = s.stop();
+  await tick();
+  assert.equal(f.log.flushes, 1);
+  const last = f.sent.at(-1);
+  assert.equal(last?.commit, true);
+  // 꼬리 100B까지 8,292B를 보냈으므로 2.1초(67,200B)가 되도록 무음으로 채운다
+  assert.equal(audioBytes(last?.audio_base_64 ?? ''), SCRIBE.minCommitBytes - 8192 - 100);
+  f.socket.emit({ message_type: 'committed_transcript', text: '색은 뭐야' });
+  assert.equal(await done, '이 옷 어디 거야 색은 뭐야');
+  assert.equal(f.socket.readyState, 3);
+  assert.ok(f.log.micClosed >= 1);
+  assert.deepEqual(f.log.recording, [true, false]);
+  assert.equal(f.log.errors.length, 0);
+  assert.equal(await s.stop(), '이 옷 어디 거야 색은 뭐야');
+});
+
+await checkAsync('받아쓰기 stop(): 마지막 확정 응답이 없으면 1.5초 뒤 그때까지의 글자로 끝낸다', async () => {
+  const f = fakeScribe();
+  const s = await f.start();
+  f.socket.emit({ message_type: 'session_started' });
+  f.socket.emit({ message_type: 'committed_transcript', text: '하나' });
+  const done = s.stop();
+  await tick();
+  await f.advance(SCRIBE.finalWaitMs - 1);
+  assert.equal(f.socket.readyState, 1);
+  await f.advance(1);
+  assert.equal(await done, '하나');
+  assert.equal(f.socket.readyState, 3);
+});
+
+await checkAsync('받아쓰기 자동 정지: 30초 직전에는 받아쓰는 중, 30초에 스스로 commit하고 닫는다(onError 없음)', async () => {
+  const f = fakeScribe();
+  const s = await f.start();
+  f.socket.emit({ message_type: 'session_started' });
+  await f.advance(SCRIBE.maxMs - 1);
+  assert.deepEqual(f.log.recording, [true]);
+  await f.advance(1);
+  assert.equal(f.sent.at(-1)?.commit, true);
+  f.socket.emit({ message_type: 'committed_transcript', text: '끝' });
+  await tick();
+  assert.deepEqual(f.log.recording, [true, false]);
+  assert.equal(await s.stop(), '끝');
+  assert.equal(f.log.errors.length, 0);
+});
+
+await checkAsync('받아쓰기 실패 경로: 토큰·마이크·제공사 오류·연결 끊김·연결 지연이면 onError 한 번, 마이크·소켓은 닫힘', async () => {
+  const noToken = fakeScribe({ token: false });
+  await noToken.start();
+  assert.deepEqual(noToken.log.errors.map((e) => e.kind), ['token']);
+  assert.equal(noToken.url(), ''); // 연결하지 않음
+  assert.deepEqual(noToken.log.recording, [false]);
+
+  const noMic = fakeScribe({ mic: false });
+  await noMic.start();
+  assert.deepEqual(noMic.log.errors.map((e) => e.kind), ['microphone']);
+
+  const auth = fakeScribe();
+  await auth.start();
+  auth.socket.emit({ message_type: 'auth_error', error: 'bad token' });
+  auth.socket.emit({ message_type: 'quota_exceeded' });
+  assert.deepEqual(auth.log.errors.map((e) => e.kind), ['provider:auth_error']);
+  assert.equal(auth.socket.readyState, 3);
+  assert.ok(auth.log.micClosed >= 1);
+  assert.deepEqual(auth.log.recording, [true, false]);
+
+  const drop = fakeScribe();
+  await drop.start();
+  drop.socket.onclose?.({});
+  assert.deepEqual(drop.log.errors.map((e) => e.kind), ['connection']);
+
+  const slow = fakeScribe();
+  await slow.start();
+  for (let i = 0; i < 40; i++) slow.mic.onChunk?.(new ArrayBuffer(8192)); // session_started 없이 5초 넘게 쌓임
+  assert.deepEqual(slow.log.errors.map((e) => e.kind), ['timeout']);
+});
+
+await checkAsync('받아쓰기 취소: 바로 닫고 그 뒤 메시지·콜백은 없다', async () => {
+  const f = fakeScribe();
+  const s = await f.start();
+  f.socket.emit({ message_type: 'session_started' });
+  s.cancel();
+  assert.equal(f.socket.readyState, 3);
+  assert.equal(f.socket.onmessage, null);
+  assert.deepEqual(f.log.recording, [true, false]);
+  assert.equal(f.timers.length, 0);
+  assert.equal(await s.stop(), '');
+  assert.equal(f.log.errors.length, 0);
 });
 
 console.log(`\n${passed}개 통과`);

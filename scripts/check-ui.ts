@@ -24,6 +24,7 @@ import {
 } from '../src/ui/geometry';
 import { cameraFor, enabledKind, glassReduce, HOME_CENTER, HOME_ROWS, homeApps, homeRows, type GlassScreen } from '../src/ui/glassHome';
 import { isGlassButtonKey } from '../src/ui/glassKeys';
+import { joinScribe, scribeFinalText, STT_NOTICE } from '../src/ui/scribe';
 import { calorieView, formatBytes, josa, parseCalorieLine } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 import { ANSWER_TEXT_MAX, APP_TEXT_MAX, sanitizeAnswerText, sanitizeAppText } from '../src/ui/sanitize';
@@ -37,6 +38,7 @@ function check(name: string, fn: () => void) {
   passed += 1;
   console.log(`ok  ${name}`);
 }
+
 
 check('coverBox: 같은 비율이면 그대로 늘린다', () => {
   assert.deepEqual(coverBox({ x: 0.25, y: 0.5, w: 0.5, h: 0.25 }, { w: 100, h: 200 }, { w: 200, h: 400 }), {
@@ -377,7 +379,7 @@ check('talkPanelPlacement: 답 패널은 흰 틀의 사람 수를 덮지 않는�
   assert.equal(talkPanelPlacement({ top: 900, right: 337 }, { w: 390, h: 1400 }).top, 16);
 });
 
-check('glassReduce: 허용 → 홈 → 런처 → 앱, 홈 알약은 앱 → 런처 → 홈, 다른 이벤트는 그대로', () => {
+check('glassReduce: 허용 → 홈 → 런처 → 앱, 홈 알약은 앱 → 런처 → 홈, 거부·오류는 안내, 다른 이벤트는 그대로', () => {
   const p: GlassScreen = { name: 'permission' };
   const home = glassReduce(p, { type: 'allow' });
   assert.deepEqual(home, { name: 'home' });
@@ -391,6 +393,12 @@ check('glassReduce: 허용 → 홈 → 런처 → 앱, 홈 알약은 앱 → 런
   assert.deepEqual(glassReduce(launcher, { type: 'home-pill' }), { name: 'home' });
   assert.equal(glassReduce(home, { type: 'home-pill' }), home);
   assert.equal(glassReduce(app, { type: 'allow' }), app);
+  // 거부·오류는 어느 화면에서든 안내로, 안내에서는 새로고침 말고는 나가지 않는다.
+  for (const from of [p, home, launcher, app]) assert.deepEqual(glassReduce(from, { type: 'camera-off' }), { name: 'no-camera' });
+  const off: GlassScreen = { name: 'no-camera' };
+  for (const e of [{ type: 'allow' }, { type: 'open-framelet' }, { type: 'home-pill' }, { type: 'open-app', app: 'calorie' }] as const)
+    assert.equal(glassReduce(off, e), off);
+  assert.equal(enabledKind(off), null);
 });
 
 check('enabledKind·cameraFor: 플러그인은 앱 화면에서 그 하나만, 터치 기기는 가로여도 후면 카메라', () => {
@@ -412,6 +420,16 @@ check('homeApps·homeRows: 4/5/4 열세 칸, 정가운데(둘째 줄 3번째)가
   assert.equal(rows[1]![2]!.label, APP_NAME);
   assert.equal(apps[HOME_CENTER]!.id, 'framelet');
   assert.equal(apps.filter((a) => a.id === 'framelet').length, 1);
+});
+
+check('scribeFinalText·joinScribe: 멈춘 뒤 stop() 글자, 없으면 확정 글자, 그것도 없으면 마지막 중간 글자', () => {
+  assert.equal(scribeFinalText('저 사람 상의 브랜드 알려줘', '저 사람', '상의'), '저 사람 상의 브랜드 알려줘');
+  assert.equal(scribeFinalText(undefined, '저 사람  상의', '브랜드'), '저 사람 상의');
+  assert.equal(scribeFinalText('  ', '', ' 무슨 옷이야 '), '무슨 옷이야');
+  assert.equal(scribeFinalText(null, '', ''), '');
+  assert.equal(joinScribe('저 사람 ', ' 상의 브랜드'), '저 사람 상의 브랜드');
+  assert.equal(joinScribe('', '상의'), '상의');
+  assert.ok(STT_NOTICE.endsWith('요'), '해요체');
 });
 
 console.log(`\n${passed}개 통과`);

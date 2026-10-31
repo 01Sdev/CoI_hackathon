@@ -74,6 +74,7 @@ The fine-tuned weights were modified by training on Nutrition5k and FlavoriaFood
 | --- | --- | --- |
 | Anthropic Claude API (`claude-haiku-5-5`) | `/api/calorie` 서버 함수의 칼로리 추정 | 유료 API. 이미 가린 조각만 보낸다. 키는 서버 환경 변수에만 둔다 |
 | Google Gemini API (`gemini-3.5-flash-lite`, REST `generateContent`, 패키지 없음) | `/api/outfit` 서버 함수의 코디 스캔 답(02-SSRD IF-11) | 유료 API(Google 약관). 착용자가 동의한 사람의 얼굴을 가린 조각과 질문만 보낸다. 키는 서버 환경 변수 `GEMINI_API_KEY`에만 둔다. https://ai.google.dev/gemini-api/docs |
+| ElevenLabs Speech-to-Text Realtime (`scribe_v2_realtime`, WebSocket, 일회용 토큰 `realtime_scribe`, 패키지 없음) | 코디 스캔 말 막대의 실시간 받아쓰기(02-SSRD IF-12). 서버 함수 `/api/scribe-token`(트랙 B)이 일회용 토큰(15분, 한 번 사용)만 만들고, 브라우저(`src/input/scribe.ts`, 트랙 A)가 그 토큰으로 `wss://api.elevenlabs.io/v1/speech-to-text/realtime`에 바로 연결한다 | 유료 API(ElevenLabs 약관). 말 막대가 켜진 동안의 마이크 소리(16kHz PCM)만 보내고 글자만 받는다. 말소리와 글자는 framelet 서버를 거치지 않고, 앱은 오디오를 저장하지 않는다. 제공사 쪽 보관은 ElevenLabs 정책을 따른다. API 키는 서버 환경 변수 `ELEVENLABS_API_KEY`에만 두고 브라우저에는 토큰만 간다. 마이크 → PCM 워크릿(`public/pcm-worklet.js`)과 메시지 처리는 사용자의 SAI 프로젝트 코드를 옮겼다. https://elevenlabs.io/docs/api-reference/speech-to-text/v-1-speech-to-text-realtime · https://elevenlabs.io/docs/api-reference/tokens/create |
 | Vercel (예정) | 배포 | 배포 방식 확정 전 |
 
 ## 6. 발표용 구분
