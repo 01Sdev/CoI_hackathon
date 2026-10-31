@@ -57,4 +57,4 @@
 - 말풍선은 이 파일의 `.fm-outfit-message` 모양을 쓰고, 겉 글로우·테두리는 사용자가 준 zip 값(`outfit-talk.css`)이다. 폰 장식(스피커·홈 바·끌기·크기 조절)은 없다.
 - 흐름은 `docs/designs/outfit-pipelines.md`를 따른다. 응시 칩(`GazeChip`) → 동의 → 시야 아래 말 막대(음성 받아쓰기, 탭·Enter·Space로 `askPlugin`) → 시야 오른쪽 가장자리 질문·답 패널(`outfitTurns`).
 - `outfit-assistant.css`의 Pretendard `@import`는 지웠다. 앱은 `theme.css`가, 이 개발 페이지는 `dev/outfit-assistant.tsx`가 불러온다.
-- 받아쓰기(2026-11-01 사용자 요청 "코디 스캔 음성 전사 모델을 elevenlabs로"): 말 막대를 누르면 A의 `startMic()`(`src/input/mic.ts`)으로 녹음하고, 다시 누르거나 꾹 눌렀다 놓으면 `POST /api/stt`(본문 = 오디오 그대로)로 받아써서 바로 묻는다(`src/ui/useRecordedStt.ts`, `src/ui/stt.ts`). 실시간 글자는 없고 "듣는 중"·"받아쓰는 중"만 보인다. 막대 위에 "말소리는 받아쓰기 서비스(ElevenLabs)로 보내요"를 둔다. 실패·503이거나 A의 녹음 모듈이 없으면 브라우저 음성 인식, 그것도 없으면 입력창으로 넘어간다.
+- 받아쓰기(2026-11-01 사용자 요청 "코디 스캔 음성 전사 모델을 elevenlabs로", 뒤이어 실시간 받아쓰기로 바꿈): A의 `startScribe`(`src/input/scribe.ts`)가 브라우저에서 ElevenLabs Scribe에 바로 연결한다(토큰은 B의 `/api/scribe-token`). 말하는 동안 중간 글자를 막대에 실시간으로 보이고, 막대 탭·Enter·Space로 멈추면 확정 글자로 묻는다(`src/ui/useScribeInput.ts`, `src/ui/scribe.ts`). 막대 위에 "말소리는 받아쓰기 서비스(ElevenLabs)로 보내요"를 둔다. 실패하거나 A의 모듈이 없으면 브라우저 음성 인식, 그것도 없으면 입력창으로 넘어간다.

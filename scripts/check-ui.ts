@@ -24,7 +24,7 @@ import {
 } from '../src/ui/geometry';
 import { cameraFor, enabledKind, glassReduce, HOME_CENTER, HOME_ROWS, homeApps, homeRows, type GlassScreen } from '../src/ui/glassHome';
 import { isGlassButtonKey } from '../src/ui/glassKeys';
-import { STT_NOTICE, STT_URL, SttUnavailable, transcribe } from '../src/ui/stt';
+import { joinScribe, scribeFinalText, STT_NOTICE } from '../src/ui/scribe';
 import { calorieView, formatBytes, josa, parseCalorieLine } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 import { ANSWER_TEXT_MAX, APP_TEXT_MAX, sanitizeAnswerText, sanitizeAppText } from '../src/ui/sanitize';
@@ -38,11 +38,7 @@ function check(name: string, fn: () => void) {
   passed += 1;
   console.log(`ok  ${name}`);
 }
-async function checkAsync(name: string, fn: () => Promise<void>) {
-  await fn();
-  passed += 1;
-  console.log(`ok  ${name}`);
-}
+
 
 check('coverBox: 같은 비율이면 그대로 늘린다', () => {
   assert.deepEqual(coverBox({ x: 0.25, y: 0.5, w: 0.5, h: 0.25 }, { w: 100, h: 200 }, { w: 200, h: 400 }), {
@@ -420,28 +416,13 @@ check('homeApps·homeRows: 4/5/4 열세 칸, 정가운데(둘째 줄 3번째)가
   assert.equal(apps.filter((a) => a.id === 'framelet').length, 1);
 });
 
-await checkAsync('transcribe: 오디오를 /api/stt에 그대로 보내고 {text}를 쓴다, 실패·503은 SttUnavailable', async () => {
-  const blob = new Blob(['x'], { type: 'audio/webm' });
-  let seen: { url: string; type: string | null; body: unknown } | null = null;
-  const ok = (async (url: string, init?: RequestInit) => {
-    seen = { url, type: new Headers(init?.headers).get('Content-Type'), body: init?.body };
-    return new Response(JSON.stringify({ text: '  저 사람   상의 브랜드 알려줘 ' }), { status: 200 });
-  }) as typeof fetch;
-  assert.equal(await transcribe(blob, ok), '저 사람 상의 브랜드 알려줘');
-  assert.deepEqual(seen, { url: STT_URL, type: 'audio/webm', body: blob });
-  const r503 = (async () => new Response('', { status: 503 })) as typeof fetch;
-  await assert.rejects(transcribe(blob, r503), (e: unknown) => e instanceof SttUnavailable && e.status === 503);
-  const down = (async () => {
-    throw new TypeError('network');
-  }) as typeof fetch;
-  await assert.rejects(transcribe(blob, down), (e: unknown) => e instanceof SttUnavailable && e.status === null);
-  const odd = (async () => new Response('not json', { status: 200 })) as typeof fetch;
-  assert.equal(await transcribe(blob, odd), '', 'text가 없으면 빈 글자');
-  const noType = (async (_u: string, init?: RequestInit) => {
-    assert.equal(new Headers(init?.headers).get('Content-Type'), 'application/octet-stream');
-    return new Response(JSON.stringify({ text: 'a' }));
-  }) as typeof fetch;
-  assert.equal(await transcribe(new Blob(['x']), noType), 'a');
+check('scribeFinalText·joinScribe: 멈춘 뒤 stop() 글자, 없으면 확정 글자, 그것도 없으면 마지막 중간 글자', () => {
+  assert.equal(scribeFinalText('저 사람 상의 브랜드 알려줘', '저 사람', '상의'), '저 사람 상의 브랜드 알려줘');
+  assert.equal(scribeFinalText(undefined, '저 사람  상의', '브랜드'), '저 사람 상의');
+  assert.equal(scribeFinalText('  ', '', ' 무슨 옷이야 '), '무슨 옷이야');
+  assert.equal(scribeFinalText(null, '', ''), '');
+  assert.equal(joinScribe('저 사람 ', ' 상의 브랜드'), '저 사람 상의 브랜드');
+  assert.equal(joinScribe('', '상의'), '상의');
   assert.ok(STT_NOTICE.endsWith('요'), '해요체');
 });
 

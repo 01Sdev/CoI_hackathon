@@ -2,9 +2,9 @@
 // 휴대폰 웹은 스마트 글래스 시야를 휴대폰 브라우저로 흉내 내는 화면이라(사용자 2026-11-01), #42의 폰 모양 창 대신
 // 글래스 화면에 뜨는 HUD 패널로 그린다. 말풍선 모양은 #42(outfit-assistant.css), 겉 글로우·테두리는 사용자가 준 zip 값이다.
 // 막대: 동의가 살아 있고 코디 스캔이 켜져 있으면 시야 아래에 뜬다. 받아쓰기는 세 단계로 넘어간다(사용자 요청 2026-11-01).
-//   1) 녹음 → ElevenLabs(useRecordedStt): 막대를 누르면 녹음, 다시 누르거나 꾹 눌렀다 놓으면 /api/stt로 받아써서 바로 묻는다.
-//      Enter·Space(글래스 버튼 대용)도 같다. 실시간 글자는 없고 "듣는 중"·"받아쓰는 중"만 보인다. 막대 위에 받아쓰기 서비스 고지를 둔다.
-//   2) 그게 실패(마이크·/api/stt 오류·503)하거나 A의 녹음 모듈이 없으면 브라우저 음성 인식(useSpeechInput): 받아 적은 글자를 보고 탭해서 묻는다.
+//   1) 실시간 받아쓰기 ElevenLabs Scribe(useScribeInput, A의 startScribe): 말하는 동안 글자가 막대에 실시간으로 보이고,
+//      막대를 탭하거나 Enter·Space(글래스 버튼 대용)로 멈추면 확정 글자로 묻는다. 막대 위에 받아쓰기 서비스 고지를 둔다.
+//   2) 그게 실패(토큰 없음·연결 오류)하거나 A의 모듈이 없으면 브라우저 음성 인식(useSpeechInput). 보이는 모양과 조작은 같다.
 //   3) 그것도 없으면 입력창. 묻기는 모두 askPlugin(코디 스캔 id, 질문).
 // 패널: 시야 오른쪽 가장자리. outfitTurns의 질문과 답(묻는 중, 실패 사유, 대체 답변)을 보인다. 답은 플러그인 문자열이라
 //   sanitizeAnswerText를 거쳐 텍스트 노드로만 넣는다. 새 질문이 생기면 열리고, ×로 닫으면 다음 질문까지 닫혀 있다.
@@ -19,8 +19,8 @@ import { sourceToView, talkPanelPlacement, type Size } from './geometry';
 import { isGlassButtonKey } from './glassKeys';
 import { fitSelection, selectionLimits } from './selection-frame';
 import { sanitizeAnswerText } from './sanitize';
-import { STT_NOTICE } from './stt';
-import { recordedSttAvailable, useRecordedStt } from './useRecordedStt';
+import { STT_NOTICE } from './scribe';
+import { scribeAvailable, useScribeInput } from './useScribeInput';
 import { useSpeechInput } from './useSpeechInput';
 import './outfit-assistant.css';
 import './outfit-talk.css';
@@ -29,10 +29,8 @@ import './outfit-talk.css';
 const QUESTION_MAX = 300;
 /** 막대에 보이는 받아쓰기 글자 수. 길면 앞을 줄이고 최근 말을 보인다. */
 const BAR_TAIL = 48;
-/** 이보다 오래 눌렀다 놓으면 놓을 때 녹음을 끝낸다(꾹 눌러 말하기). 짧게 누르면 다시 누를 때까지 녹음한다. */
-const HOLD_MS = 350;
 
-type SttEngine = 'recorded' | 'browser' | 'type';
+type SttEngine = 'scribe' | 'browser' | 'type';
 
 export function OutfitTalk({ size }: { size: Size }) {
   const v = useLensStore(
@@ -51,24 +49,19 @@ export function OutfitTalk({ size }: { size: Size }) {
   const allTurns = useLensStore((s) => s.outfitTurns);
   const ask = useLensStore((s) => s.askPlugin);
   const live = v.pluginId !== null && v.enabled && v.consents > 0;
-  const [engine, setEngine] = useState<SttEngine>(recordedSttAvailable ? 'recorded' : 'browser');
+  const [engine, setEngine] = useState<SttEngine>(scribeAvailable ? 'scribe' : 'browser');
+  const scribe = useScribeInput(live && engine === 'scribe');
   const speech = useSpeechInput(live && engine === 'browser');
   const typing = engine === 'type' || (engine === 'browser' && (speech.state === 'unsupported' || speech.state === 'error'));
   const [draft, setDraft] = useState('');
   const [hint, setHint] = useState('');
-  const recorder = useRecordedStt(
-    live && engine === 'recorded',
-    (text) => {
-      if (!text) setHint('못 알아들었어요 · 다시 눌러 말해 주세요');
-      else send(text);
-    },
-    () => {
-      const next: SttEngine = speech.state === 'unsupported' ? 'type' : 'browser';
-      setEngine(next);
-      setHint(next === 'browser' ? '받아쓰기 서비스를 쓸 수 없어 브라우저 음성 인식으로 바꿨어요' : '받아쓰기를 쓸 수 없어요 · 글로 물어보세요');
-    },
-  );
-  const press = useRef<{ t0: number; started: boolean } | null>(null);
+  // 실시간 받아쓰기가 실패하면(토큰 없음·연결 오류) 브라우저 음성 인식, 그것도 없으면 입력창으로 넘어간다.
+  useEffect(() => {
+    if (scribe.state !== 'error') return;
+    const next: SttEngine = speech.state === 'unsupported' ? 'type' : 'browser';
+    setEngine(next);
+    setHint(next === 'browser' ? '받아쓰기 서비스를 쓸 수 없어 브라우저 음성 인식으로 바꿨어요' : '받아쓰기를 쓸 수 없어요 · 글로 물어보세요');
+  }, [scribe.state, speech.state]);
   const [closedAt, setClosedAt] = useState<string | null>(null);
   const log = useRef<HTMLDivElement>(null);
 
@@ -78,7 +71,7 @@ export function OutfitTalk({ size }: { size: Size }) {
   );
   const lastId = turns[turns.length - 1]?.id ?? null;
   const panelOpen = lastId !== null && closedAt !== lastId;
-  const question = (typing ? draft : speech.text).trim().slice(0, QUESTION_MAX);
+  const question = (typing ? draft : engine === 'scribe' ? scribe.text : speech.text).trim().slice(0, QUESTION_MAX);
 
   /** 질문 하나를 묻는다. 보낼 조각이 없으면(askPlugin null) 알림만. */
   function send(text: string): boolean {
@@ -92,7 +85,12 @@ export function OutfitTalk({ size }: { size: Size }) {
     return true;
   }
   function submit() {
-    if (engine === 'recorded') return recorder.toggle();
+    if (engine === 'scribe') {
+      // 멈추고 확정 글자로 묻는다. 받아쓰기는 바로 다시 듣는다.
+      if (scribe.state !== 'listening') return;
+      void scribe.finish().then((t) => (t ? send(t) : setHint('못 알아들었어요 · 다시 말해 주세요')));
+      return;
+    }
     if (!send(question)) return;
     setDraft('');
     speech.clear();
@@ -126,12 +124,8 @@ export function OutfitTalk({ size }: { size: Size }) {
   const place = talkPanelPlacement({ top: view.y * size.h, right: (view.x + view.w) * size.w }, size);
   const shown = question.length > BAR_TAIL ? `…${question.slice(-BAR_TAIL)}` : question;
   const note = hint || (live && engine === 'browser' && speech.state === 'error' ? speech.error : '');
-  const recLabel: Record<typeof recorder.state, string> = {
-    idle: '눌러서 말하기',
-    starting: '마이크 켜는 중…',
-    recording: '듣는 중 · 다시 누르면 보내요',
-    transcribing: '받아쓰는 중…',
-  };
+  const liveState = engine === 'scribe' ? scribe.state : speech.state;
+  const finishing = engine === 'scribe' && scribe.state === 'finishing';
 
   return (
     <>
@@ -156,7 +150,7 @@ export function OutfitTalk({ size }: { size: Size }) {
         </section>
       )}
       {live && (
-        <div className="fm-talk fm-talkbar" data-mode={typing ? 'type' : engine === 'recorded' ? 'record' : 'speech'}>
+        <div className="fm-talk fm-talkbar" data-mode={typing ? 'type' : engine}>
           <div className="fm-talk__glow" aria-hidden="true" />
           <div className="fm-talk__ring">
             <div className="fm-talk__inner">
@@ -182,63 +176,30 @@ export function OutfitTalk({ size }: { size: Size }) {
                     ↑
                   </button>
                 </form>
-              ) : engine === 'recorded' ? (
-                <button
-                  type="button"
-                  className="fm-talkbar__speech"
-                  aria-label={
-                    recorder.state === 'recording' ? '녹음 끝내고 보내기' : recorder.state === 'transcribing' ? '받아쓰는 중' : '질문 녹음 시작'
-                  }
-                  aria-busy={recorder.state === 'transcribing' || recorder.state === 'starting'}
-                  onPointerDown={(e) => {
-                    if (e.button !== 0) return;
-                    const idle = recorder.state === 'idle';
-                    press.current = { t0: performance.now(), started: idle };
-                    if (idle) void recorder.start();
-                  }}
-                  onPointerUp={() => {
-                    const p = press.current;
-                    press.current = null;
-                    if (!p) return;
-                    // 녹음 중에 다시 누름 = 끝내기, 녹음을 시작한 누름을 오래 눌렀다 놓음 = 끝내기
-                    if (!p.started || performance.now() - p.t0 > HOLD_MS) void recorder.stop();
-                  }}
-                  onPointerCancel={() => {
-                    press.current = null;
-                  }}
-                  onClick={(e) => {
-                    // 키보드로 누른 버튼(detail 0)만. 손가락·마우스는 위의 누름·뗌이 맡는다.
-                    if (e.detail === 0) recorder.toggle();
-                  }}
-                >
-                  <span className="fm-talkbar__dot" data-state={recorder.state === 'recording' ? 'listening' : recorder.state} aria-hidden="true" />
-                  <span className="fm-talkbar__text" data-empty={recorder.state === 'idle'}>
-                    {recLabel[recorder.state]}
-                  </span>
-                </button>
               ) : (
                 <button
                   type="button"
                   className="fm-talkbar__speech"
-                  aria-label={question ? `질문 보내기: ${question}` : '듣는 중 · 말한 뒤 탭하거나 Enter'}
+                  aria-label={finishing ? '받아쓰는 중' : question ? `질문 보내기: ${question}` : '듣는 중 · 말한 뒤 탭하거나 Enter'}
+                  aria-busy={finishing}
                   onClick={submit}
                 >
-                  <span className="fm-talkbar__dot" data-state={speech.state} aria-hidden="true" />
-                  <span className="fm-talkbar__text" data-empty={!question}>
-                    {shown || (speech.state === 'listening' ? '듣는 중 · 말한 뒤 탭하세요' : '마이크 켜는 중…')}
+                  <span className="fm-talkbar__dot" data-state={finishing ? 'transcribing' : liveState} aria-hidden="true" />
+                  <span className="fm-talkbar__text" data-empty={!question || finishing}>
+                    {finishing ? '받아쓰는 중…' : shown || (liveState === 'listening' ? '듣는 중 · 말한 뒤 탭하세요' : '마이크 켜는 중…')}
                   </span>
                 </button>
               )}
             </div>
           </div>
-          {(note || engine === 'recorded') && (
+          {(note || engine === 'scribe') && (
             <div className="fm-talkbar__above">
               {note && (
                 <p className="fm-talkbar__hint" role="status">
                   {note}
                 </p>
               )}
-              {engine === 'recorded' && <p className="fm-talkbar__notice">{STT_NOTICE}</p>}
+              {engine === 'scribe' && <p className="fm-talkbar__notice">{STT_NOTICE}</p>}
             </div>
           )}
         </div>
