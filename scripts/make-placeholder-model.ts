@@ -1,5 +1,5 @@
 // 칼로리 기기 안 모델의 자리표시(개발 페이지 전용). 실제 calorie-lens ONNX는 허브가 public/models/calorie-lens/에 넣는다.
-// 그래프: kcal = 300 + 100 · mean(pixel_values). 입력 [1,3,224,224], 출력 [1,1,1,1]. 내려받지 않고 protobuf를 직접 쓴다.
+// 그래프: totals = 300 + 100 · mean(pixels), mass = 150(g). 입력 [1,3,378,504](실제 모델과 같은 이름·크기). 내려받지 않고 protobuf를 직접 쓴다.
 // 실행: npx tsx scripts/make-placeholder-model.ts → dev/fixtures/calorie-lens-placeholder/
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -26,7 +26,12 @@ const f32 = (x: number) => [...new Uint8Array(new Float32Array([x]).buffer)];
 const dim = (n: number) => bytes(1, vint(1, n));
 const valueInfo = (name: string, dims: number[]) =>
   [...str(1, name), ...bytes(2, bytes(1, [...vint(1, 1), ...bytes(2, dims.flatMap(dim))]))];
-const scalar = (name: string, x: number) => [...vint(2, 1), ...str(8, name), ...bytes(9, f32(x))];
+const scalar = (name: string, x: number, dims: number[] = []) => [
+  ...dims.flatMap((d) => vint(1, d)),
+  ...vint(2, 1),
+  ...str(8, name),
+  ...bytes(9, f32(x)),
+];
 const node = (op: string, inputs: string[], outputs: string[], attrs: number[][] = []) => [
   ...inputs.flatMap((i) => str(1, i)),
   ...outputs.flatMap((o) => str(2, o)),
@@ -38,14 +43,17 @@ const intsAttr = (name: string, xs: number[]) => [...str(1, name), ...xs.flatMap
 const intAttr = (name: string, x: number) => [...str(1, name), ...vint(3, x), ...vint(20, 2)];
 
 const graph = [
-  ...bytes(1, node('ReduceMean', ['pixel_values'], ['m'], [intsAttr('axes', [1, 2, 3]), intAttr('keepdims', 1)])),
+  ...bytes(1, node('ReduceMean', ['pixels'], ['m'], [intsAttr('axes', [1, 2, 3]), intAttr('keepdims', 1)])),
   ...bytes(1, node('Mul', ['m', 'scale'], ['s'])),
-  ...bytes(1, node('Add', ['s', 'bias'], ['kcal'])),
+  ...bytes(1, node('Add', ['s', 'bias'], ['totals'])),
+  ...bytes(1, node('Identity', ['mass_g'], ['mass'])),
   ...str(2, 'calorie_placeholder'),
   ...bytes(5, scalar('scale', 100)),
   ...bytes(5, scalar('bias', 300)),
-  ...bytes(11, valueInfo('pixel_values', [1, 3, 224, 224])),
-  ...bytes(12, valueInfo('kcal', [1, 1, 1, 1])),
+  ...bytes(5, scalar('mass_g', 150, [1])),
+  ...bytes(11, valueInfo('pixels', [1, 3, 378, 504])),
+  ...bytes(12, valueInfo('totals', [1, 1, 1, 1])),
+  ...bytes(12, valueInfo('mass', [1])),
 ];
 const model = Buffer.from([
   ...vint(1, 8), // ir_version
@@ -61,16 +69,9 @@ writeFileSync(`${OUT}model.onnx.0`, model.subarray(0, half));
 writeFileSync(`${OUT}model.onnx.1`, model.subarray(half));
 const spec = {
   files: ['model.onnx.0', 'model.onnx.1'],
-  input: {
-    name: 'pixel_values',
-    width: 224,
-    height: 224,
-    mean: [0.485, 0.456, 0.406],
-    std: [0.229, 0.224, 0.225],
-    resize: 'center-crop',
-    cropFraction: 0.875,
-  },
-  output: { name: 'kcal', index: 0 },
+  input: { name: 'pixels', width: 504, height: 378, mean: [0, 0, 0], std: [1, 1, 1], resize: 'letterbox', fill: [124, 116, 104] },
+  output: { name: 'totals', index: 0 },
+  mass: { name: 'mass', index: 0 },
 };
 writeFileSync(`${OUT}model.json`, `${JSON.stringify(spec, null, 2)}\n`);
 console.log(`${OUT}: ${model.length}B (${half} + ${model.length - half})`);

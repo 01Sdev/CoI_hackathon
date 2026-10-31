@@ -6,13 +6,17 @@ import { PLUGIN_SEEDS, type PluginSeed } from '../src/core/plugins';
 import { createLensStore } from '../src/core/store';
 import { buildModelWorkerSource, calorieOnDevice, ORT_PATH } from '../src/plugins/calorie-model';
 import { createPluginHost, sha256Hex } from '../src/plugins/host';
+import { PORTION_TABLE, portionKcal } from '../src/plugins/portion';
 import { calorieSource, pluginSourceFor } from '../src/plugins/registry';
 import { FIXTURE, createReport, deliver, el, sleep, waitFor } from './lib';
 
 const { record, finish } = createReport('__onDevice');
 
-const MODEL = new URLSearchParams(location.search).get('model') ?? '/dev/fixtures/calorie-lens-placeholder/';
-const RUNS = 5;
+const params = new URLSearchParams(location.search);
+const MODEL = params.get('model') ?? '/dev/fixtures/calorie-lens-placeholder/';
+/** 같은 origin의 JPEG(기본은 M0 고정 JPEG). */
+const IMAGE = params.get('image') ?? FIXTURE;
+const RUNS = Number(params.get('runs') ?? 5);
 const seed = (id: string) => PLUGIN_SEEDS.find((s) => s.id === id)!;
 const seeds: PluginSeed[] = [
   { ...seed('calorie') },
@@ -48,24 +52,26 @@ async function breakdown(blob: Blob) {
     });
   const t0 = performance.now();
   w.postMessage({ type: 'load', ortBase: `${location.origin}${ORT_PATH}`, modelBase: `${location.origin}${MODEL}` });
-  const loaded = await next('loaded', 60_000);
+  const loaded = await next('loaded', 120_000);
   const totalLoadMs = Math.round(performance.now() - t0);
   const runs: number[] = [];
   let kcal: unknown = null;
+  let mass: unknown = null;
   if (loaded?.type === 'loaded') {
     for (let i = 0; i < RUNS; i++) {
       w.postMessage({ type: 'run', id: i, blob });
       const out = await next('out', 30_000);
       kcal = out?.kcal ?? null;
+      mass = out?.mass ?? null;
       runs.push(typeof out?.ms === 'number' ? out.ms : -1);
     }
   }
   w.terminate();
-  return { loaded, totalLoadMs, runs, kcal };
+  return { loaded, totalLoadMs, runs, kcal, mass };
 }
 
 async function run() {
-  const blob = await fetch(FIXTURE).then((r) => r.blob());
+  const blob = await fetch(IMAGE).then((r) => r.blob());
   const sha = await sha256Hex(blob);
   const store = createLensStore({ seeds });
   const host = createPluginHost({
@@ -80,7 +86,7 @@ async function run() {
   });
   const st = () => store.getState();
   const violations = () => st().logs.filter((l) => l.kind === 'violation');
-  const resultFor = async (pluginId: string, deliveryId: string, ms = 8_000) => {
+  const resultFor = async (pluginId: string, deliveryId: string, ms = 15_000) => {
     await waitFor(() => st().results[pluginId]?.deliveryId === deliveryId, ms);
     const r = st().results[pluginId];
     return r?.deliveryId === deliveryId ? r : null;
@@ -97,10 +103,10 @@ async function run() {
     `${Math.round(readyAt - tReady0)}ms · ${csp.replace(/'nonce-[^']+'/, "'nonce-…'")}`,
   );
 
-  // 1. 모델 준비 전 전달은 API로 간다. 준비되면 source on-device. 첫 on-device까지 반복한다(최대 60초).
+  // 1. 모델 준비 전 전달은 API로 간다. 준비되면 source on-device. 첫 on-device까지 반복한다(최대 120초).
   let first: { text: string; ms: number; ack: string; tries: number; sinceReady: number } | null = null;
   const early: string[] = [];
-  const deadline = performance.now() + 60_000;
+  const deadline = performance.now() + 120_000;
   for (let tries = 1; first === null && performance.now() < deadline; tries++) {
     const t0 = performance.now();
     const d = await deliver(store, host, 'calorie', blob, sha);
@@ -117,7 +123,7 @@ async function run() {
     first !== null && ON_DEVICE_LINE.test(first.text) && first.ack === 'match' && violations().length === 0,
     first
       ? `ready 뒤 ${first.sinceReady}ms에 첫 on-device("${first.text}", 전달→결과 ${first.ms}ms) · 그전 ${early.length}건(${[...new Set(early)].join('·') || '-'}) · 기록 ${violations().length}줄`
-      : `60초 안에 on-device 없음 · ${[...new Set(early)].join('·')}`,
+      : `120초 안에 on-device 없음 · ${[...new Set(early)].join('·')}`,
   );
 
   // 2. 전달 → 결과 시간(호스트 기준, 확인·디코드·전처리·추론 포함).
@@ -170,7 +176,7 @@ async function run() {
     '단계별 시간(같은 하위 Worker 코드, 격리 밖)',
     b.loaded?.type === 'loaded' && b.runs.every((x) => x >= 0),
     b.loaded?.type === 'loaded'
-      ? `실행기 ${String(b.loaded.ep)} · 모델 ${String(b.loaded.bytes)}B · 받기+세션 ${String(b.loaded.loadMs)}ms · 준비 실행 ${String(b.loaded.firstMs)}ms·${String(b.loaded.warmMs)}ms · 전체 ${b.totalLoadMs}ms · 실행 ${RUNS}회 중앙값 ${median(b.runs)}ms [${b.runs.join(', ')}] · kcal ${String(b.kcal)} · ${navigator.userAgent}`
+      ? `실행기 ${String(b.loaded.ep)} · 모델 ${String(b.loaded.bytes)}B · 받기+세션 ${String(b.loaded.loadMs)}ms · 준비 실행 ${String(b.loaded.firstMs)}ms(재기 ${String(b.loaded.warmMs)}ms) · 전체 ${b.totalLoadMs}ms · 실행 ${RUNS}회(디코드 포함) 중앙값 ${median(b.runs)}ms [${b.runs.join(', ')}] · 모델 kcal ${String(b.kcal)} · mass ${String(b.mass)}g → 피자 표 ${String(portionKcal(PORTION_TABLE.pizza, typeof b.kcal === 'number' ? b.kcal : null, typeof b.mass === 'number' ? b.mass : null))}kcal · ${navigator.userAgent}`
       : `실패: ${String(b.loaded?.reason ?? '시간 초과')}`,
   );
   finish('기기 안 모델');

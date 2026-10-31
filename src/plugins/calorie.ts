@@ -5,6 +5,7 @@
 
 import type { FrameletSdk } from '../core/sdk';
 import type { OnDeviceConfig } from './calorie-model';
+import type { Portion, clampApiKcal, portionKcal } from './portion';
 
 export function caloriePlugin(
   framelet: FrameletSdk,
@@ -14,11 +15,16 @@ export function caloriePlugin(
   timeoutMs: number,
   unknownText: string,
   onDevice: OnDeviceConfig | null,
+  portions: Record<string, Portion>,
+  toKcal: typeof portionKcal,
+  clampApi: typeof clampApiKcal,
 ): void {
   const labelRe = new RegExp(labelPattern);
   const isValidLabel = (label: string) => label.length <= labelMax && labelRe.test(label);
   const rowOf = (label: string) =>
     isValidLabel(label) && Object.prototype.hasOwnProperty.call(table, label) ? table[label] : undefined;
+  const portionOf = (label: string) =>
+    isValidLabel(label) && Object.prototype.hasOwnProperty.call(portions, label) ? portions[label] : undefined;
   // core fallbackText와 같은 규칙.
   const fallbackText = (label: string) => {
     const row = rowOf(label);
@@ -33,7 +39,10 @@ export function caloriePlugin(
   // 연달아 실패한 횟수(시간 초과·출력 없음·5~5000 밖). 2번이면 이 iframe에서는 끈다.
   let failures = 0;
   let seq = 0;
-  const waiting = new Map<number, { timer: ReturnType<typeof setTimeout>; resolve: (kcal: number | null) => void }>();
+  const waiting = new Map<
+    number,
+    { timer: ReturnType<typeof setTimeout>; portion: Portion | undefined; resolve: (kcal: number | null) => void }
+  >();
   const stopModel = (why: string) => {
     // 개발자 도구에만 남긴다(호스트 기록·reportViolation 아님). 이 iframe에서는 API로 간다.
     console.warn(`[calorie] 기기 안 모델 끔: ${why}`);
@@ -72,15 +81,16 @@ export function caloriePlugin(
         waiting.delete(m.id);
         clearTimeout(w.timer);
         const kcal = typeof m.kcal === 'number' ? m.kcal : null;
-        // 5~5000 밖은 단위·정규화가 어긋난 출력으로 보고 API로 넘긴다(그럴듯한 틀린 숫자를 내지 않게).
-        if (kcal === null || !(kcal >= 5 && kcal <= 5000)) {
+        const mass = typeof m.mass === 'number' ? m.mass : null;
+        // 양은 라벨 범위 평균, 1g당 kcal만 모델에서(portion.ts). 계산할 수 없으면 API로 넘긴다.
+        const shown = toKcal(w.portion, kcal, mass);
+        if (shown === null) {
           w.resolve(null);
-          fail(kcal === null ? '출력 없음' : `범위 밖 ${kcal}`);
+          fail(`쓸 수 없는 출력 kcal=${String(kcal)} mass=${String(mass)}`);
           return;
         }
         failures = 0;
-        // 서버와 같은 표시 범위(10~3000).
-        w.resolve(Math.min(3000, Math.max(10, Math.round(kcal))));
+        w.resolve(shown);
       }
     });
     model.addEventListener('error', () => stopModel('하위 Worker 오류'));
@@ -91,7 +101,7 @@ export function caloriePlugin(
       budgetMs: onDevice.timeoutMs,
     });
   };
-  const onDeviceKcal = (blob: Blob): Promise<number | null> => {
+  const onDeviceKcal = (blob: Blob, label: string): Promise<number | null> => {
     // 한 실행이 제한의 2배를 넘게 끝나지 않으면 멈춘 것으로 보고 끈다.
     if (onDevice && busy && Date.now() - busySince > 2 * onDevice.timeoutMs) stopModel('실행이 끝나지 않음');
     if (!onDevice || model === null || !modelReady || busy) return Promise.resolve(null);
@@ -105,7 +115,7 @@ export function caloriePlugin(
         resolve(null);
         fail('시간 초과');
       }, onDevice.timeoutMs);
-      waiting.set(id, { timer, resolve });
+      waiting.set(id, { timer, portion: portionOf(label), resolve });
       worker.postMessage({ type: 'run', id, blob });
     });
   };
@@ -124,7 +134,7 @@ export function caloriePlugin(
       framelet.result(d.deliveryId, fallbackText(d.objectLabel), 'fallback');
       return;
     }
-    const kcal = await onDeviceKcal(d.blob);
+    const kcal = await onDeviceKcal(d.blob, d.objectLabel);
     if (kcal !== null) {
       // 이름은 0단계 라벨에서(표에 없으면 서버와 같은 기본 이름).
       framelet.result(d.deliveryId, `${rowOf(d.objectLabel)?.ko ?? '음식'} 약 ${kcal}kcal`, 'on-device');
@@ -142,7 +152,9 @@ export function caloriePlugin(
       if (res.ok) {
         const line = (await res.text()).split('\n')[0]?.trim() ?? '';
         if (line) {
-          framelet.result(d.deliveryId, line, 'api');
+          // 서버 숫자도 같은 표의 kcal 범위로 자른다(엉뚱한 값을 막기 위해). "음식 아님"은 그대로.
+          const m = /^(.+) 약 (\d+)kcal$/.exec(line);
+          framelet.result(d.deliveryId, m ? `${m[1]} 약 ${clampApi(portionOf(d.objectLabel), Number(m[2]))}kcal` : line, 'api');
           return;
         }
       }

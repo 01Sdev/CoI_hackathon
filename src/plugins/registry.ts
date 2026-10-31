@@ -6,6 +6,7 @@ import { CALORIE_CLIENT_TIMEOUT_MS } from '../core/constants';
 import type { PluginKind } from '../core/types';
 import { caloriePlugin } from './calorie';
 import { calorieOnDevice, type OnDeviceConfig } from './calorie-model';
+import { PORTION_TABLE, clampApiKcal, portionKcal } from './portion';
 import { helloPlugin } from './hello';
 import { pluginCall } from './sdk/source';
 import { TAMPER_TARGETS, tamperPlugin } from './tamper';
@@ -21,6 +22,9 @@ export function calorieSource(onDevice: OnDeviceConfig | null = calorieOnDevice(
     CALORIE_CLIENT_TIMEOUT_MS,
     fallbackText(''),
     onDevice,
+    PORTION_TABLE,
+    portionKcal,
+    clampApiKcal,
   );
 }
 

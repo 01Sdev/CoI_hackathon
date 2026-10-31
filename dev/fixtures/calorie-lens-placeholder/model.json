@@ -4,24 +4,32 @@
     "model.onnx.1"
   ],
   "input": {
-    "name": "pixel_values",
-    "width": 224,
-    "height": 224,
+    "name": "pixels",
+    "width": 504,
+    "height": 378,
     "mean": [
-      0.485,
-      0.456,
-      0.406
+      0,
+      0,
+      0
     ],
     "std": [
-      0.229,
-      0.224,
-      0.225
+      1,
+      1,
+      1
     ],
-    "resize": "center-crop",
-    "cropFraction": 0.875
+    "resize": "letterbox",
+    "fill": [
+      124,
+      116,
+      104
+    ]
   },
   "output": {
-    "name": "kcal",
+    "name": "totals",
+    "index": 0
+  },
+  "mass": {
+    "name": "mass",
     "index": 0
   }
 }

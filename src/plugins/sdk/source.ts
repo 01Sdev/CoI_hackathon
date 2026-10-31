@@ -39,10 +39,10 @@ export function buildWorkerSource(pluginSource: string, test: SdkTestOptions = {
 }
 
 /**
- * 플러그인 함수를 Worker에서 부르는 문장. 첫 인자는 self.framelet, 나머지는 JSON으로 넣는다.
+ * 플러그인 함수를 Worker에서 부르는 문장. 첫 인자는 self.framelet, 나머지는 JSON으로 넣는다(함수 인자는 toString()).
  * 함수는 바깥 이름을 참조하지 않아야 한다(docs/designs/plugin-host.md §2.1).
  */
 export function pluginCall(fn: (framelet: FrameletSdk, ...data: never[]) => void, ...data: unknown[]): string {
-  const args = ['self.framelet', ...data.map((d) => JSON.stringify(d))].join(', ');
+  const args = ['self.framelet', ...data.map((d) => (typeof d === 'function' ? `(${d.toString()})` : JSON.stringify(d)))].join(', ');
   return `(${fn.toString()})(${args});`;
 }

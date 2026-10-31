@@ -7,15 +7,8 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const from = join(root, 'node_modules/onnxruntime-web/dist');
 const to = join(root, 'public/ort');
-// wasm판(WebGPU 없음)과 webgpu판(asyncify). 둘 다 단일 스레드로 쓴다(src/plugins/calorie-model.ts).
-const files = [
-  'ort.wasm.min.js',
-  'ort-wasm-simd-threaded.mjs',
-  'ort-wasm-simd-threaded.wasm',
-  'ort.webgpu.min.js',
-  'ort-wasm-simd-threaded.asyncify.mjs',
-  'ort-wasm-simd-threaded.asyncify.wasm',
-];
+// wasm판만(단일 스레드). int8 calorie-lens는 WebGPU 커널이 없다(src/plugins/calorie-model.ts).
+const files = ['ort.wasm.min.js', 'ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm'];
 if (!existsSync(from)) {
   console.warn(`[copy-ort] ${from} 없음, 건너뜀`);
   process.exit(0);
