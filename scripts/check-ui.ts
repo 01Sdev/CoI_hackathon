@@ -377,7 +377,7 @@ check('talkPanelPlacement: 답 패널은 흰 틀의 사람 수를 덮지 않는�
   assert.equal(talkPanelPlacement({ top: 900, right: 337 }, { w: 390, h: 1400 }).top, 16);
 });
 
-check('glassReduce: 허용 → 홈 → 런처 → 앱, 홈 알약은 앱 → 런처 → 홈, 다른 이벤트는 그대로', () => {
+check('glassReduce: 허용 → 홈 → 런처 → 앱, 홈 알약은 앱 → 런처 → 홈, 거부·오류는 안내, 다른 이벤트는 그대로', () => {
   const p: GlassScreen = { name: 'permission' };
   const home = glassReduce(p, { type: 'allow' });
   assert.deepEqual(home, { name: 'home' });
@@ -391,6 +391,12 @@ check('glassReduce: 허용 → 홈 → 런처 → 앱, 홈 알약은 앱 → 런
   assert.deepEqual(glassReduce(launcher, { type: 'home-pill' }), { name: 'home' });
   assert.equal(glassReduce(home, { type: 'home-pill' }), home);
   assert.equal(glassReduce(app, { type: 'allow' }), app);
+  // 거부·오류는 어느 화면에서든 안내로, 안내에서는 새로고침 말고는 나가지 않는다.
+  for (const from of [p, home, launcher, app]) assert.deepEqual(glassReduce(from, { type: 'camera-off' }), { name: 'no-camera' });
+  const off: GlassScreen = { name: 'no-camera' };
+  for (const e of [{ type: 'allow' }, { type: 'open-framelet' }, { type: 'home-pill' }, { type: 'open-app', app: 'calorie' }] as const)
+    assert.equal(glassReduce(off, e), off);
+  assert.equal(enabledKind(off), null);
 });
 
 check('enabledKind·cameraFor: 플러그인은 앱 화면에서 그 하나만, 터치 기기는 가로여도 후면 카메라', () => {
