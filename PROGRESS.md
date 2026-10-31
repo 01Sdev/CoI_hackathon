@@ -60,7 +60,7 @@
 - 같은 데모에서 MediaPipe 로그 요청을 발견했다(→ V15).
 - 미확인: 거리, 옆얼굴, 두 사람, 피자 장면, Android.
 - 상세: `/Users/Kimdonggyun/Documents/Codex/2026-10-31/x20/outputs/Selfie-Multiclass-demo.ko.md`
-- Selfie 모델의 쓰임(2단계 가림에 더할지)은 사용자 결정 대기다.
+- **결정(2026-10-31):** Selfie는 2단계 가림의 모양만 정한다(PRD F23, SRS FR-016a, P1, 1차 통합 뒤). 범위·분기·카운터·출구 재검사는 BlazeFace와 사람 검출 그대로. 트랙 A가 BlazeFace 경로를 끝낸 뒤 맡는다.
 
 
 - [ ] 물체 판정 모델: MediaPipe Tasks `ObjectDetector`가 읽는 `.tflite`(메타데이터 포함). COCO `pizza` 클래스가 있어야 한다. 지금 명세 기준은 EfficientDet-Lite0
@@ -80,8 +80,8 @@
 | V1 | MediaPipe 속도·GPU→CPU 대체(Android) | 트랙 A 첫 PR(0단계) 뒤, 모델 파일이 정해지고 배포 주소가 생기면 | A | iPhone 통과(첫 추론 11~14초). 노트북 Chrome(M3 Pro, 제품 코드 `/dev/`): GPU, 0단계 5.0fps, 추론 평균 28ms·p95 36ms. Android 대기(배포 주소 없음) |
 | V4 | 큰 해상도 요청 시 실제 해상도·포착 시간(Android) | V1과 같이 | A | iPhone 통과. 노트북: 내장 브라우저 창이 카메라를 막아 못 잼(녹화 자동 전환은 확인). Android 대기 |
 | V8 | 녹화 mp4 재생 후 판정 | 트랙 A 입력 PR + `08-데모-소재.md`의 `pizza-alone.mp4` | A | iPhone 합성 영상 통과. 노트북 Chrome: 직접 만든 피자 그림 mp4(720×1280)로 `food·pizza` 확정(제품 코드). `pizza-alone.mp4` 없음, 실제 영상 대기 |
-| V2 | 먼·옆·잘린 얼굴의 분기 | 트랙 A 둘째 PR(포착·가림) + 얼굴 영상 3개 | A | 대기 |
-| V3 | 2c가 손에 든 피자를 가리는지 | V2와 같이 | A | 대기 |
+| V2 | 먼·옆·잘린 얼굴의 분기. F23 뒤에는 Selfie 가림이 박스·사각형보다 덜 가린 사례가 있는지(SRS FR-016a) | 트랙 A 둘째 PR(포착·가림) + 얼굴 영상 3개 | A | 대기 |
+| V3 | 2c가 손에 든 피자를 가리는지. F23 뒤에는 Selfie가 피자를 머리카락·피부로 보는지 | V2와 같이 | A | 대기 |
 | V5 | 칼로리 응답 시간·비용(피자 256px 10회, p50·p95, 토큰) | 트랙 B `/api/calorie` PR. 키가 있는 로컬에서 | B | 대기 |
 | V11 | 통합 상태 격리 6줄·전환·옛 iframe 메시지(iPhone·Android) | 1차 통합 뒤, 배포 주소에서 | B | 대기 |
 | V12 | 노트북 Chrome에서 데모 5단계 네트워크 탭 | 2차 통합 뒤 리허설 | C·발표자 | 대기 |
