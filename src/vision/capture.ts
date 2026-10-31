@@ -3,14 +3,14 @@
 // 원본 프레임은 이 파일 안에서만 만들고 조각을 자르자마자 놓는다(비교 모드는 raw 인코딩 직후). 가리기 전 조각은 가림 단계에서
 // 덮어쓴다. 작업 캔버스는 모든 경로(보류·예외 포함)에서 finally로 비운다. 플러그인에는 broker의 deliver만 쓴다.
 
-import { frameToPx } from '../core/frame';
+import { cropToFramePx, frameToPx } from '../core/frame';
 import { lensStore, type NewDetection } from '../core/store';
 import type { Box, FaceCheck, SceneDecision } from '../core/types';
 import { deliver, hold, skip } from '../broker/broker';
 import { getInputEpoch, getVideo } from '../input/adapter';
 import { cooldownUntil, decideBranch, type ProtectedBranch } from './branch';
 import { VISION_CONFIG } from './config';
-import { clampToFrame, cropInFrame, fitLongSide, matchTarget, scaleBox, translate, type Found } from './geometry';
+import { clampToFrame, expand, fitLongSide, matchTarget, scaleBox, translate, type Found } from './geometry';
 import { canvasOf, pixelate, pixelateShaped, release, toJpeg } from './mask';
 import { segmentCategories } from './segmenter';
 import { dilateRadius, shapeMask } from './shape';
@@ -158,9 +158,10 @@ function protect(m: Models, frame: HTMLCanvasElement, objectLabel: string, targe
   lensStore.getState().recordRuns({ stage0Runs: 1 });
   const target = matchTarget(found, objectLabel, scaleBox(targetBox, W, H), cfg.recheckTargetScoreMin);
   if (!target) return { kind: 'hold', branch: null, reason: '대상 재검출 실패' };
-  // frameRect는 원본 안이므로(clampFrame) cropRect도 원본 안이다.
-  const cropRect = cropInFrame(target.box, frameRect, cfg.targetExpand);
-  if (!cropRect) return { kind: 'hold', branch: null, reason: '프레임 밖', frameRect };
+  // core cropToFramePx: 넓힌 박스 ∩ frameRect를 안쪽 정수 px로(늘 frameRect 안, prepareDelivery도 같은 조건을 본다).
+  // frameRect는 원본 안이므로(clampFrame) cropRect도 원본 안이다. 한 변 2px 미만의 띠는 보낼 조각이 아니라서 "프레임 밖"으로 친다.
+  const cropRect = cropToFramePx(expand(target.box, cfg.targetExpand), frameRect);
+  if (!cropRect || cropRect.w < 2 || cropRect.h < 2) return { kind: 'hold', branch: null, reason: '프레임 밖', frameRect };
   const persons = found.filter((f) => f.label === 'person' && f.score >= cfg.safetyPersonScoreMin);
 
   const { canvas: crop, ctx } = canvasOf(cropRect.w, cropRect.h);

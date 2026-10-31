@@ -1,7 +1,6 @@
 // 좌표 계산과 장면 선택. DOM·모델 없이 도는 순수 함수라 scripts/check-runtime.ts가 경계를 확인한다.
 // 단위는 인자마다 같기만 하면 된다(px 또는 0~1). 함수 설명에 따로 적은 것만 예외다.
 
-import { intersectBox } from '../core/frame';
 import type { Box, SceneLabel } from '../core/types';
 import { FOOD_LABELS, VISION_CONFIG, type VisionConfig } from './config';
 
@@ -119,18 +118,3 @@ export function matchTarget(found: readonly Found[], objectLabel: string, hint: 
   return best;
 }
 
-/**
- * F24 자르기(02-SSRD "전송 범위 프레임" 3·4): 대상 박스를 변마다 ratio 넓힌 뒤 프레임(원본 px, 정수)과의 교집합을
- * 정수 px로 돌려준다. 바깥쪽으로 반올림하되 프레임을 넘지 않으므로 늘 cropRect ⊆ frameRect다.
- * 겹치지 않거나 한 변이 2px 미만이면 null("프레임 밖").
- */
-export function cropInFrame(target: Box, frameRect: Box, ratio: number): Box | null {
-  const hit = intersectBox(expand(target, ratio), frameRect);
-  if (!hit) return null;
-  const x0 = Math.max(frameRect.x, Math.floor(hit.x));
-  const y0 = Math.max(frameRect.y, Math.floor(hit.y));
-  const x1 = Math.min(frameRect.x + frameRect.w, Math.ceil(hit.x + hit.w));
-  const y1 = Math.min(frameRect.y + frameRect.h, Math.ceil(hit.y + hit.h));
-  if (x1 - x0 < 2 || y1 - y0 < 2) return null;
-  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-}
