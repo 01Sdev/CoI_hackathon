@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { coverBox, faceWindowRemaining } from '../src/ui/geometry';
 import { formatBytes, josa } from '../src/ui/labels';
+import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -67,6 +68,27 @@ check('formatBytes: 단위 경계', () => {
   assert.equal(formatBytes(19_046), '18.6KB');
   assert.equal(formatBytes(212_000), '207KB');
   assert.equal(formatBytes(7_600_000), '7.2MB');
+});
+
+check('parseOutwardMessage: 숫자·불리언만 받고 모양이 다르면 버린다', () => {
+  const ok = { type: 'outward', apps: 1, compareMode: true, at: 1000 };
+  assert.deepEqual(parseOutwardMessage(ok), ok);
+  const extra = parseOutwardMessage({ ...ok, extra: 'x' }); // 남는 필드는 받아도 옮겨 담지 않는다
+  assert.ok(extra && extra.apps === 1 && !('extra' in extra));
+  assert.equal(parseOutwardMessage({ ...ok, type: 'other' }), null);
+  assert.equal(parseOutwardMessage({ ...ok, apps: -1 }), null);
+  assert.equal(parseOutwardMessage({ ...ok, apps: 1.5 }), null);
+  assert.equal(parseOutwardMessage({ ...ok, apps: '1' }), null);
+  assert.equal(parseOutwardMessage({ ...ok, compareMode: 1 }), null);
+  assert.equal(parseOutwardMessage({ ...ok, at: Number.NaN }), null);
+  assert.equal(parseOutwardMessage(null), null);
+});
+
+check('outwardView: 메시지 없음 pending, 5,000ms까지 live, 넘으면 stale', () => {
+  const m = { type: 'outward' as const, apps: 0, compareMode: false, at: 10_000 };
+  assert.equal(outwardView(null, 0).state, 'pending');
+  assert.equal(outwardView(m, 10_000 + OUTWARD_STALE_MS).state, 'live');
+  assert.equal(outwardView(m, 10_000 + OUTWARD_STALE_MS + 1).state, 'stale');
 });
 
 console.log(`\n${passed}개 통과`);

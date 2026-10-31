@@ -7,6 +7,8 @@ import type { InputKind } from '../core/types';
 import { ConfirmScreen } from '../proof/ConfirmScreen';
 import { LogSheet } from '../proof/LogSheet';
 import { Hud } from './Hud';
+import { useOutwardPublisher } from './outward';
+import { PresenterBar } from './PresenterBar';
 import { StartScreen } from './screens/StartScreen';
 import { CameraFallbackNotice } from './screens/StatusPanels';
 import { SidePanel, type SideTab } from './SidePanel';
@@ -23,6 +25,8 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
   const [tab, setTab] = useState<SideTab>('log');
   const [confirmOpen, setConfirmOpen] = useState(false);
   useStoreTick();
+  // 바깥 표시(/outward)는 휴대폰·데스크톱 메인 창만 보낸다. /hud 창까지 보내면 두 값이 번갈아 보인다.
+  useOutwardPublisher();
 
   if (!started) {
     const start = (kind: InputKind) => {
@@ -44,7 +48,9 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
             <CameraFallbackNotice />
           </Stage>
         </section>
-        <div className="fm-desk__presenter" />
+        <div className="fm-desk__presenter">
+          <PresenterBar />
+        </div>
         <aside className="fm-desk__side fm-glass fm-glass--panel" aria-label="증명 로그와 설정">
           <SidePanel tab={tab} onTab={setTab} />
         </aside>

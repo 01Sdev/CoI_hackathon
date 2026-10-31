@@ -19,6 +19,7 @@ export function Hud({ variant, onOpenConfirm }: { variant: HudVariant; onOpenCon
   const ref = useRef<HTMLDivElement>(null);
   const size = useElementSize(ref);
   const compare = useLensStore((s) => s.session.compareMode);
+  const paused = useLensStore((s) => s.session.paused);
   const delivery = useDeliverySignal();
   const hold = useHoldSignal();
   const showDelivered = useRecent(delivery.count, 1200);
@@ -35,6 +36,14 @@ export function Hud({ variant, onOpenConfirm }: { variant: HudVariant; onOpenCon
       )}
       <TargetFrame size={size} tagged={glass} />
       <SceneCapsule readout={glass} />
+      {paused && (
+        <div className="fm-hud__paused">
+          <span className={glass ? 'fm-capsule fm-glass fm-glass--panel' : 'fm-capsule fm-label'} data-tone="hold" role="status">
+            <span className="fm-dot" aria-hidden="true" />
+            전달 일시 정지 · 아무것도 보내지 않음
+          </span>
+        </div>
+      )}
       {!glass && <HudInputLabel />}
       {glass && showToast && delivery.last && <DeliveryToast key={delivery.count} d={delivery.last} />}
       {!glass && showDelivered && (

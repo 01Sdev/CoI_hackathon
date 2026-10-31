@@ -41,7 +41,8 @@
 - [x] 증명 로그(휴대폰 시트·데스크톱 탭)·상세(해시)·확인 화면(외 k장)·`/hud` D-pad — `track-c/proof`
 - [x] 매니페스트 편집기(검증·적용·되돌리기·멈춤 다시 켜기·플러그인 켜기)·처리량 패널(F16·F19) — `track-c/manifest`
 - [ ] B: `stopped`가 된 뒤 `enabled: false` 구독에서 `terminated`로 덮어쓰지 않기(덮으면 "다시 켜기" 카드가 안 보임)
-- [ ] 전달 신호(테두리 점멸·효과음), `/outward`, 비교 모드·발표자 컨트롤
+- [x] 전달 신호(테두리 점멸·효과음) — `track-c/hud`
+- [x] `/outward`(IF-07 1초 재발행·5초 연결 끊김), 비교 모드·일시 정지·새 세션 발표자 컨트롤 — `track-c/presenter`
 
 ## 모델 파일 (사용자가 직접 고른다)
 
@@ -68,5 +69,5 @@
 | V11 | 통합 상태 격리 6줄·전환·옛 iframe 메시지(iPhone·Android) | 1차 통합 뒤, 배포 주소에서 | B | 대기 |
 | V12 | 노트북 Chrome에서 데모 5단계 네트워크 탭 | 2차 통합 뒤 리허설 | C·발표자 | 대기 |
 | V13 | Ray-Ban Display 시뮬레이터에서 `/hud` D-pad | 트랙 C `/hud` PR | C | 대기. 키 처리(화살표·Enter keydown, 뒤로 = history)는 앱 안 브라우저 600×600에서 확인, 시뮬레이터 확장은 못 씀(`track-c/proof`) |
-| V14 | 메인 창과 `/outward` 동기화(외부 화면) | 트랙 C `/outward` PR 뒤 리허설 | C | 대기 |
+| V14 | 메인 창과 `/outward` 동기화(외부 화면) | 트랙 C `/outward` PR 뒤 리허설 | C | 대기. 같은 브라우저 두 탭 동기화는 확인(`track-c/presenter`), 외부 화면·실제 통합은 리허설 |
 | V7 | iPhone 효과음·무음 모드 | — | — | 통과 |
