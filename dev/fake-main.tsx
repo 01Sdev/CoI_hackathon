@@ -1,5 +1,6 @@
 // /dev/fake.html 진입점. 실제 App을 가짜 런타임과 함께 띄운다(개발 서버 전용).
 // 쿼리: route=hud, autostart(시작 버튼 건너뜀), deny(카메라 거부), fail(엔진 실패), load=ms, auto=0(자동 전달 끔).
+// 미리보기는 A에 붙이지 않는다(PreviewMountContext false). 붙이면 진짜 A 런타임이 카메라·모델을 켜고 가짜 런타임과 같은 스토어에 쓴다.
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -8,6 +9,7 @@ import '../src/ui/theme.css';
 import { App } from '../src/App';
 import { APP_NAME } from '../src/core/constants';
 import { lensStore } from '../src/core/store';
+import { PreviewMountContext } from '../src/ui/Preview';
 import { applyTheme, storedTheme } from '../src/ui/theme';
 import { startFakeRuntime } from './fake-runtime';
 import { FakePanel } from './FakePanel';
@@ -31,7 +33,9 @@ if (autostart) lensStore.getState().selectInput(route === 'hud' ? 'video' : inne
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App route={route} autostart={autostart} />
+    <PreviewMountContext.Provider value={false}>
+      <App route={route} autostart={autostart} />
+    </PreviewMountContext.Provider>
   </StrictMode>,
 );
 createRoot(document.getElementById('fake')!).render(<FakePanel controls={controls} />);
