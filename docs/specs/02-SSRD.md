@@ -126,6 +126,15 @@ type PluginToHost =
 
 **플러그인 입력 위생:** 플러그인에서 온 모든 문자열 필드(`text`, `target`, `pluginId`)는 `textContent`로만 쓴다. 시작값 [제안]은 플러그인당 받는 메시지 초당 20건, 메시지 하나의 직렬화 크기 8KiB, `text` 200자, ID 128자, `target` 512자다. Blob·`MessagePort` 같은 정해지지 않은 타입은 받지 않는다. 형식이 틀린 메시지는 버리고 기록하며, 한도를 넘거나 위반이 반복되면 그 iframe을 종료하고 LogEntry(`enforcedBy: host`)를 남긴다. 이것은 앱의 처리량 제한이지 브라우저 차원의 CPU·메모리 격리 보장은 아니다. 부트스트랩은 `event.source === parent`인 `init`만, 1번만 받고 리스너를 지운다.
 
+**트랙 연결 기준 (2026-10-31 확정, 사용자 승인):**
+- **A → B 전달.** A의 중개기는 `connectPluginHost(send)`(`src/broker/broker.ts`, `src/vision`에서도 export)로 연결을 받는다. `send`의 모양은 `(pluginId, msg: DeliveryMessage) => void`이고, 돌아오기 전에 `markDelivery`를 써야 한다. B는 `startPluginHost()`와 `sendDelivery(deliveryId): boolean`을 export하고 A를 import하지 않는다. 둘은 `main.tsx`에서 허브가 잇는다: `connectPluginHost((_id, msg) => { sendDelivery(msg.deliveryId); })`. B의 `sendDelivery`가 안에서 `markDelivery`를 쓰므로 A의 요구를 지킨다.
+- **C → A 미리보기.** C는 A의 `src/input/preview.ts`의 `mountPreview(container)`를 부른다(런타임 시작 포함). 원본 픽셀은 A 안에 머문다.
+- **시작 배선.** `main.tsx`가 React 밖에서 시작 함수를 한 번씩 부른다. 시작 함수는 여러 번 불러도 한 번만 붙고 해제 함수를 돌려준다.
+
+**스토어가 막는 것 (2026-10-31 추가, 사용자 승인):**
+- `setResult`는 그 플러그인에 실제로 보낸(`dispatched`) 전달의 **첫** 결과만 받는다. 없는 전달·`prepared` 전달·다른 플러그인·두 번째 결과·새 세션 전 전달의 결과는 버리고 `false`를 돌려준다. 늦게 온 옛 결과가 새 세션 화면에 뜨거나 `apiSends`가 부풀어 "전달 수 = API 요청 수" 대조가 어긋나는 것을 막는다.
+- `setPluginRuntime`에 `gateOpen: true`와 함께 `desired`(그 iframe을 만든 때의 `selectDesiredRuntime` 값)를 주면, 지금 값과 다를 때 게이트를 열지 않는다. B가 `ready` 처리 중에 대조와 쓰기 사이에 await를 끼워도 낡은 정책으로 게이트가 열리지 않게 하는 보험이다. B는 게이트를 열 때 `desired`를 넘긴다.
+
 ### 플러그인 SDK (Worker 안의 전역 `famelet`, 2026-10-31 추가)
 
 플러그인 코드는 Worker에서 돈다. B는 SDK 코드를 플러그인 코드 앞에 붙여 blob Worker 하나로 만든다. 타입은 `src/core/sdk.ts`에 있다. IF-01~06 메시지는 SDK만 주고받고, 플러그인 코드는 아래 네 함수만 쓴다.
@@ -243,6 +252,7 @@ type OutwardMessage = { type: 'outward'; apps: number; compareMode: boolean; at:
    ```
    `clamped`일 때만 `X-Famelet-Kcal-Clamped: 1`을 붙인다. 한 판을 한 조각 값으로 덮어쓰지 않도록 기준값에 `portion`을 반영했다. 바꿀 때는 이름도 표의 이름으로 바꿔 숫자와 이름의 출처가 섞이지 않게 한다.
 7. 본문은 `${name} 약 ${kcal}kcal` 한 줄이다.
+8. **502일 때 로그 한 줄(2026-10-31 추가, 사용자 승인).** 서버는 `console.error`에 원인 한 줄만 남긴다. 예: `calorie 502 upstream=400 type=invalid_request_error` 또는 `calorie 502 timeout`. 이미지, 요청·응답 본문, 키는 남기지 않는다. 모델 이름이나 출력 형식이 틀려 매번 고정표로 빠져도 조용히 지나가지 않게 하기 위해서다. 배포 직후 실제 키로 1번 호출해 200을 확인한다(배포 체크리스트).
 
 `X_LABEL_RE = /^[a-z]+( [a-z]+)*$/`와 길이 32자 이하(`src/core/calorie.ts`). 소문자 단어를 공백 하나로 이은 것만 받는다. COCO 이름(가장 긴 것 14자, `hot dog` 포함)은 모두 통과하고, 줄바꿈·연속 공백·대문자·쉼표(중복 헤더가 `, `로 이어진 값)는 거른다. 플러그인도 같은 정규식을 통과할 때만 `x-label`을 붙인다.
 
