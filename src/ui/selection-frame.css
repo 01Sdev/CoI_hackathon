@@ -1,0 +1,38 @@
+/* 승인된 시안: 흰 배경 없는 사람 아이콘·숫자, 숫자 흰 외곽선 1.5px. */
+.fm-selection { position: absolute; inset: 0; pointer-events: none; }
+.fm-selection, .fm-selection * { box-sizing: border-box; }
+.fm-selection[data-mode='move'], .fm-selection[data-mode='resize'] { user-select: none; }
+.fm-selection__frame { position: absolute; border: 1px solid rgb(255 255 255 / .9); border-radius: 0; background: rgb(116 150 182 / .08); box-shadow: 0 0 1px #0006; pointer-events: none; }
+.fm-selection__frame:focus-visible { outline: none; }
+.fm-selection__count { position: absolute; right: 8px; top: 8px; display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0; background: transparent; color: #111; pointer-events: none; }
+.fm-selection__person { display: block; width: 24px; height: 24px; flex: none; overflow: visible; stroke: rgb(255 255 255 / .96); stroke-width: 3; stroke-linejoin: round; paint-order: stroke fill; filter: drop-shadow(0 1px 1px #0006); }
+.fm-selection__count output { display: block; color: #111; font-family: var(--fm-font-sans, 'Pretendard Variable', Pretendard, sans-serif); font-weight: 600; font-size: 30px; line-height: 40px; font-variant-numeric: tabular-nums; transform: translateY(-2px); -webkit-text-stroke: 1.5px rgb(255 255 255 / .96); paint-order: stroke fill; text-shadow: 0 1px 2px #0006; }
+.fm-selection__edge { position: absolute; z-index: 1; padding: 0; border: 0; border-radius: 0; background: transparent; pointer-events: auto; cursor: grab; touch-action: none; }
+.fm-selection__edge[data-edge='n'], .fm-selection__edge[data-edge='s'] { left: 0; right: 0; height: 12px; }
+.fm-selection__edge[data-edge='n'] { top: -6px; }
+.fm-selection__edge[data-edge='s'] { bottom: -6px; }
+.fm-selection__edge[data-edge='w'], .fm-selection__edge[data-edge='e'] { top: 0; bottom: 0; width: 12px; }
+.fm-selection__edge[data-edge='w'] { left: -6px; }
+.fm-selection__edge[data-edge='e'] { right: -6px; }
+.fm-selection[data-mode='move'] .fm-selection__edge { cursor: grabbing; }
+.fm-selection__edge:focus-visible { outline: none; }
+.fm-selection__handle { position: absolute; z-index: 2; width: clamp(28px, 6%, 48px); height: clamp(28px, 10%, 48px); padding: 0; border: 0; border-radius: 0; background: transparent; pointer-events: auto; touch-action: none; }
+.fm-selection__handle::after { content: ''; position: absolute; inset: 0; border: 0 solid #fff; border-radius: 0; filter: drop-shadow(0 1px 1px #0009); }
+.fm-selection__handle[data-handle='nw'] { left: -3px; top: -3px; cursor: nwse-resize; }
+.fm-selection__handle[data-handle='ne'] { right: -3px; top: -3px; cursor: nesw-resize; }
+.fm-selection__handle[data-handle='sw'] { left: -3px; bottom: -3px; cursor: nesw-resize; }
+.fm-selection__handle[data-handle='se'] { right: -3px; bottom: -3px; cursor: nwse-resize; }
+.fm-selection__handle[data-handle='nw']::after { border-width: 4px 0 0 4px; }
+.fm-selection__handle[data-handle='ne']::after { border-width: 4px 4px 0 0; }
+.fm-selection__handle[data-handle='sw']::after { border-width: 0 0 4px 4px; }
+.fm-selection__handle[data-handle='se']::after { border-width: 0 4px 4px 0; }
+.fm-selection__handle[data-handle='n'], .fm-selection__handle[data-handle='s'] { left: 50%; width: 64px; height: 28px; transform: translateX(-50%); cursor: ns-resize; }
+.fm-selection__handle[data-handle='n'] { top: -14px; }
+.fm-selection__handle[data-handle='s'] { bottom: -14px; }
+.fm-selection__handle[data-handle='n']::after, .fm-selection__handle[data-handle='s']::after { inset: 12px 8px; border: 0; background: #fff; }
+.fm-selection__handle[data-handle='w'], .fm-selection__handle[data-handle='e'] { top: 50%; width: 28px; height: 64px; transform: translateY(-50%); cursor: ew-resize; }
+.fm-selection__handle[data-handle='w'] { left: -14px; }
+.fm-selection__handle[data-handle='e'] { right: -14px; }
+.fm-selection__handle[data-handle='w']::after, .fm-selection__handle[data-handle='e']::after { inset: 8px 12px; border: 0; background: #fff; }
+.fm-selection__handle:focus-visible { outline: none; }
+.fm-selection__frame:focus-visible .fm-selection__handle::after, .fm-selection__handle:focus-visible::after, .fm-selection__edge:focus-visible { filter: drop-shadow(0 0 3px var(--fm-lens, #71bfff)); }
