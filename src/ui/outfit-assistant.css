@@ -1,5 +1,5 @@
 /* design.html에서 승인된 코디 UI 스타일만 추출. 전역 테마·기존 앱 CSS는 바꾸지 않는다. */
-@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
+/* 글꼴은 앱에서는 theme.css가, 미리보기에서는 dev/outfit-assistant.tsx가 불러온다(두 번 넣지 않게 @import 없음). */
 .fm-outfit { position: absolute; inset: 0; pointer-events: none; }
 .fm-outfit, .fm-outfit * { box-sizing: border-box; }
 .fm-outfit-launcher, .fm-outfit-chat, .fm-outfit-pick-layer { pointer-events: auto; }

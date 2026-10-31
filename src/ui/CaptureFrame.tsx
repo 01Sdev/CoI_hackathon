@@ -1,37 +1,20 @@
-// 전송 범위 프레임(F24·F24a, FR-061). 흰색 뷰파인더 틀이고, 틀 밖 픽셀은 어떤 플러그인에도 가지 않는다(자르기는 A).
-// 소스 0~1 → 화면 px 변환은 대상 위치(targetBox)와 같은 cover 변환이다. 틀 밖은 살짝 어둡게 해서 보내는 범위를 보인다.
-// 조절: 위쪽 줄의 "전송 범위" 버튼(TopBar)으로 조절 모드가 되고 네 꼭짓점을 끈다(터치·마우스·화살표 키).
-// 카메라 위에는 조절 중에만 크기와 "조절 끝내기"를 보인다(사용자 결정 2026-11-01). 끌기 규칙은 core dragCorner
-// (맞은편 꼭짓점 고정, 0~1 안, 최소 0.1에서 멈춤)이고, 끄는 동안 미리 보인 뒤 손을 떼면 setCaptureFrame으로 한 번 쓴다. A는 포착을 시작할 때 한 번 읽는다. 틀 위에서는 스크롤·확대를 막는다(touch-action: none).
-// /hud는 틀만 그린다(어둡게 하지 않음, 조절 없음).
-// badge(사람 아이콘·숫자)는 틀 오른쪽 위 가장자리에 붙인다. 끄는 동안에도 따라가고, 화면 밖으로 나가면 안쪽으로 붙잡는다.
+// 전송 범위 흰 틀(F24·F24a, FR-061)과 그 오른쪽 위 사람 아이콘·숫자. 모양과 조작은 #44 SelectionFrame 그대로다
+// (사용자 결정 2026-11-01: 플랫폼은 #44를 최대한 따른다). 틀 밖 픽셀은 어떤 플러그인에도 가지 않는다(자르기는 A).
+// SelectionFrame은 화면(부모) 0~1 값을 쓰고 스토어의 captureFrame은 소스 0~1이라, cover 변환(sourceToView·viewToSource)으로 오간다.
+// 휴대폰·데스크톱은 늘 조절할 수 있다(테두리 끌기 = 이동, 모서리·중간점 = 크기, 방향키). 화면에 들어가게 맞춘 값도 그대로 쓴다.
+// 그래서 흰 틀이 곧 보내는 범위다(화면 밖으로 잘린 부분까지 보내지 않는다). /hud는 틀만 그리고 스토어에 쓰지 않는다.
+// 숫자(FR-035) = 지금 가림 없이 앱에 넘어가는 사람 수 = 살아 있는 코디 스캔 동의(selectConsentCount, 몸만 보이고 얼굴은 가림)
+// + 최근 10초 가림 없이 넘어간 얼굴(selectFaceM, 비교 모드에서만 1 이상). 보호 모드 평소에는 0이다.
+// 동의가 1 이상일 때만 숫자가 버튼이 되고, 누르면 모든 동의를 끈다(revokeConsent). 비교 모드 얼굴은 눌러서 끌 수 없다.
 
-import { useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { frameToPx, type FrameCorner } from '../core/frame';
-import { useLensStore } from '../core/store';
+import { selectConsentCount, selectFaceM } from '../core/selectors';
+import { lensStore, useLensStore } from '../core/store';
 import type { Box } from '../core/types';
-import { coverBox, cornerPoint, dragCornerFromScreen, nudgeCorner, type Size } from './geometry';
+import { sameBox, sourceToView, viewToSource, type Size } from './geometry';
+import { SelectionFrame } from './SelectionFrame';
 
-const CORNERS: FrameCorner[] = ['tl', 'tr', 'bl', 'br'];
-const CORNER_LABEL: Record<FrameCorner, string> = { tl: '왼쪽 위', tr: '오른쪽 위', bl: '왼쪽 아래', br: '오른쪽 아래' };
-/** 화살표 키 한 번에 옮기는 양(소스 0~1). */
-const KEY_STEP = 0.02;
-
-export function CaptureFrame({
-  size,
-  adjustable,
-  editing = false,
-  onEditing,
-  badge,
-}: {
-  size: Size;
-  /** 휴대폰·데스크톱은 true, /hud는 false. */
-  adjustable: boolean;
-  editing?: boolean;
-  onEditing?: (on: boolean) => void;
-  badge?: ReactNode;
-}) {
+export function CaptureFrame({ size, adjustable }: { size: Size; /** 휴대폰·데스크톱은 true, /hud는 false. */ adjustable: boolean }) {
   const v = useLensStore(
     useShallow((s) => ({
       frame: s.session.captureFrame,
@@ -39,91 +22,34 @@ export function CaptureFrame({
       srcH: s.session.input?.height ?? 0,
     })),
   );
+  const consents = useLensStore((s) => selectConsentCount(s));
+  const faces = useLensStore((s) => selectFaceM(s));
   const setCaptureFrame = useLensStore((s) => s.setCaptureFrame);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ corner: FrameCorner; start: Box; pointerId: number } | null>(null);
-  const [draft, setDraft] = useState<Box | null>(null);
 
-  if (size.w === 0) return null;
+  if (size.w === 0 || size.h === 0) return null;
   const src = v.srcW > 0 ? { w: v.srcW, h: v.srcH } : null;
-  const shown = draft ?? v.frame;
-  const r = coverBox(shown, src, size);
-  const px = src ? frameToPx(shown, src.w, src.h) : null;
-  const sizeText = px ? `${px.w}×${px.h}` : `${Math.round(shown.w * 100)}%×${Math.round(shown.h * 100)}%`;
-
-  const onDown = (corner: FrameCorner) => (e: PointerEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { corner, start: v.frame, pointerId: e.pointerId };
-  };
-  const onMove = (e: PointerEvent<HTMLButtonElement>) => {
-    const d = drag.current;
-    if (!d || d.pointerId !== e.pointerId) return;
-    const box = rootRef.current!.getBoundingClientRect();
-    setDraft(dragCornerFromScreen(d.start, d.corner, { x: e.clientX - box.left, y: e.clientY - box.top }, src, size));
-  };
-  const onUp = (e: PointerEvent<HTMLButtonElement>) => {
-    const d = drag.current;
-    if (!d || d.pointerId !== e.pointerId) return;
-    drag.current = null;
-    if (draft) setCaptureFrame(draft);
-    setDraft(null);
-  };
-  const onKey = (corner: FrameCorner) => (e: KeyboardEvent<HTMLButtonElement>) => {
-    const dx = e.key === 'ArrowLeft' ? -KEY_STEP : e.key === 'ArrowRight' ? KEY_STEP : 0;
-    const dy = e.key === 'ArrowUp' ? -KEY_STEP : e.key === 'ArrowDown' ? KEY_STEP : 0;
-    if (!dx && !dy) return;
-    e.preventDefault();
-    setCaptureFrame(nudgeCorner(v.frame, corner, dx, dy));
+  const onChange = (next: Box) => {
+    if (!adjustable) return;
+    const f = viewToSource(next, src, size);
+    if (!sameBox(f, v.frame)) setCaptureFrame(f);
   };
 
   return (
-    <div ref={rootRef} className="fm-capture" data-adjustable={adjustable} data-editing={editing}>
-      <div className="fm-capture__rect" style={{ left: r.left, top: r.top, width: r.width, height: r.height }} aria-hidden="true" />
-      {badge && (
-        <div
-          className="fm-capture__badge"
-          style={{
-            left: `clamp(var(--fm-badge-min-left), ${r.left + r.width}px, calc(100% - var(--fm-gutter)))`,
-            top: `max(${r.top}px, var(--fm-badge-min-top))`,
-          }}
-        >
-          {badge}
-        </div>
-      )}
-      {adjustable && editing && (
-        <button
-          type="button"
-          className="fm-capsule fm-glass fm-glass--panel fm-capture__label"
-          style={{ left: Math.max(r.left + 10, 12), top: r.top + 10 }}
-          aria-pressed="true"
-          onClick={() => onEditing?.(false)}
-        >
-          조절 끝내기
-          <span className="fm-readout">{sizeText} · 꼭짓점을 끄세요</span>
-        </button>
-      )}
-      {adjustable &&
-        editing &&
-        CORNERS.map((c) => {
-          const at = cornerPoint(shown, c);
-          const pos = coverBox({ x: at.x, y: at.y, w: 0, h: 0 }, src, size);
-          return (
-            <button
-              key={c}
-              type="button"
-              className="fm-capture__handle"
-              data-corner={c}
-              style={{ left: pos.left, top: pos.top }}
-              aria-label={`전송 범위 ${CORNER_LABEL[c]} 꼭짓점. 화살표 키로 옮김. 지금 ${sizeText}`}
-              onPointerDown={onDown(c)}
-              onPointerMove={onMove}
-              onPointerUp={onUp}
-              onPointerCancel={onUp}
-              onKeyDown={onKey(c)}
-            />
-          );
-        })}
+    <div className="fm-capture" data-adjustable={adjustable}>
+      <SelectionFrame
+        value={sourceToView(v.frame, src, size)}
+        onChange={onChange}
+        peopleCount={consents + faces}
+        editable={adjustable}
+        countLabel={(n) => `가림 없이 넘어가는 사람 ${n}명`}
+        onCountPress={adjustable && consents > 0 ? revokeAll : undefined}
+        countPressLabel="눌러서 동의 끄기"
+      />
     </div>
   );
+}
+
+function revokeAll() {
+  const s = lensStore.getState();
+  for (const id of Object.keys(s.consents)) s.revokeConsent(id);
 }

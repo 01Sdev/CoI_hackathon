@@ -17,10 +17,10 @@ const ok = (name: string, fn: () => void) => {
   console.log(`ok ${passed} ${name}`);
 };
 
-ok('씨앗에 코디 스캔이 두 번째로, 켜진 채 있다', () => {
+ok('씨앗에 코디 스캔이 두 번째로, 꺼진 채 있다', () => {
   assert.equal(s().pluginOrder[1], 'outfit');
   assert.equal(s().plugins.outfit?.kind, 'outfit');
-  assert.equal(s().plugins.outfit?.enabled, true);
+  assert.equal(s().plugins.outfit?.enabled, false);
   assert.deepEqual(s().plugins.outfit?.manifest.scenes, ['person']);
 });
 

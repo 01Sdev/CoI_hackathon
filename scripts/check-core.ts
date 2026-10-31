@@ -217,12 +217,12 @@ function setup() {
   return { store, revoked, advance, now, ready, delivery, send };
 }
 
-check('시작할 때 플러그인 4개가 시드로 채워진다(코디 스캔은 두 번째, 켜짐)', () => {
+check('시작할 때 플러그인 4개가 시드로 채워진다(코디 스캔은 두 번째, 꺼짐)', () => {
   const { store } = setup();
   const s = store.getState();
   assert.deepEqual(s.pluginOrder, ['calorie', 'outfit', 'tamper', 'hello']);
   assert.equal(s.plugins.calorie!.enabled, true);
-  assert.equal(s.plugins.outfit!.enabled, true);
+  assert.equal(s.plugins.outfit!.enabled, false);
   assert.equal(s.plugins.tamper!.enabled, false);
   assert.deepEqual(s.plugins.calorie!.allowedOrigins, ['https://app.test']);
 });

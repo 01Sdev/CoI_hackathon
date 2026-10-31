@@ -85,10 +85,6 @@ p {
   align-items: center;
   gap: 8px;
 }
-.fm-topbar__frame[aria-pressed='true'] {
-  background: var(--fm-text);
-  color: var(--fm-on-text);
-}
 .fm-brand {
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -441,47 +437,6 @@ button.fm-capsule:focus-visible,
   z-index: 6;
 }
 
-/* ── 사람 아이콘·숫자(카운터 M, FR-035). 작은 글자 한 줄(숫자 16px·아이콘 14px, /hud는 48px). 흰 틀 오른쪽 위 가장자리 위에 붙고 틀과 같은 흰색, M ≥ 1이면 주황.
-   위쪽 줄과 겹치지 않게 --fm-badge-min-top 아래로, 화면 밖으로 나가지 않게 가로로 붙잡는다(CaptureFrame) ── */
-.fm-hud {
-  --fm-badge-min-top: calc(env(safe-area-inset-top, 0px) + 116px + var(--fm-band-h, 0px));
-  --fm-badge-min-left: calc(var(--fm-gutter) + 40px);
-}
-.fm-desk .fm-hud {
-  --fm-badge-min-top: calc(122px + var(--fm-band-h, 0px));
-}
-.fm-capture__badge {
-  position: absolute;
-  z-index: 5;
-  translate: -100% calc(-100% - 6px);
-}
-.fm-person {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: #fff;
-  font-family: var(--fm-font-sans);
-  font-size: var(--fm-size-result);
-  font-weight: 600;
-  line-height: 1;
-  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.5)) drop-shadow(0 1px 4px rgb(0 0 0 / 0.35));
-}
-.fm-person[data-tone='exposed'] {
-  color: var(--fm-exposed);
-}
-.fm-person > svg {
-  inline-size: var(--fm-size-label);
-  block-size: var(--fm-size-label);
-}
-button.fm-person {
-  min-block-size: 44px;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
 /* ── 플러그인 화면(PluginViews). 칼로리의 금빛 상태창은 food-status-panel.css, 장면 기록은 아래쪽 작은 글자 카드 ── */
 .fm-scenenote {
   position: absolute;
@@ -539,17 +494,6 @@ button.fm-person {
 .fm-hud[data-variant='hud'] {
   --fm-band-h: 0px;
   --fm-bottom-gap: 34px;
-  --fm-badge-min-top: calc(var(--fm-band-h) + 64px);
-  --fm-badge-min-left: calc(var(--fm-gutter) + 104px);
-}
-/* /hud 카운터는 40px 이상(NFR-040) */
-.fm-hud[data-variant='hud'] .fm-person {
-  gap: 6px;
-  font-size: var(--fm-size-counter-sm);
-}
-.fm-hud[data-variant='hud'] .fm-person > svg {
-  inline-size: 0.8em;
-  block-size: 0.8em;
 }
 .fm-hud[data-variant='hud']:has(.fm-hud__band) {
   --fm-band-h: 46px;
@@ -1071,108 +1015,64 @@ button.fm-logcard:focus-visible,
   font-weight: 600;
 }
 
-/* ── 전송 범위 프레임(F24): 흰 뷰파인더 틀, 틀 밖은 살짝 어둡게. 조절 중에는 네 꼭짓점 손잡이 ── */
+/* ── 전송 범위 흰 틀(F24)은 #44 selection-frame.css. 플러그인 화면(금빛 상태창 z 4) 위에 두어 앱 화면이 틀·숫자를 덮지 않게 한다 ── */
 .fm-capture {
   position: absolute;
   inset: 0;
+  z-index: 5;
   pointer-events: none;
 }
-.fm-capture__rect {
+/* /hud 사람 수는 40px 이상(NFR-040). 글래스 화면은 검정이 투명이라 #44의 검정 채움 대신 흰색으로 그린다 */
+.fm-hud[data-variant='hud'] .fm-selection__count output {
+  font-size: var(--fm-size-counter-sm);
+  line-height: 1.2;
+  color: #fff;
+  -webkit-text-stroke: 0;
+}
+.fm-hud[data-variant='hud'] .fm-selection__person {
+  width: 36px;
+  height: 36px;
+  color: #fff;
+  stroke: none;
+}
+
+/* ── 응시 동의 칩(GazeChip): 사람 상자 위쪽 바깥의 버튼 하나. 상자·표시는 그리지 않는다 ── */
+.fm-gazechip {
   position: absolute;
-  border: 1px solid rgb(255 255 255 / 0.7);
-  box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.25),
-    0 0 0 100vmax rgb(0 0 0 / 0.16);
-  transition:
-    left 120ms linear,
-    top 120ms linear,
-    width 120ms linear,
-    height 120ms linear;
-}
-.fm-capture__rect::before {
-  --b: 26px;
-  --w: 4px;
-  content: '';
-  position: absolute;
-  inset: -3px;
-  background:
-    linear-gradient(#fff 0 0) top left / var(--b) var(--w),
-    linear-gradient(#fff 0 0) top left / var(--w) var(--b),
-    linear-gradient(#fff 0 0) top right / var(--b) var(--w),
-    linear-gradient(#fff 0 0) top right / var(--w) var(--b),
-    linear-gradient(#fff 0 0) bottom left / var(--b) var(--w),
-    linear-gradient(#fff 0 0) bottom left / var(--w) var(--b),
-    linear-gradient(#fff 0 0) bottom right / var(--b) var(--w),
-    linear-gradient(#fff 0 0) bottom right / var(--w) var(--b);
-  background-repeat: no-repeat;
-  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.5));
-}
-.fm-capture[data-editing='true'] .fm-capture__rect {
-  border-style: dashed;
-  transition: none;
-}
-.fm-hud[data-variant='hud'] .fm-capture__rect {
-  box-shadow: none;
-  border-color: rgb(255 255 255 / 0.55);
-}
-/* 틀의 조절 버튼은 플러그인 화면(금빛 상태창 z 4)보다 위에 둔다. framelet 조작을 앱 화면이 덮지 않게 */
-.fm-capture__label {
-  position: absolute;
-  z-index: 5;
-  min-block-size: 30px;
-  padding: 0 11px;
-  font-size: 12px;
+  z-index: 6;
+  translate: -50% -100%;
+  min-block-size: 40px;
+  padding: 0 16px;
+  border: 1px solid rgb(255 255 255 / 0.9);
+  border-radius: 999px;
+  background: rgb(13 14 19 / 0.72);
+  color: #fff;
+  font: 600 14px/1 var(--fm-font-sans);
+  white-space: nowrap;
+  cursor: pointer;
   pointer-events: auto;
   touch-action: manipulation;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
 }
-.fm-capture__label[aria-pressed='true'] {
-  background: var(--fm-text);
-  color: var(--fm-on-text);
-}
-.fm-capture__label[aria-pressed='true'] .fm-readout {
-  color: inherit;
-  opacity: 0.75;
-}
-.fm-capture__handle {
-  position: absolute;
-  z-index: 8;
-  inline-size: 48px;
-  block-size: 48px;
-  margin: -24px 0 0 -24px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: none;
-  pointer-events: auto;
-  touch-action: none;
-  cursor: nwse-resize;
-}
-.fm-capture__handle[data-corner='tr'],
-.fm-capture__handle[data-corner='bl'] {
-  cursor: nesw-resize;
-}
-.fm-capture__handle::after {
-  content: '';
-  position: absolute;
-  inset: 14px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow:
-    0 0 0 3px rgb(0 0 0 / 0.35),
-    0 2px 8px rgb(0 0 0 / 0.4);
-}
-.fm-capture__handle:focus-visible {
+.fm-gazechip:focus-visible {
   outline: 2px solid var(--fm-lens);
-  outline-offset: -4px;
+  outline-offset: 2px;
 }
-/* 휴대폰: 조절하는 동안 하단 시트를 내려 아래 꼭짓점이 보이게 한다 */
-.fm-phone[data-frame-editing='true'] {
-  --fm-sheet-peek: 0px;
+
+/* ── 글래스 시야(기본 메인 화면): 카메라 전체 화면 + HUD만 ── */
+.fm-glassview {
+  position: relative;
+  block-size: 100dvh;
+  overflow: hidden;
 }
-.fm-phone[data-frame-editing='true'] .fm-sheet {
-  transform: translateY(calc(100% + 16px));
-  pointer-events: none;
+.fm-glassview__stage {
+  position: absolute;
+  inset: 0;
 }
+.fm-glassview .fm-stage {
+  --fm-bottom-gap: calc(env(safe-area-inset-bottom, 0px) + 96px);
+}
+
 .fm-sheet {
   transition:
     max-block-size 320ms var(--fm-ease),
