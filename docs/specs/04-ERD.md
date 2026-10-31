@@ -26,6 +26,7 @@ erDiagram
     SceneDecision ||--o{ LogEntry : "포착·분기 결과(F3·F4)"
     LogEntry ||--o| Delivery : "kind=deliver일 때만"
     LogEntry ||--o{ Detection : "조각 안 사람·얼굴(F4)"
+    Plugin ||--o{ UsageSample : "대표 조각 최근 3장(F25)"
 
     Session {
         string id PK
@@ -56,6 +57,10 @@ erDiagram
     Counter {
         string sessionId PK
     }
+    UsageSample {
+        string pluginId FK
+        string deliveryId FK
+    }
 ```
 
 읽는 법: 판정(SceneDecision)은 화면 단위다. 그 장면을 원하는 플러그인마다 포착·분기를 한 번씩 하고 결과를 LogEntry 한 줄로 남긴다. 실제로 보낸 경우에만 Delivery가 붙는다(2d 보류·주기 제한 → Delivery 없음). 차단(violation)은 판정과 무관하므로 `sceneDecisionId`가 비어 있다.
@@ -75,6 +80,7 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | inputRequest | {kind, seq} \| null (C의 요청, 같은 입력도 seq가 오름. A가 보고 `input`을 씀) | F1, F10 |
 | compareMode | bool | F17 |
 | paused | bool (전달 일시 정지, 발표자 화면 전용) | F20 |
+| captureFrame | {x,y,w,h} 소스 프레임 기준 0\~1 (전송 범위 프레임. 기본 가운데 60% [제안], 한 변 최소 0.1 [제안]. C만 `setCaptureFrame`으로 씀) | F24, F24a |
 
 **Plugin**. Manifest를 속성으로 품는다. 매니페스트가 바뀌면 iframe을 다시 만들고 `manifest.version`을 올린다. 검증 실패 시 기존 값 유지.
 
@@ -113,6 +119,7 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | branch | `2a\|2b\|2c\|2d\|raw` \| null (`raw` = 비교 모드, `2d` = hold) | F4, F17 |
 | reason | string (예: "주기 제한", "출구 재검사", "검사 실패", "카메라 요청"; `fetch`·`script` violation은 호스트가 대상 origin을 `network`와 대조해 "허용 목록 밖" 또는 "허용 목록 안인데 실패"를 붙임). `skip`은 같은 플러그인·같은 사유 10초에 1번만 | F3, F13, F14 |
 | enforcedBy | `plugin-report`(변조 4종) \| `host`(iframe 재로드·해시 불일치) \| null | F5, F13 |
+| frameRect | {x,y,w,h} 원본 px \| null (그 포착에 쓴 전송 범위 프레임. deliver와 hold "프레임 밖"에 남김. 로그 목록에는 "프레임 W×H") | F24 |
 | at | number | F6 |
 
 **Delivery**. 중개기가 플러그인에 `delivery` 메시지로 **실제로 보낸** Blob 1개(G5). 숫자는 모두 이 Blob에서 잰다.
@@ -126,6 +133,7 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | branch | `2a\|2b\|2c\|raw` | F4, F6 | |
 | bytes | int | F6 | 보낸 Blob의 `size` |
 | areaRatio (+ cropRect) | float, {x,y,w,h} 원본 px | F6 | **실제로 자른** cropRect 면적 / 원본 프레임 면적(판정기 `targetBox` 아님) |
+| frameRect | {x,y,w,h} 원본 px | F24 | 포착 시작 때 읽은 `Session.captureFrame`을 원본 px로 바꾼 값. 불변식 `cropRect ⊆ frameRect` |
 | facesMasked | int | F6 | 같은 LogEntry의 Detection 중 `masked≠none` 수(가림 적용 기록) |
 | faceCheck | `{status:'checked', detectedFaces:int} \| {status:'error', detectedFaces:null}` | F4, F8 | 출구 재검사(P0, JPEG 후 BlazeFace), 두 모드 공통. 보호 모드에서 ≥1이면 hold("출구 재검사"), error면 hold("검사 실패")라 Delivery 없음. `raw`는 전체 프레임 얼굴 수 |
 | processedAt, location | number, `browser` (처리 위치, GPS 아님) | F6 | `phone\|glasses\|enterprise`는 발표 그림용, 데모에서는 안 씀 |
@@ -155,6 +163,15 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | perPlugin | {pluginId: {deliveries, faceDeliveries}} 증가 전용 | F6, F12 |
 | rawServerSends | int (원본 서버 전송, 항상 0) | F16, F17 |
 | apiSends | int (가린 조각의 허용 API 전송 수) | F7, F16 |
+| usage | {at, pluginId, deliveryId, objectLabel, bytes, frameW, frameH}[] 증가 전용, 이미지 없음. `dispatched`마다 1줄 | F25 |
+
+**UsageSample**. 사용 기록(F25)의 대표 조각. 플러그인별 최근 3장 [제안]만 둔다. 넘치면 가장 오래된 것을 해제한다. branch `raw`는 남기지 않는다(이미 가린 2b·2c, 가릴 필요가 없던 2a만). 새 세션 시작과 새로고침 때 비운다.
+
+| 속성 | 타입 | 출처 |
+| --- | --- | --- |
+| pluginId (FK), deliveryId (FK) | string | F25 |
+| at | number | F25 |
+| thumbnailRef | object URL (보낸 Blob으로 만든 별도 URL. 로그 썸네일이 해제돼도 남음) | F25 |
 
 ## 4. 파생값 계산 (Counter)
 
