@@ -1,0 +1,56 @@
+@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
+
+/* 연결선·상태창·글꼴만. 바깥 화면의 배치와 색에는 관여하지 않는다. */
+.fm-food-status {
+  --food-gold: #dec88d;
+  --food-paper: #f5ebd0;
+  --food-muted: #c1b79a;
+  position: absolute; inset: 0; z-index: 4; isolation: isolate; pointer-events: none;
+  font-family: 'Pretendard Variable', Pretendard, 'Malgun Gothic', sans-serif;
+}
+.fm-food-status, .fm-food-status * { box-sizing: border-box; }
+.fm-food-status[hidden] { display: none; }
+.fm-food-status__connector { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; overflow: visible; }
+.fm-food-status__connector polyline { fill: none; stroke-linejoin: miter; vector-effect: non-scaling-stroke; }
+.fm-food-status__line-shadow { stroke: rgba(40,31,12,.35); stroke-width: 4; }
+.fm-food-status__line { stroke: var(--food-gold); stroke-width: 2; }
+.fm-food-status__anchor { fill: #312b1c; stroke: var(--food-gold); stroke-width: 2; }
+.fm-food-status__end { fill: var(--food-gold); }
+.fm-food-status__panel {
+  position: absolute; left: 0; top: 0; z-index: 2; width: min(272px,calc(100% - 24px)); padding: 32px 24px;
+  display: grid; justify-items: center; align-content: center; gap: 16px;
+  background: transparent; border: 0; border-radius: 4px; color: var(--food-paper);
+  cursor: grab; touch-action: none; user-select: none; will-change: transform; pointer-events: auto;
+}
+.fm-food-status__panel[data-dragging='true'] { cursor: grabbing; }
+.fm-food-status__panel:focus-visible { outline: none; }
+.fm-food-status__frame { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.fm-food-status__frame path, .fm-food-status__frame rect { fill: none; stroke: var(--food-gold); vector-effect: non-scaling-stroke; }
+.fm-food-status__frame .fm-food-status__backdrop { fill: rgba(19,18,9,.82); stroke: none; }
+.fm-food-status__frame .fm-food-status__outer { stroke-width: 1; opacity: .8; }
+.fm-food-status__frame .fm-food-status__inner { stroke-width: .5; opacity: .45; }
+.fm-food-status__frame .fm-food-status__corner { stroke-width: 1.25; }
+.fm-food-status__frame .fm-food-status__gem { fill: var(--food-gold); stroke: none; }
+.fm-food-status__frame .fm-food-status__halo { stroke: #f1d58a; stroke-width: 5; opacity: .8; }
+.fm-food-status__frame .fm-food-status__core { stroke: #fff5cf; stroke-width: 1.75; }
+.fm-food-status__name { margin: 0; max-width: 100%; color: var(--food-gold); font-size: 36px; line-height: 40px; font-weight: 600; letter-spacing: -.04em; text-align: center; text-wrap: balance; overflow-wrap: anywhere; }
+.fm-food-status__divider { display: flex; width: 96px; align-items: center; gap: 8px; color: var(--food-gold); opacity: .7; }
+.fm-food-status__divider::before, .fm-food-status__divider::after { content: ''; flex: 1; height: 1px; background: currentColor; }
+.fm-food-status__divider span { width: 4px; height: 4px; background: currentColor; transform: rotate(45deg); }
+.fm-food-status__energy { display: flex; align-items: baseline; justify-content: center; gap: 8px; font-variant-numeric: tabular-nums; }
+.fm-food-status__energy output { font-size: 36px; line-height: 40px; font-weight: 500; letter-spacing: -.04em; }
+.fm-food-status__energy span { font-size: 14px; line-height: 20px; color: var(--food-muted); }
+.fm-food-status__close {
+  position: absolute; right: 24px; top: 8px; display: grid; place-items: center;
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: var(--food-muted); font-family: inherit; font-size: 20px; line-height: 24px;
+  cursor: pointer; touch-action: manipulation; opacity: 0; pointer-events: none;
+  transition: opacity 200ms cubic-bezier(.22,1,.36,1);
+}
+.fm-food-status__panel:hover .fm-food-status__close, .fm-food-status__panel:focus-within .fm-food-status__close { opacity: 1; pointer-events: auto; }
+.fm-food-status__close:hover { color: var(--food-paper); background: rgba(222,200,141,.12); }
+.fm-food-status__close:active { transform: translateY(1px); }
+.fm-food-status__close:focus-visible { outline: 1px solid var(--food-gold); outline-offset: 2px; }
+.fm-food-status__help { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+@media (hover: none) { .fm-food-status__close { opacity: .75; pointer-events: auto; } }
+@media (prefers-reduced-motion: reduce) { .fm-food-status__close { transition: none; } .fm-food-status__glow { display: none; } }
