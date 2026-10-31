@@ -13,6 +13,7 @@ import {
   selectThroughput,
 } from '../src/core/selectors';
 import type { DeliveryBranch, FaceCheck } from '../src/core/types';
+import { adjustKcal, fallbackText, isValidLabel } from '../src/core/calorie';
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -123,6 +124,35 @@ check('호스트 허용 목록 밖 주소는 빠진다', () => {
 
 check('호스트 origin을 직접 적어도 허용', () => {
   assert.deepEqual(resolveAllowedOrigins(['https://app.test'], 'https://app.test'), ['https://app.test']);
+});
+
+// ── 칼로리 표·라벨 ──
+check('x-label 정규식: COCO 이름은 통과, 주입·변형은 거름', () => {
+  for (const ok of ['pizza', 'hot dog', 'broccoli']) assert.ok(isValidLabel(ok), ok);
+  for (const bad of ['Pizza', 'hot  dog', 'pizza\n', 'pizza, pizza', ' pizza', 'pizza ', '', 'a'.repeat(33), null, undefined]) {
+    assert.equal(isValidLabel(bad), false, JSON.stringify(bad));
+  }
+});
+
+check('고정표 문장: 표에 있으면 "<이름> 약 <kcal>kcal", 없으면 "음식(종류 미상)"', () => {
+  assert.equal(fallbackText('pizza'), '피자 약 285kcal');
+  assert.equal(fallbackText('bowl'), '음식(종류 미상)');
+  assert.equal(fallbackText('Pizza'), '음식(종류 미상)');
+});
+
+check('kcal 보정: 한 판은 8조각 기준이라 2,400은 그대로', () => {
+  assert.deepEqual(adjustKcal(2400, '피자', '한 판', 'pizza'), { kcal: 2400, name: '피자', clamped: false });
+});
+
+check('kcal 보정: 한 조각인데 터무니없으면 표 값과 표 이름으로', () => {
+  assert.deepEqual(adjustKcal(5000, '샌드위치', '한 조각', 'pizza'), { kcal: 285, name: '피자', clamped: true });
+  assert.deepEqual(adjustKcal(30, '피자', '한 조각', 'pizza'), { kcal: 285, name: '피자', clamped: true });
+});
+
+check('kcal 보정: 비율 비교 뒤에 10~3000으로 자른다', () => {
+  assert.deepEqual(adjustKcal(5, '당근', '한 조각', 'carrot'), { kcal: 25, name: '당근', clamped: true });
+  assert.deepEqual(adjustKcal(5, '이상한 것', '알 수 없음', null), { kcal: 10, name: '이상한 것', clamped: false });
+  assert.deepEqual(adjustKcal(9000, '음식', '알 수 없음', 'bowl'), { kcal: 3000, name: '음식', clamped: false });
 });
 
 // ── 스토어 ──

@@ -27,7 +27,8 @@ function ensureVideo(): HTMLVideoElement {
   v.setAttribute('autoplay', '');
   v.disablePictureInPicture = true;
   // 좌우 반전하지 않는다(targetBox를 그대로 겹치기 위해). 크기는 컨테이너를 따른다.
-  Object.assign(v.style, { width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' });
+  // object-fit은 정하지 않는다(브라우저 기본 contain). C의 CSS가 cover로 바꾸면 그 매핑으로 박스를 겹친다.
+  Object.assign(v.style, { width: '100%', height: '100%', display: 'block', background: '#000' });
   video = v;
   return v;
 }

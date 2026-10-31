@@ -228,14 +228,14 @@ function readyStore() {
   return { st, setT: (v: number) => (t = v) };
 }
 
-check('게이트: food는 calorie·hello 포착, person은 calorie skip·hello 포착', () => {
+check('게이트(F21): food면 calorie(256)·hello 장면 기록(64)이 각자 매니페스트대로, person이면 둘 다 skip', () => {
   const { st } = readyStore();
   const food = planCapture(st.getState(), 'food', 0);
-  assert.deepEqual(food.capture.map((c) => c.pluginId), ['calorie', 'hello']);
+  assert.deepEqual(food.capture.map((c) => [c.pluginId, c.maxSide]), [['calorie', 256], ['hello', 64]]);
   assert.deepEqual(food.undeclared, []);
   const person = planCapture(st.getState(), 'person', 0);
-  assert.deepEqual(person.capture.map((c) => c.pluginId), ['hello']);
-  assert.deepEqual(person.undeclared, ['calorie']);
+  assert.deepEqual(person.capture, []);
+  assert.deepEqual(person.undeclared, ['calorie', 'hello']);
 });
 
 check('게이트: 쿨다운·busy·일시 정지·게이트 닫힘이면 포착 안 함', () => {
@@ -247,7 +247,7 @@ check('게이트: 쿨다운·busy·일시 정지·게이트 닫힘이면 포착 
   assert.deepEqual(planCapture(st.getState(), 'food', 10_000).capture.map((c) => c.pluginId), ['calorie']);
   st.getState().setPaused(true);
   assert.equal(planCapture(st.getState(), 'food', 10_000).capture.length, 0);
-  assert.equal(planCapture(st.getState(), 'person', 10_000).undeclared.length, 0); // 보낼 수 없으면 skip도 없음
+  assert.equal(planCapture(st.getState(), 'person', 10_000).undeclared.length, 0); // 보낼 수 없으면 skip도 없음(F22 착용자 일시 정지)
 });
 
 check('게이트: 매니페스트 적용 직후(게이트 닫힘·버전 다름) 포착 안 함, 새 iframe ready 뒤 새 maxSide', () => {

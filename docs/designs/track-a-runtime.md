@@ -27,7 +27,7 @@
 | `vision/branch.ts`, `geometry.ts`, `scene.ts` | 순수 함수: 분기 결정표, 좌표, 장면 선택, 상태기계 | 없음 |
 | `broker/broker.ts` | `prepareDelivery`와 `sendDelivery` 호출(이 파일 한 곳), hold·skip 로그 | 없음(가린 Blob만) |
 
-- `<video>`와 MediaStream은 스토어에 넣지 않는다. `getVideo()`는 `vision/`만 import한다.
+- `<video>`와 MediaStream은 스토어에 넣지 않는다. `<video>`의 `object-fit`은 A가 정하지 않는다(C의 CSS가 정하고, 박스 겹치기도 그 매핑을 따른다). `getVideo()`는 `vision/`만 import한다.
 - 시작점은 `startRuntime()`(`vision/index.ts`) 하나다. 여러 번 불러도 구독과 반복은 하나만 돈다(HMR·StrictMode 대비).
 - C는 `import.meta.glob('/src/input/preview.ts')`로 `mountPreview`를 찾는다(track-c/screens). `input/preview.ts`의 `mountPreview`는 처음 불릴 때 `startRuntime()`도 부른다. 그래서 `main.tsx`를 고치지 않아도 미리보기가 붙으면 판정이 돈다.
 
@@ -47,6 +47,7 @@
   - 파일을 넣고 `loadModels()`를 다시 부르면 붙는다.
 - 모델 파일은 직접 `fetch`하고 응답 형식을 확인한 뒤 `modelAssetBuffer`로 넘긴다. Vite 개발 서버가 없는 파일에도 `index.html`(200)을 돌려주기 때문이다.
 - 두 모델은 `runningMode: 'IMAGE'` 인스턴스를 하나씩 쓴다. 0단계(640 캔버스), 포착 재검출(원본 프레임), 얼굴 검출(조각, 출구 JPEG)이 모두 같은 인스턴스를 쓴다. MediaPipe 호출은 동기라 차례대로 돈다.
+- C에 엔진 상태를 알린다(track-c/screens가 core에 더하는 `engine`·`setEngine`, core에 아직 없으면 부르지 않는다). 모델 받기 시작 = `loading`(받은 바이트·전체 바이트), 0단계 첫 추론 = `ready`, 파일 없음·GPU와 CPU 모두 실패 = `failed`(사유 한 줄, NFR-022).
 - 만든 직후 빈 캔버스로 한 번씩 돌려 예열한다. 첫 포착이 GPU 준비 때문에 느려져 쿨다운 간격이 흔들리는 것을 막기 위해서다.
 - WASM은 `postinstall`(`scripts/copy-wasm.mjs`)이 `node_modules/@mediapipe/tasks-vision/wasm/`에서 SIMD판과 nosimd판만 `public/wasm/`으로 복사한다. 레포에는 넣지 않는다(`.gitignore`).
 

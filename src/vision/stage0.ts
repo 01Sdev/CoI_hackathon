@@ -7,7 +7,7 @@ import type { Box, SceneDecision } from '../core/types';
 import { getInputEpoch, getVideo } from '../input/adapter';
 import { VISION_CONFIG } from './config';
 import { classifyScene, fitLongSide, scaleBox, type Found } from './geometry';
-import { detectObjects, getModels } from './models';
+import { detectObjects, getModels, reportEngine } from './models';
 import { SCENE_NONE, stepScene, type SceneState } from './scene';
 
 /** 0단계 틱 하나의 결과. 포착 게이트가 틱마다 받는다. */
@@ -34,6 +34,8 @@ let lastFrameCount: number | null = null;
 let canvas: HTMLCanvasElement | null = null;
 let stopLoop: (() => void) | null = null;
 let warned = false;
+/** 첫 추론을 C에 ready로 알렸는가. */
+let engineReady = false;
 const tickListeners = new Set<(t: Stage0Tick) => void>();
 /** 최근 틱 시각과 추론 시간(ms). 처리량 확인(V1)용. */
 const recentTicks: number[] = [];
@@ -125,6 +127,10 @@ function runTick(v: HTMLVideoElement) {
     try {
       const t0 = performance.now();
       found = detectObjects(m, canvas);
+      if (!engineReady) {
+        engineReady = true;
+        reportEngine({ status: 'ready', detail: null });
+      }
       pushRecent(recentInferMs, performance.now() - t0);
       pushRecent(recentTicks, now);
     } catch (e) {
