@@ -22,7 +22,7 @@ import {
   sourceToView,
   viewToSource,
 } from '../src/ui/geometry';
-import { cameraFor, enabledKind, glassReduce, HOME_CENTER, HOME_ROWS, homeApps, homeRows, type GlassScreen } from '../src/ui/glassHome';
+import { cameraFor, cameraUnavailable, enabledKind, glassReduce, HOME_CENTER, HOME_ROWS, homeApps, homeRows, type GlassScreen } from '../src/ui/glassHome';
 import { isGlassButtonKey } from '../src/ui/glassKeys';
 import { closedOnEnter, outfitPanelOpen } from '../src/ui/outfitView';
 import { joinScribe, scribeFinalText, STT_NOTICE } from '../src/ui/scribe';
@@ -448,6 +448,14 @@ check('outfitPanelOpen·closedOnEnter: 칼로리에서는 코디 스캔 패널�
   assert.equal(outfitPanelOpen(true, 't2', reentered), true);
   // 질문이 하나도 없으면 없음
   assert.equal(outfitPanelOpen(true, null, closedOnEnter(null)), false);
+});
+
+check('cameraUnavailable: 녹화 영상으로 바뀜(fallbackFrom)이나 카메라·대체 영상 모두 실패(inputError)면 안내', () => {
+  assert.equal(cameraUnavailable(null, null), false, '아직 여는 중');
+  assert.equal(cameraUnavailable({ fallbackFrom: null }, null), false, '카메라가 열림');
+  assert.equal(cameraUnavailable({ fallbackFrom: 'rear' }, null), true, '카메라 실패 → 녹화 영상');
+  // 권한은 허용됐는데 카메라와 대체 영상이 모두 실패: input은 null, inputError만 있다(#59)
+  assert.equal(cameraUnavailable(null, { kind: 'video', fallbackFrom: 'rear', at: 1 }), true);
 });
 
 console.log(`\n${passed}개 통과`);

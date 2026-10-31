@@ -2,7 +2,7 @@
 // "/" 첫 진입은 카메라 허용 → AR 홈(비전 프로 배치 4/5/4) → framelet 런처(버튼 넷) → 고른 앱 순서로 간다.
 // 화면 전환과 홈 배치는 경계가 있는 순수 함수라 scripts/check-ui.ts가 확인한다.
 
-import type { InputKind, PluginKind } from '../core/types';
+import type { InputError, InputKind, InputSource, PluginKind } from '../core/types';
 import type { LayoutMode } from './useLayoutMode';
 
 /** 런처에서 실행할 수 있는 앱. "추가..."는 알림만 띄우고 화면을 바꾸지 않는다. */
@@ -51,6 +51,15 @@ export function enabledKind(s: GlassScreen): PluginKind | null {
 /** 카메라 허용 때 고를 입력. 터치 기기(아이폰 가로 포함)는 후면(environment), 아니면 웹캠. */
 export function cameraFor(layout: LayoutMode, coarsePointer: boolean): InputKind {
   return coarsePointer || layout === 'phone' ? 'rear' : 'webcam';
+}
+
+/**
+ * 글래스 흐름에서 카메라를 쓸 수 없다고 볼지. 둘 중 하나면 안내 화면("카메라 없이는 볼 수 없어요.")으로 간다.
+ * - A가 카메라 실패 뒤 녹화 영상으로 바꿈(input.fallbackFrom).
+ * - A가 카메라와 대체 영상을 모두 열지 못함(session.inputError, #59). 권한은 허용됐는데 기기·영상이 모두 실패한 경우다.
+ */
+export function cameraUnavailable(input: Pick<InputSource, 'fallbackFrom'> | null, inputError: InputError | null): boolean {
+  return input?.fallbackFrom != null || inputError != null;
 }
 
 export type HomeAppId =
