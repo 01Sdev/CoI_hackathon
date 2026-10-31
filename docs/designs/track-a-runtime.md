@@ -26,7 +26,8 @@
 | `vision/geometry.ts`, `vision/scene.ts` | 순수 함수(좌표, 장면 선택, 상태기계, 분기 결정) | 없음 |
 
 - `<video>`와 MediaStream은 스토어에 넣지 않는다. `getVideo()`는 `vision/`만 import한다.
-- 시작점은 `startRuntime()`(`vision/index.ts`) 하나다. 여러 번 불러도 구독·반복은 하나다(HMR·StrictMode). 앱 연결(`main.tsx`에서 부르기)은 통합 PR에서 한다.
+- 시작점은 `startRuntime()`(`vision/index.ts`) 하나다. 여러 번 불러도 구독·반복은 하나다(HMR·StrictMode).
+- C는 `import.meta.glob('/src/input/preview.ts')`로 `mountPreview`를 찾는다(track-c/screens). `input/preview.ts`의 `mountPreview`는 처음 불릴 때 `startRuntime()`도 부른다. 그래서 `main.tsx`를 고치지 않아도 미리보기가 붙으면 판정이 돈다.
 
 ### 2.2 입력(F1·F10)
 

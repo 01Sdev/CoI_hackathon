@@ -22,7 +22,7 @@
 
 - [x] 입력 어댑터(웹캠·후면·녹화 mp4), `mountPreview` — `track-a/runtime`
 - [x] 0단계 판정(EfficientDet-Lite0, 5fps, 1초 유지 확정) — `track-a/runtime`
-- [ ] 앱 연결: `main.tsx`에서 `startRuntime()` 부르기(통합 때, C의 화면 배치와 같이)
+- [x] 앱 연결: C의 `Preview`가 찾는 `src/input/preview.ts`의 `mountPreview`가 `startRuntime()`도 부른다
 - [ ] 1단계 포착·2단계 가림·분기(2a~2d)·출구 재검사
 - [ ] 중개기 `sendDelivery` 경로와 Counter 기록
 
