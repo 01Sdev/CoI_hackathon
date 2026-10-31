@@ -5,7 +5,7 @@
 ## 파일과 미리보기
 
 - `src/ui/FoodStatusPanel.tsx`: 연결선·상태창 SVG, 드래그·방향키 이동, 닫기, 글로우 제어.
-- `src/ui/food-status-panel.css`: 위 요소만 대상으로 하는 스타일. 기존 `pretendard` 패키지를 재사용하며 새 의존성을 추가하지 않는다.
+- `src/ui/food-status-panel.css`: 위 요소만 대상으로 하는 스타일. 기존 `pretendard` 패키지를 재사용하며 새 의존성을 추가하지 않는다. 글꼴 파일은 앱에서는 `theme.css`가, 미리보기에서는 `dev/food-status-panel.tsx`가 불러온다(2026-11-01, 겹친 `@import` 정리).
 - `dev/food-status-panel.html`, `dev/food-status-panel.tsx`: 해당 컴포넌트만 보여 주는 개발 페이지. 이름은 표시 예시이며 인식을 실행하지 않는다.
 
 `npm run dev`를 실행한 뒤 출력된 로컬 주소에 `/dev/food-status-panel.html`을 붙인다. 예: `http://localhost:5173/dev/food-status-panel.html`. 개발 페이지는 루트 `index.html`만 사용하는 현재 프로덕션 빌드 입력에 포함되지 않는다.
@@ -31,7 +31,7 @@ import { FoodStatusPanel } from './ui/FoodStatusPanel';
 - 이름은 `textContent`로 넣는다. 폰트는 `Pretendard Variable`, `Pretendard`, `Malgun Gothic`, `sans-serif` 순서다. 원본 글자 크기 36/40px, 이름 굵기 600, 열량 굵기 500, 금빛 색상을 유지했다.
 - SVG ID는 인스턴스별로 분리한다. 움직임 줄이기 설정에서는 글로우를 숨기고, 창이 닫히거나 탭이 숨겨지면 애니메이션을 멈춘다.
 
-기존 `Hud.tsx`, 스토어, 플러그인 계약과 전역 테마는 바꾸지 않았다. 앱에 연결하는 작업은 별도다. 이 추출본의 금색은 사용자가 지정한 원본 시안이며, 기존 전역 의미색 토큰을 재정의하지 않는다.
+기존 `Hud.tsx`, 스토어, 플러그인 계약과 전역 테마는 바꾸지 않았다. 앱에 연결하는 작업은 별도다. 2026-11-01 `src/ui/PluginViews.tsx`가 칼로리 플러그인 화면으로 연결했다(이름은 `sanitizeAppText`를 거치고, `anchor`는 0단계 대상 박스 중심, 고정표 결과는 이름 뒤에 "(고정표)"). 결과가 아직 없는 최신 전달이 있으면 `{ id: 그 전달의 deliveryId, name: 대상 이름, kcal: null }`로 먼저 띄워 "— kcal"이 보이고, 결과가 오면 같은 id라 같은 창에서 숫자로 바뀐다(`labels.ts` `calorieView`). 이 추출본의 금색은 사용자가 지정한 원본 시안이며, 기존 전역 의미색 토큰을 재정의하지 않는다.
 
 ## 확인한 결과
 
