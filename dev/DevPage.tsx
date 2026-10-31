@@ -73,6 +73,7 @@ function Preview() {
   const ref = useRef<HTMLDivElement>(null);
   const input = useLensStore((s) => s.session.input);
   const obs = useLensStore((s) => s.liveObservation);
+  const frame = useLensStore((s) => s.session.captureFrame);
   useEffect(() => (ref.current ? mountPreview(ref.current) : undefined), []);
   const aspect = input && input.height > 0 ? `${input.width} / ${input.height}` : '16 / 9';
   const color = obs?.label === 'food' ? '#3c3' : obs?.label === 'person' ? '#39f' : '#fc3';
@@ -94,6 +95,19 @@ function Preview() {
           <span style={{ background: color, color: '#000', fontSize: 12, padding: '0 4px' }}>{obs.objectLabel}</span>
         </div>
       )}
+      {/* F24 전송 범위 프레임(흰색) */}
+      <div
+        data-capture-frame=""
+        style={{
+          position: 'absolute',
+          left: `${frame.x * 100}%`,
+          top: `${frame.y * 100}%`,
+          width: `${frame.w * 100}%`,
+          height: `${frame.h * 100}%`,
+          border: '2px solid #fff',
+          pointerEvents: 'none',
+        }}
+      />
       {/* 판정 영역(가운데 60%) */}
       <div style={{ position: 'absolute', left: '20%', top: '20%', width: '60%', height: '60%', border: '1px dotted #666', pointerEvents: 'none' }} />
     </div>
@@ -190,6 +204,13 @@ function Presenter() {
         <button onClick={() => apply(64)}>maxSide 64</button>
         <button onClick={() => apply(256, 30)}>maxPerMinute 30</button>
       </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+        <span style={mono}>프레임:</span>
+        <button onClick={() => lensStore.getState().setCaptureFrame({ x: 0.2, y: 0.2, w: 0.6, h: 0.6 })}>가운데 60%</button>
+        <button onClick={() => lensStore.getState().setCaptureFrame({ x: 0.5, y: 0.2, w: 0.5, h: 0.6 })}>오른쪽 절반</button>
+        <button onClick={() => lensStore.getState().setCaptureFrame({ x: 0, y: 0, w: 1, h: 0.15 })}>맨 위 띠(대상 밖)</button>
+        <button onClick={() => lensStore.getState().setCaptureFrame({ x: 0, y: 0, w: 1, h: 1 })}>전체</button>
+      </div>
       <div style={mono}>{`비교 모드 ${compareMode ? '켜짐' : '꺼짐'} · 일시 정지 ${paused ? '예' : '아니오'} · M ${m} · K ${k}${msg ? `\n${msg}` : ''}`}</div>
     </div>
   );
@@ -239,7 +260,7 @@ function Logs() {
           <div key={l.id} data-log-kind={l.kind} data-branch={l.branch ?? ''} style={{ display: 'flex', gap: 8, borderTop: '1px solid #222', padding: '4px 0' }}>
             {d?.thumbnailRef ? <img src={d.thumbnailRef} alt="" style={{ width: 72, height: 72, objectFit: 'contain', background: '#000' }} /> : <div style={{ width: 72 }} />}
             <div style={mono}>
-              {`${l.kind} ${l.pluginId} ${l.branch ?? '-'} ${l.reason}`}
+              {`${l.kind} ${l.pluginId} ${l.branch ?? '-'} ${l.reason}${l.frameRect ? ` · 프레임 ${l.frameRect.w}×${l.frameRect.h}` : ''}`}
               {d &&
                 `\n${d.objectLabel} ${d.width}×${d.height} ${d.bytes}B 비율 ${d.areaRatio.toFixed(3)} 가림 ${d.facesMasked} 재검사 ${d.faceCheck.status === 'checked' ? d.faceCheck.detectedFaces : 'error'}\n${d.sendStatus} ack=${d.ackStatus} 위치=${d.location} crop=${fmtBox(d.cropRect)}`}
               {dets.length > 0 && `\n검출: ${dets.map((x) => `${x.kind}${x.masked !== 'none' ? `(${x.masked})` : ''} ${x.score.toFixed(2)}${x.overlap !== null ? ` 겹침 ${x.overlap.toFixed(2)}` : ''}`).join(', ')}`}

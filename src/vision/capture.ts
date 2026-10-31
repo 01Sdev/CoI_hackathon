@@ -3,13 +3,14 @@
 // 원본 프레임은 이 파일 안에서만 만들고 조각을 자르자마자 놓는다(비교 모드는 raw 인코딩 직후). 가리기 전 조각은 가림 단계에서
 // 덮어쓴다. 작업 캔버스는 모든 경로(보류·예외 포함)에서 finally로 비운다. 플러그인에는 broker의 deliver만 쓴다.
 
+import { frameToPx } from '../core/frame';
 import { lensStore, type NewDetection } from '../core/store';
 import type { Box, FaceCheck, SceneDecision } from '../core/types';
 import { deliver, hold, skip } from '../broker/broker';
 import { getInputEpoch, getVideo } from '../input/adapter';
 import { cooldownUntil, decideBranch, type ProtectedBranch } from './branch';
 import { VISION_CONFIG } from './config';
-import { clampToFrame, expand, fitLongSide, matchTarget, scaleBox, translate, type Found } from './geometry';
+import { clampToFrame, cropInFrame, fitLongSide, matchTarget, scaleBox, translate, type Found } from './geometry';
 import { canvasOf, pixelate, pixelateShaped, release, toJpeg } from './mask';
 import { segmentCategories } from './segmenter';
 import { dilateRadius, shapeMask } from './shape';
@@ -103,7 +104,7 @@ async function exitCheck(m: Models, blob: Blob): Promise<FaceCheck> {
 }
 
 type Protected =
-  | { kind: 'hold'; branch: '2d' | null; reason: string; detections?: NewDetection[] }
+  | { kind: 'hold'; branch: '2d' | null; reason: string; detections?: NewDetection[]; frameRect?: Box }
   | {
       kind: 'ok';
       crop: HTMLCanvasElement;
@@ -146,18 +147,20 @@ function applyMasks(ctx: CanvasRenderingContext2D, crop: HTMLCanvasElement, crop
 }
 
 /**
- * 원본 프레임에서 이번 틱의 대상을 다시 찾고(FR-013) +10% 원본 해상도로 잘라(FR-011) 얼굴 검출·분기·가림까지(FR-014~017).
+ * 원본 프레임 전체에서 이번 틱의 대상과 사람을 다시 찾고(FR-013), 대상 박스를 +10% 넓혀 전송 범위 프레임과 겹치는 부분만
+ * 원본 해상도로 잘라(FR-011·060) 얼굴 검출·분기·가림까지(FR-014~017). 프레임 밖 픽셀은 조각 캔버스에 그리지 않는다.
  * 'ok'의 crop은 이미 가린 조각이고 호출자가 비운다. 그 밖의 경로에서는 여기서 비운다.
  */
-function protect(m: Models, frame: HTMLCanvasElement, objectLabel: string, targetBox: Box): Protected {
+function protect(m: Models, frame: HTMLCanvasElement, objectLabel: string, targetBox: Box, frameRect: Box): Protected {
   const W = frame.width;
   const H = frame.height;
   const found = detectObjects(m, frame);
   lensStore.getState().recordRuns({ stage0Runs: 1 });
   const target = matchTarget(found, objectLabel, scaleBox(targetBox, W, H), cfg.recheckTargetScoreMin);
   if (!target) return { kind: 'hold', branch: null, reason: '대상 재검출 실패' };
-  const cropRect = clampToFrame(expand(target.box, cfg.targetExpand), W, H);
-  if (cropRect.w < 2 || cropRect.h < 2) return { kind: 'hold', branch: null, reason: '대상 재검출 실패' };
+  // frameRect는 원본 안이므로(clampFrame) cropRect도 원본 안이다.
+  const cropRect = cropInFrame(target.box, frameRect, cfg.targetExpand);
+  if (!cropRect) return { kind: 'hold', branch: null, reason: '프레임 밖', frameRect };
   const persons = found.filter((f) => f.label === 'person' && f.score >= cfg.safetyPersonScoreMin);
 
   const { canvas: crop, ctx } = canvasOf(cropRect.w, cropRect.h);
@@ -184,9 +187,8 @@ function protect(m: Models, frame: HTMLCanvasElement, objectLabel: string, targe
   }
 }
 
-/** 긴 변 maxSide로 줄여(크면) JPEG. 줄인 캔버스는 바로 비운다. maxSide가 null이면 원본 크기 그대로. */
-async function encode(source: HTMLCanvasElement, maxSide: number | null, quality: number) {
-  if (maxSide === null) return { blob: await toJpeg(source, quality), width: source.width, height: source.height };
+/** 긴 변 maxSide로 줄여(크면) JPEG. 줄인 캔버스는 바로 비운다. */
+async function encode(source: HTMLCanvasElement, maxSide: number, quality: number) {
   const fit = fitLongSide(source.width, source.height, maxSide);
   if (fit.scale === 1) return { blob: await toJpeg(source, quality), width: source.width, height: source.height };
   const { canvas, ctx } = canvasOf(fit.width, fit.height);
@@ -195,6 +197,17 @@ async function encode(source: HTMLCanvasElement, maxSide: number | null, quality
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(source, 0, 0, fit.width, fit.height);
     return { blob: await toJpeg(canvas, quality), width: fit.width, height: fit.height };
+  } finally {
+    release(canvas);
+  }
+}
+
+/** 원본 프레임에서 region(정수 px)만 원본 해상도로 JPEG. 사본 캔버스는 바로 비운다. */
+async function encodeRegion(source: HTMLCanvasElement, region: Box, quality: number) {
+  const { canvas, ctx } = canvasOf(region.w, region.h);
+  try {
+    ctx.drawImage(source, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h);
+    return { blob: await toJpeg(canvas, quality), width: region.w, height: region.h };
   } finally {
     release(canvas);
   }
@@ -214,10 +227,13 @@ async function runCapture(t: Stage0Tick, decision: SceneDecision, objectLabel: s
     store.setPluginBusy(c.pluginId, true, cooldownUntil(startedAt, c.maxPerMinute));
   }
 
+  /** F24: 포착을 시작할 때 한 번 읽고 이 포착 끝까지 쓴다(0~1, 원본 px는 크기를 안 뒤에). */
+  const captureFrame = store.session.captureFrame;
+
   /** 지금도 같은 세대일 때만 보류 로그를 쓰고 쿨다운을 확정한다. */
-  const holdIfCurrent = (c: CaptureTarget, branch: '2d' | null, reason: string, detections?: readonly NewDetection[]) => {
+  const holdIfCurrent = (c: CaptureTarget, branch: '2d' | null, reason: string, detections?: readonly NewDetection[], frameRect?: Box) => {
     if (!stillCurrent(token, c)) return;
-    hold(c.pluginId, decision.id, branch, reason, detections);
+    hold(c.pluginId, decision.id, branch, reason, detections, frameRect);
     cooled.add(c.pluginId);
   };
 
@@ -232,18 +248,19 @@ async function runCapture(t: Stage0Tick, decision: SceneDecision, objectLabel: s
     const f = canvasOf(W, H);
     frame = f.canvas;
     f.ctx.drawImage(v, 0, 0, W, H);
+    const frameRect = frameToPx(captureFrame, W, H);
 
     const raws = targets.filter((c) => c.raw);
     const prots = targets.filter((c) => !c.raw);
-    const p = prots.length > 0 ? protect(m, frame, objectLabel, targetBox) : null;
+    const p = prots.length > 0 ? protect(m, frame, objectLabel, targetBox, frameRect) : null;
     if (p?.kind === 'ok') crop = p.crop;
-    // 비교 모드(F17, 05 결정 30): 원본 해상도 그대로 한 번 인코딩한 뒤 원본 프레임을 놓는다.
-    const rawBlob = raws.length > 0 ? await encode(frame, null, cfg.rawQuality) : null;
+    // 비교 모드(F17, 05 결정 30, F24): 프레임 안 전체를 원본 해상도로, 가리지 않고 한 번 인코딩한 뒤 원본 프레임을 놓는다.
+    const rawBlob = raws.length > 0 ? await encodeRegion(frame, frameRect, cfg.rawQuality) : null;
     release(frame);
     frame = null;
 
     if (p?.kind === 'hold') {
-      for (const c of prots) holdIfCurrent(c, p.branch, p.reason, p.detections);
+      for (const c of prots) holdIfCurrent(c, p.branch, p.reason, p.detections, p.frameRect);
     } else if (p?.kind === 'ok') {
       for (const c of prots) {
         const out = await encode(p.crop, c.maxSide, c.quality);
@@ -269,6 +286,7 @@ async function runCapture(t: Stage0Tick, decision: SceneDecision, objectLabel: s
             height: out.height,
             areaRatio: (p.cropRect.w * p.cropRect.h) / (W * H),
             cropRect: p.cropRect,
+            frameRect,
             facesMasked: p.facesMasked,
             faceCheck: check,
             blob: out.blob,
@@ -301,8 +319,9 @@ async function runCapture(t: Stage0Tick, decision: SceneDecision, objectLabel: s
             branch: 'raw',
             width: rawBlob.width,
             height: rawBlob.height,
-            areaRatio: 1,
-            cropRect: { x: 0, y: 0, w: W, h: H },
+            areaRatio: (frameRect.w * frameRect.h) / (W * H),
+            cropRect: frameRect,
+            frameRect,
             facesMasked: 0,
             faceCheck: check,
             blob: rawBlob.blob,
