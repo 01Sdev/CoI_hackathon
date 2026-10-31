@@ -1,0 +1,235 @@
+<title>LensGate 유저플로우 02판</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one reading column, top to bottom = entering, one delivery, operations, transitions, what changed. Colors carry HUD meaning only. */
+:root {
+  --bg: #F1F4F3; --surface: #FFFFFF; --ink: #17201E; --muted: #56635F; --line: #C5CECB; --lane: #E9EDEB;
+  --ok: #0B7350; --ok-bg: #DFF3EA; --warn: #A95400; --warn-bg: #FCEAD3; --stop: #BB2527; --stop-bg: #FBE3E2;
+  --code: #3546A6;
+  --sans: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #101514; --surface: #19211F; --ink: #E6ECEA; --muted: #9CA9A5; --line: #35413E; --lane: #161D1B;
+  --ok: #55D3A4; --ok-bg: #12352A; --warn: #F2A650; --warn-bg: #3A2710; --stop: #F47C7D; --stop-bg: #3E1718;
+  --code: #A9B6F7; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #101514; --surface: #19211F; --ink: #E6ECEA; --muted: #9CA9A5; --line: #35413E; --lane: #161D1B;
+  --ok: #55D3A4; --ok-bg: #12352A; --warn: #F2A650; --warn-bg: #3A2710; --stop: #F47C7D; --stop-bg: #3E1718;
+  --code: #A9B6F7; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65 }
+main { max-width: 1120px; margin: 0 auto; padding-block: 36px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 40px }
+main > * { min-width: 0 }
+h1 { font-size: 30px; line-height: 1.25; font-weight: 700; margin: 0; text-wrap: balance }
+h2 { font-size: 20px; line-height: 1.35; font-weight: 700; margin: 0; text-wrap: balance }
+p { margin: 0; max-width: 70ch }
+code { font-family: var(--mono); font-size: .9em; color: var(--code) }
+header, section { display: grid; gap: 12px }
+section > * { min-width: 0 }
+.note { border: 1px solid var(--ok); background: var(--ok-bg); border-radius: 6px; padding: 12px 14px; font-size: 14px; max-width: 80ch }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted) }
+.legend li { display: flex; align-items: center; gap: 7px }
+.sw { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; flex: none }
+.sw.ok { background: var(--ok-bg); border-color: var(--ok) }
+.sw.warn { background: var(--warn-bg); border-color: var(--warn) }
+.sw.stop { background: var(--stop-bg); border-color: var(--stop) }
+.sw.muted { background: var(--lane); border-color: var(--line) }
+.diagram { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px }
+.diagram pre.mermaid { margin: 0; background: transparent; min-width: 760px }
+.cap { font-size: 13.5px; color: var(--muted); max-width: 80ch }
+.table { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface) }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 13.5px; line-height: 1.55 }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line) }
+th { font-weight: 600; color: var(--muted); background: var(--lane); font-size: 12.5px }
+tr:last-child td { border-bottom: 0 }
+td:first-child { font-weight: 600 }
+.tag { display: inline-block; font-family: var(--mono); font-size: 11.5px; padding: 1px 7px; border-radius: 4px; border: 1px solid }
+.tag.ok { color: var(--ok); border-color: var(--ok); background: var(--ok-bg) }
+.tag.warn { color: var(--warn); border-color: var(--warn); background: var(--warn-bg) }
+.tag.stop { color: var(--stop); border-color: var(--stop); background: var(--stop-bg) }
+a { color: var(--code) }
+</style>
+
+<main>
+<header>
+  <h1>LensGate 유저플로우 02판</h1>
+  <p>심사위원이 QR로 들어와 음식 한 장을 앱에 넘기고, 넘어간 것을 눈으로 확인하기까지의 흐름입니다. 팀이 기준 계약으로 정한 02-SSRD(2026-10-31 저녁판)와 PRD 반영본으로 다시 그렸습니다.</p>
+  <p class="note">기준: <code>02-SSRD.md</code>(인터페이스 계약), <code>03-SRS.md</code> v1.5(요구사항), <code>04-ERD.md</code>(데이터), PRD. 팀원의 "유저플로우 SSRD판"과 달라진 곳은 맨 아래 표에 있습니다.</p>
+  <ul class="legend">
+    <li><span class="sw ok"></span>초록: 정상 전달, 얼굴이 넘어가지 않음</li>
+    <li><span class="sw warn"></span>주황: 비교 모드 전용</li>
+    <li><span class="sw stop"></span>빨강: 차단·폐기·정지</li>
+    <li><span class="sw muted"></span>회색: 전달 없음(보류·건너뜀)</li>
+  </ul>
+</header>
+
+<section>
+  <h2>1. 접속해서 라이브 화면까지</h2>
+  <p>시작 버튼 하나가 오디오 잠금 해제와 카메라 권한 요청을 함께 맡습니다. iPhone은 사용자 조작 안에서만 소리를 켤 수 있기 때문입니다. 권한을 묻는 동안 모델을 미리 받습니다.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  QR["QR · 배포 URL"] --> START["시작 버튼 · 오디오 잠금 해제 · 카메라 권한 요청 · 모델 받기 시작"]
+  START --> CAM{"카메라 허용?"}
+  CAM -->|허용| IN1["후면 카메라 또는 웹캠 · ideal 1280×720"]
+  CAM -->|거부 · 실패| IN2["녹화 영상 · 같은 video 경로"]
+  IN1 --> ENG{"인식 엔진 준비"}
+  IN2 --> ENG
+  ENG -->|GPU 성공| PLG
+  ENG -->|GPU 실패| CPU["CPU로 다시 생성"]
+  CPU --> PLG
+  ENG -->|둘 다 실패| NOAN["전달 정지 · 로컬 분석 불가 표시"]:::stop
+  PLG["플러그인 준비 · srcdoc iframe · nonce CSP · init → blob Worker"] --> RDY{"3초 안에 ready?"}
+  RDY -->|예| LIVE["라이브 화면 · 화면 속 N명 · 앱에 반영된 사람 0명"]:::ok
+  RDY -->|아니오| STOP["그 플러그인 정지 · 다시 켜야 풀림"]:::stop
+  LIVE --> MODES["화면 모드 · 휴대폰 · 데스크톱 · /hud · /outward"]
+  classDef ok fill:#DFF3EA,stroke:#0B7350,color:#17201E
+  classDef warn fill:#FCEAD3,stroke:#A95400,color:#17201E
+  classDef stop fill:#FBE3E2,stroke:#BB2527,color:#17201E
+  classDef muted fill:#E9EDEB,stroke:#9AA5A1,color:#17201E
+  </pre></div>
+  <p class="cap">휴대폰과 데스크톱은 폭 768px로 자동 선택하고 수동 전환도 둡니다. 녹화 영상은 카메라가 막혔을 때의 대안입니다. 인식 엔진이 실패하면 녹화 영상으로 바꿔도 해결되지 않으므로 전달을 멈춥니다. "3초 안에 ready"는 02-SSRD의 시작값입니다.</p>
+</section>
+
+<section>
+  <h2>2. 전달 한 번이 일어나는 경로</h2>
+  <p>사용자가 하는 일은 음식을 비추는 것뿐이고, 나머지는 호스트가 정합니다. 모든 관문을 통과해 <code>dispatched</code>가 된 JPEG 한 장만 플러그인 경계를 넘습니다.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  S0["0단계 판정 · 긴 변 640 비율 유지 · 5fps · 네트워크 0건"] --> Q1{"가운데 60% 안 대상이 1초 유지? 음식 우선"}
+  Q1 -->|아니오| S0
+  Q1 -->|예| Q2{"scenes에 선언한 장면?"}
+  Q2 -->|아니오| SK1["전달 없음 · 선언하지 않은 장면 · 같은 사유 10초에 1번 기록"]:::muted
+  Q2 -->|예| Q3{"쿨다운 끝? 60 / maxPerMinute초"}
+  Q3 -->|아니오| SK2["전달 없음 · 주기 제한"]:::muted
+  Q3 -->|예| Q4{"비교 모드?"}
+  Q4 -->|켜짐| RAW["원본 전체 · 팀원 녹화 영상 · 자르기와 가림 건너뜀"]:::warn
+  Q4 -->|꺼짐| CAP["1단계 포착 · 원본 1장 고정 · 다음 포착 시각 예약 · 대상과 사람 다시 검출"]
+  CAP --> Q5{"대상을 다시 찾았나?"}
+  Q5 -->|아니오| H0["보류 · 대상 재검출 실패 · 쿨다운 시작"]:::muted
+  Q5 -->|예| CUT["대상 박스 +10%로 자름 · 축소 전 조각에서 얼굴 검출"]
+  CUT --> PP["사람 박스마다 얼굴 대응 판단 · 5%와 60% 필터 쓰지 않음"]
+  PP --> Q6{"얼굴 없는 사람이 조각 절반 이상? 또는 대응 불확실?"}
+  Q6 -->|예| H2D["2d 보류 · 조각 전체 · 쿨다운 시작"]:::muted
+  Q6 -->|아니오| MASK["가림 · 검출된 얼굴 전부 2b · 얼굴 없는 사람은 머리 쪽 2c · 아무도 없으면 2a"]:::ok
+  MASK --> ENC["maxSide 이하로 축소 · JPEG"]
+  ENC --> EX{"출구 재검사 · 얼굴 0개?"}
+  EX -->|1개 이상 · 검사 실패| H3["보류 · 출구 재검사 또는 검사 실패"]:::stop
+  EX -->|0개| PREP
+  RAW --> EXC["출구 재검사로 얼굴 수만 셈"]:::warn
+  EXC --> PREP
+  PREP["Delivery 기록 prepared · 기대 해시는 호스트만 보관"] --> G{"전달 게이트 열림 · runtimeId 같음?"}
+  G -->|아니오| FAIL["failed · 전달 수에 안 들어감"]:::stop
+  G -->|예| DISP["dispatched · 카운터 숫자 기록 · 테두리 점멸 기본 · 효과음 보조"]:::ok
+  DISP --> RCV
+  subgraph PL["플러그인 · sandbox iframe 안 Worker"]
+    RCV["Blob과 objectLabel 수신 · 해시는 오지 않음"] --> ACK["ack · 받은 Blob의 SHA-256 · 2초 넘으면 timeout"]
+    RCV --> APIQ{"apiBase 있음?"}
+  end
+  APIQ -->|없음 · 비교 모드| FB["고정표로 결과"]
+  APIQ -->|있음| POST
+  subgraph SV["서버 /api/calorie"]
+    POST["POST image/jpeg 그대로 · x-label = objectLabel"] --> RES["200 한 줄 · 받은 바이트와 해시를 응답 헤더로"]
+  end
+  POST -.->|3초 초과 · 413 · 415 · 429 · 502| FB
+  RES --> OUT["결과 한 줄"]
+  FB --> OUT
+  OUT --> HUD["HUD와 로그 갱신 · 로그 바이트 = 서버가 받은 바이트"]:::ok
+  HUD --> OW["바깥 표시 /outward · 같은 브라우저 창만 · 숫자만 전달"]
+  classDef ok fill:#DFF3EA,stroke:#0B7350,color:#17201E
+  classDef warn fill:#FCEAD3,stroke:#A95400,color:#17201E
+  classDef stop fill:#FBE3E2,stroke:#BB2527,color:#17201E
+  classDef muted fill:#E9EDEB,stroke:#9AA5A1,color:#17201E
+  </pre></div>
+  <p class="cap">찍히는 사람이 볼 수 있는 것은 바깥 표시 화면뿐이고, 그 화면은 발표 노트북의 두 번째 창이라 심사위원 폰과는 연결되지 않습니다. 카운터는 화면 로그(최근 100건)와 따로 쌓은 숫자 기록에서 나오므로 로그가 밀려나도 줄지 않습니다. 같은 장면이 이어지면 쿨다운이 끝날 때마다 다시 포착합니다.</p>
+</section>
+
+<section>
+  <h2>3. 라이브 화면에서 갈라지는 조작</h2>
+  <p>권한·입력·모드를 바꾸는 조작은 모두 4장의 전환 절차를 거칩니다. 나머지는 화면만 바뀝니다.</p>
+  <div class="table"><table>
+    <thead><tr><th>조작</th><th>누가</th><th>거치는 길</th><th>화면에서 보이는 결과</th></tr></thead>
+    <tbody>
+      <tr><td>로그 항목 열기</td><td>착용자</td><td>읽기만</td><td>썸네일·바이트·면적 비율·분기, 상세에 해시와 수신 확인 상태. 확인 화면에서 "이 플러그인이 본 것은 이 사진 N장뿐" <span class="tag ok">초록</span></td></tr>
+      <tr><td>매니페스트 JSON 고치기</td><td>개발자</td><td>잘못된 JSON이면 기존 값 유지. 통과하면 전환 절차</td><td><code>maxSide</code> 256 → 64면 다음 전달부터 바이트가 줄어듦</td></tr>
+      <tr><td><code>network</code>에서 주소 지우기</td><td>발표자</td><td>전환 절차(새 CSP)</td><td>칼로리 호출 실패, 서버 도달 0건, 결과 줄에 "(고정표)" <span class="tag stop">빨강</span></td></tr>
+      <tr><td>변조 플러그인 켜기</td><td>발표자</td><td>전환 절차</td><td>카메라·호스트 화면·외부 서버·외부 스크립트 네 가지 시도 실패. 로그는 "플러그인 내부 보고", 증거는 네트워크 탭의 서버 도달 0건, HUD 빨강 <span class="tag stop">빨강</span></td></tr>
+      <tr><td>비교 모드 켜기</td><td>발표자 화면에만</td><td>전환 절차(<code>connect-src 'none'</code>, <code>apiBase: null</code>)</td><td>원본 전체 전달, 서버 요청 0건, 차단 기록 없음, 상단 주황 띠, 카운터 주황 <span class="tag warn">주황</span></td></tr>
+      <tr><td>전달 일시 정지</td><td>발표자 화면에만</td><td>모든 플러그인의 전달 게이트만 닫음(iframe은 그대로)</td><td>일시 정지 중 전달 0건, 다시 누르면 재개</td></tr>
+      <tr><td>비교 모드 끄기</td><td>발표자 화면에만</td><td>전환 절차(원래 <code>network</code>)</td><td>보호 표시는 즉시 바뀌고, 카운터와 바깥 표시는 10초 안에 0. raw 썸네일 해제, 숫자 기록은 남김</td></tr>
+      <tr><td>입력을 녹화 영상으로 바꾸기</td><td>발표자·심사위원</td><td>전환 절차</td><td>플러그인 코드 수정 없이 같은 흐름</td></tr>
+      <tr><td>새 세션 시작</td><td>발표자</td><td>전환 절차 + 카운터 초기화</td><td>모든 숫자 0, 비교 모드 꺼짐. 이미 보낸 데이터를 회수하지는 않음</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>4. 전환 공통 절차</h2>
+  <p>매니페스트 적용, 비교 모드 켜기·끄기, 입력 전환, 새 세션 시작이 모두 같은 순서를 따릅니다. 이전 권한으로 자동 복귀하는 길은 없습니다.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  T0["전환 요청"] --> T1["1 전달 게이트 닫기"]
+  T1 --> T2["2 진행 중 포착 · 인코딩 · 해시 버림"]
+  T2 --> T3["3 옛 iframe과 Worker 종료"]
+  T3 --> T4["4 새 정책으로 iframe 생성 · runtimeId 새로"]
+  T4 --> T5{"3초 안에 새 ready?"}
+  T5 -->|예| T6["5 게이트 열기 · 다음 전달부터 새 정책"]:::ok
+  T5 -->|아니오| T7["플러그인 정지 · 옛 권한으로 안 돌아감 · 사용자가 다시 켜야 함"]:::stop
+  classDef ok fill:#DFF3EA,stroke:#0B7350,color:#17201E
+  classDef stop fill:#FBE3E2,stroke:#BB2527,color:#17201E
+  </pre></div>
+  <p class="cap">옛 iframe에서 늦게 도착한 <code>ready</code>·<code>ack</code>·<code>result</code>는 <code>runtimeId</code>가 달라 버려집니다.</p>
+</section>
+
+<section>
+  <h2>팀원 "유저플로우 SSRD판"과 달라진 곳</h2>
+  <p>팀원 판은 팀원 SSRD v2 계약으로 그려졌습니다. 기준 계약을 02-SSRD로 정했으므로 아래가 바뀝니다.</p>
+  <div class="table"><table>
+    <thead><tr><th>항목</th><th>팀원 판</th><th>이번 판(02-SSRD)</th></tr></thead>
+    <tbody>
+      <tr><td>첫 메시지</td><td><code>ready</code> 뒤 <code>boot</code></td><td><code>init</code>(매니페스트, <code>apiBase</code>, 코드) → <code>ready</code> → <code>delivery</code></td></tr>
+      <tr><td>칼로리 라벨</td><td><code>label</code> 쿼리 문자열</td><td><code>x-label</code> 헤더, 값은 물체 라벨(<code>objectLabel</code>)</td></tr>
+      <tr><td>음식 우선 영역</td><td>프레임 중앙 50%</td><td>화면 가운데 60%</td></tr>
+      <tr><td>빈도 제한</td><td>최근 60초 전달 수</td><td>고정 간격 쿨다운 <code>60 / maxPerMinute</code>초, 보류도 쿨다운 시작</td></tr>
+      <tr><td>2단계 분기</td><td>조각에서 얼굴을 찾으면 2b</td><td>사람 박스마다 얼굴 대응을 따로 판단, 한 사람이라도 보류 조건이면 전체 보류</td></tr>
+      <tr><td>출구 검사</td><td>보이는 얼굴이 있으면 폐기</td><td>같음. 검사가 실패해도 0으로 세지 않고 보류</td></tr>
+      <tr><td>해시</td><td>로그에 먼저 남기고 보냄</td><td>기대 해시는 호스트만 보관하고 메시지에 싣지 않음</td></tr>
+      <tr><td>보낸 것으로 세는 기준</td><td>로그에 남으면 전달</td><td><code>dispatched</code>만 전달. 거부되면 <code>failed</code></td></tr>
+      <tr><td>기록 구조</td><td><code>DeliveryLog</code>, <code>PluginReportLog</code>, <code>RuntimeState</code></td><td><code>LogEntry</code>, <code>Delivery</code>, <code>Counter</code>(화면 로그와 별개인 숫자 기록)</td></tr>
+      <tr><td>비교 모드 켤 때</td><td>칼로리 호출이 막혀 차단 기록과 섞임</td><td><code>apiBase: null</code>이라 요청을 아예 하지 않음</td></tr>
+      <tr><td>비교 모드 끈 직후</td><td>즉시 0</td><td>보호 표시는 즉시, 카운터는 10초 안에 0</td></tr>
+      <tr><td>바깥 표시로 보내는 값</td><td><code>RuntimeState</code></td><td>숫자와 불리언만(<code>OutwardMessage</code>)</td></tr>
+      <tr><td>시작 버튼</td><td>뺐음</td><td>유지(오디오 잠금 해제, 카메라 권한 요청)</td></tr>
+      <tr><td>인식 엔진 실패</td><td>그림에 없음</td><td>GPU → CPU, 둘 다 실패하면 전달 정지</td></tr>
+      <tr><td>전환 실패</td><td>그림에 없음</td><td>3초 안에 <code>ready</code>가 없으면 플러그인 정지</td></tr>
+    </tbody>
+  </table></div>
+  <p class="cap">팀원 판이 "팀이 정해야 할 것"으로 남긴 다섯 가지 중 같은 장면 재전달, 대상 재검출 실패, 비교 모드 직후 카운터, 비교 모드 켤 때의 처리는 위 표대로 정해졌습니다. 사람 장면의 "전달 0건"은 로그에 남기기로 정했습니다(결정판 N5).</p>
+</section>
+
+<section>
+  <h2>그림에 반영된 결정</h2>
+  <p>결정판(<a href="https://claude.ai/artifact/44qiV2yhoVjVFDFzR6RGPt">LensGate 착수 결정판</a>)에서 2026-10-31에 정한 것입니다.</p>
+  <div class="table"><table>
+    <thead><tr><th>결정판</th><th>정한 것</th><th>그림의 위치</th></tr></thead>
+    <tbody>
+      <tr><td>N1</td><td>10초 목표는 유지. 첫 화면과 첫 판정을 나눠 재고, 권한을 묻는 동안 모델을 미리 받음</td><td>1장 시작 버튼</td></tr>
+      <tr><td>N2</td><td>얼굴 검출은 가까운 얼굴을 정밀하게, 먼 사람은 사람 검출로 머리 영역을 넓게 가리도록 나눈 설계</td><td>2장 사람별 얼굴 대응</td></tr>
+      <tr><td>N3</td><td>테두리 점멸과 "전달됨" 표시가 기본, 효과음은 보조</td><td>2장 전달 신호</td></tr>
+      <tr><td>N5</td><td>사람 장면의 "전달 0건"은 로그에 남김</td><td>2장 "선언하지 않은 장면"</td></tr>
+      <tr><td>N6</td><td>시작 버튼 유지</td><td>1장 시작 버튼</td></tr>
+      <tr><td>N12</td><td>플러그인이 요청한 주소 중 호스트 허용 목록과 겹치는 것만 허용, 승인 화면 없음</td><td>3장 주소 지우기</td></tr>
+      <tr><td>N14</td><td>발표자 화면에 전달 일시 정지·새 세션 시작</td><td>3장</td></tr>
+      <tr><td>32</td><td>비교 모드 띠는 주황</td><td>3장 비교 모드 켜기</td></tr>
+      <tr><td>33</td><td><code>/hud</code> D-pad: 좌우 최근 전달물, 선택 상세, 뒤로 닫기</td><td>1장 화면 모드</td></tr>
+      <tr><td>N9</td><td>F19는 비활성 "미구현" 안내</td><td>그림에 없음(설정 화면)</td></tr>
+    </tbody>
+  </table></div>
+  <p class="cap">아직 남은 것: 제품명(팀이 직접 정함), 제품 정의를 "감각 접근 계약"으로 올릴지(결정판 N10).</p>
+</section>
+</main>
