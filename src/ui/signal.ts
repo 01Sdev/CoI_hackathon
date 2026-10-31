@@ -30,7 +30,9 @@ export function playDeliveryTone(): void {
   osc.stop(t + 0.13);
 }
 
-/** Android 40ms 진동. iPhone에는 navigator.vibrate가 없다(FR-040 typeof 가드). */
+/** Android 40ms 진동. iPhone에는 navigator.vibrate가 없다(FR-040 typeof 가드). 사용자가 한 번도 누르지 않은 페이지는 Chrome이 막으므로 부르지 않는다. */
 export function vibrateDelivery(): void {
-  if (typeof navigator.vibrate === 'function') navigator.vibrate(40);
+  if (typeof navigator.vibrate !== 'function') return;
+  if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+  navigator.vibrate(40);
 }
