@@ -410,6 +410,14 @@ check('enabledKind·cameraFor: 플러그인은 앱 화면에서 그 하나만, �
   assert.equal(cameraFor('desktop', false), 'webcam');
 });
 
+check('cameraUnavailable: 녹화 영상으로 바뀜(fallbackFrom)이나 카메라·대체 영상 모두 실패(inputError)면 안내', () => {
+  assert.equal(cameraUnavailable(null, null), false, '아직 여는 중');
+  assert.equal(cameraUnavailable({ fallbackFrom: null }, null), false, '카메라가 열림');
+  assert.equal(cameraUnavailable({ fallbackFrom: 'rear' }, null), true, '카메라 실패 → 녹화 영상');
+  // 권한은 허용됐는데 카메라와 대체 영상이 모두 실패: input은 null, inputError만 있다(#59)
+  assert.equal(cameraUnavailable(null, { kind: 'video', fallbackFrom: 'rear', at: 1 }), true);
+});
+
 check('homeApps·homeRows: 4/5/4 열세 칸, 정가운데(둘째 줄 3번째)가 framelet', () => {
   assert.deepEqual([...HOME_ROWS], [4, 5, 4]);
   const apps = homeApps(APP_NAME);
@@ -448,14 +456,6 @@ check('outfitPanelOpen·closedOnEnter: 칼로리에서는 코디 스캔 패널�
   assert.equal(outfitPanelOpen(true, 't2', reentered), true);
   // 질문이 하나도 없으면 없음
   assert.equal(outfitPanelOpen(true, null, closedOnEnter(null)), false);
-});
-
-check('cameraUnavailable: 녹화 영상으로 바뀜(fallbackFrom)이나 카메라·대체 영상 모두 실패(inputError)면 안내', () => {
-  assert.equal(cameraUnavailable(null, null), false, '아직 여는 중');
-  assert.equal(cameraUnavailable({ fallbackFrom: null }, null), false, '카메라가 열림');
-  assert.equal(cameraUnavailable({ fallbackFrom: 'rear' }, null), true, '카메라 실패 → 녹화 영상');
-  // 권한은 허용됐는데 카메라와 대체 영상이 모두 실패: input은 null, inputError만 있다(#59)
-  assert.equal(cameraUnavailable(null, { kind: 'video', fallbackFrom: 'rear', at: 1 }), true);
 });
 
 console.log(`\n${passed}개 통과`);
