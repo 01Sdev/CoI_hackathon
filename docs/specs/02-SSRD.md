@@ -160,7 +160,7 @@ type OutwardMessage = { type: 'outward'; apps: number; compareMode: boolean; at:
 // apps = Counter.outwardApps. 보내는 쪽: C 메인 창(Counter가 바뀔 때마다 재발행만, 직접 계산 금지)
 ```
 
-- 숫자와 불리언만 싣는다. 이미지·라벨·로그는 절대 싣지 않는다. 메인 창은 Counter 재계산 주기(ERD: 1초)마다 재발행한다. `at`은 창마다 기준이 다른 `performance.now()`가 아니라 `Date.now()`. `/outward`는 마지막 메시지가 일정 시간(미정) 넘게 낡으면 초록 대신 회색 "연결 끊김"을 보여 거짓 안심을 막는다 [제안].
+- 숫자와 불리언만 싣는다. 이미지·라벨·로그는 절대 싣지 않는다. 메인 창은 Counter 재계산 주기(ERD: 1초)마다 재발행한다. `at`은 창마다 기준이 다른 `performance.now()`가 아니라 `Date.now()`. `/outward`는 마지막 메시지가 5초 넘게 낡으면 초록 대신 회색 "연결 끊김"을 보여 거짓 안심을 막는다 [제안].
 - `/hud`는 bus가 없는 별도 창이 아니라 A·B·C 전체가 도는 페이지다(HUD 배치, 입력은 녹화 영상). 스토어 없이 도는 창은 `/outward`뿐이다.
 - `apps`의 집계 기간은 ERD 정의(최근 10초)를 따른다(PRD에는 없음 → 검토 메모 4).
 
@@ -272,7 +272,7 @@ declare function validateManifest(json: string, pluginId: string): { ok: true; m
 { "purpose": "음식 칼로리 추정", "scenes": ["food"], "region": "target", "maxSide": 256, "quality": 0.8, "maxPerMinute": 6, "network": ["$ORIGIN"] }
 ```
 
-(`quality` 예시값은 범위 안의 임의값이며 기본값은 미정)
+(`quality` 기본값은 0.8. 03-SRS EI-4, `MANIFEST_DEFAULTS`와 같다)
 
 | 규칙 | 이유 |
 | --- | --- |
