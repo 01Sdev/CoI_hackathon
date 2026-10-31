@@ -4,57 +4,14 @@
 import { PLUGIN_SEEDS, type PluginSeed } from '../src/core/plugins';
 import type { FameletSdk } from '../src/core/sdk';
 import { selectPluginTotals } from '../src/core/selectors';
-import { createLensStore, type LensStore, type NewDelivery } from '../src/core/store';
-import type { AckStatus, Delivery } from '../src/core/types';
-import { createPluginHost, sha256Hex, type PluginHost } from '../src/plugins/host';
+import { createLensStore } from '../src/core/store';
+import { createPluginHost, sha256Hex } from '../src/plugins/host';
 import { pluginSourceFor } from '../src/plugins/registry';
 import { sha256Pure } from '../src/plugins/sdk/sha256';
 import { pluginCall, type SdkTestOptions } from '../src/plugins/sdk/source';
+import { FIXTURE, FIXTURE_SHA256 as EXPECTED_SHA256, createReport, deliver, el, prepare, waitFor } from './lib';
 
-/** docs/specs/08-데모-소재.md §1. */
-const EXPECTED_SHA256 = '358dbf25d013fc82e1a6e8fdeca1f735cf1b8aad35a445c63f01aa39033605e8';
-const FIXTURE = '/dev/fixtures/m0-test.jpg';
-
-interface Row {
-  name: string;
-  pass: boolean;
-  detail: string;
-}
-declare global {
-  interface Window {
-    __m0?: { done: boolean; pass: boolean; rows: Row[] };
-  }
-}
-const rows: Row[] = [];
-window.__m0 = { done: false, pass: false, rows };
-
-const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-function record(name: string, pass: boolean, detail: string) {
-  rows.push({ name, pass, detail });
-  const tr = document.createElement('tr');
-  for (const [text, cls] of [
-    [String(rows.length), ''],
-    [name, ''],
-    [pass ? '통과' : '실패', pass ? 'pass' : 'fail'],
-    [detail, ''],
-  ] as const) {
-    const td = document.createElement('td');
-    td.textContent = text;
-    if (cls) td.className = cls;
-    tr.appendChild(td);
-  }
-  el('rows').appendChild(tr);
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function waitFor(cond: () => boolean, timeoutMs: number): Promise<boolean> {
-  const t0 = performance.now();
-  while (performance.now() - t0 < timeoutMs) {
-    if (cond()) return true;
-    await sleep(5);
-  }
-  return cond();
-}
+const { record, finish } = createReport('__m0');
 
 // ── 시험용 플러그인 ──
 const helloJson = PLUGIN_SEEDS.find((s) => s.id === 'hello')!.manifestJson;
@@ -91,56 +48,6 @@ function noReadyPlugin(famelet: FameletSdk): void {
   famelet.onInit(() => new Promise<void>(() => undefined));
 }
 let spoofTarget: { deliveryId: string; sha256: string } | null = null;
-
-function prepare(store: LensStore, pluginId: string, blob: Blob, sha256: string, over: Partial<NewDelivery> = {}) {
-  const s = store.getState();
-  const p = s.plugins[pluginId];
-  if (!p) return null;
-  return s.prepareDelivery(
-    {
-      pluginId,
-      manifestVersion: p.runtimePolicy?.manifestVersion ?? p.manifest.version,
-      runtimeId: p.runtimeId ?? '',
-      scene: 'food',
-      objectLabel: 'pizza',
-      branch: '2a',
-      bytes: blob.size,
-      width: 256,
-      height: 192,
-      areaRatio: 1,
-      cropRect: { x: 0, y: 0, w: 256, h: 192 },
-      facesMasked: 0,
-      faceCheck: { status: 'checked', detectedFaces: 0 },
-      location: 'browser',
-      sha256,
-      thumbnailRef: null,
-      blob,
-      ...over,
-    },
-    { sceneDecisionId: null, reason: 'M0' },
-  );
-}
-
-async function deliver(store: LensStore, host: PluginHost, pluginId: string, blob: Blob, sha256: string) {
-  const prepared = prepare(store, pluginId, blob, sha256);
-  if (!prepared) return { sent: false, status: 'pending' as AckStatus, ms: 0, delivery: null as Delivery | null };
-  const id = prepared.delivery.id;
-  // 시각은 스토어 구독으로 잰다(배경 탭에서는 setTimeout 폴링이 1초 단위로 늦어진다).
-  let ackedAt: number | null = null;
-  const unsub = store.subscribe(
-    (s) => s.deliveries[id]?.ackStatus,
-    (st) => {
-      if (st !== 'pending' && ackedAt === null) ackedAt = performance.now();
-    },
-  );
-  const t0 = performance.now();
-  const sent = host.sendDelivery(id);
-  await waitFor(() => ackedAt !== null, 3_000);
-  unsub();
-  const delivery = store.getState().deliveries[id] ?? null;
-  const ms = ackedAt === null ? -1 : Math.round((ackedAt - t0) * 10) / 10;
-  return { sent, status: delivery?.ackStatus ?? 'pending', ms, delivery };
-}
 
 async function run() {
   const blob = await fetch(FIXTURE).then((r) => r.blob());
@@ -279,7 +186,8 @@ async function run() {
       spoofLogs.length === 1 &&
       spoofLogs[0]!.enforcedBy === 'host' &&
       spoofLogs[0]!.reason.includes('보내지 않은 deliveryId'),
-    spoofLogs.map((l) => `${l.reason}(${l.enforcedBy})`).join(' / ') || '로그 없음',
+    `spoof ${store.getState().plugins['hello-spoof']?.status} sent=${spoofSent} · ` +
+      (spoofLogs.map((l) => `${l.reason}(${l.enforcedBy})`).join(' / ') || '로그 없음'),
   );
 
   // sendDelivery 거부 → failed, 전달 수에 안 들어감.
@@ -343,13 +251,7 @@ async function run() {
     `status=${rl.status} · 로그 "${reloadLog?.reason ?? '없음'}"(${reloadLog?.enforcedBy ?? '-'})`,
   );
 
-  const pass = rows.every((r) => r.pass);
-  el('summary').textContent = pass ? `M0 통과 (${rows.length}/${rows.length})` : `실패 ${rows.filter((r) => !r.pass).length}건`;
-  window.__m0 = { done: true, pass, rows };
+  finish('M0');
 }
 
-run().catch((err: unknown) => {
-  record('실행 오류', false, String(err));
-  el('summary').textContent = '실행 오류';
-  window.__m0 = { done: true, pass: false, rows };
-});
+run().catch((err: unknown) => finish('M0', err));

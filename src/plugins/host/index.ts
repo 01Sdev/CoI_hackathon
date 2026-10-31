@@ -433,6 +433,32 @@ export function sendDelivery(deliveryId: string): boolean {
   return false;
 }
 
+type DeliveryMessage = Extract<HostToPlugin, { type: 'delivery' }>;
+
+/**
+ * 트랙 A broker의 `connectPluginHost(send)`에 넘기는 모양(PR #11의 SendDelivery). 받은 메시지가 스토어 Delivery와
+ * 같을 때(같은 Blob 객체 포함)만 sendDelivery로 보낸다. 다르면 failed. 실제로 보내는 메시지는 스토어에서 다시 만든다.
+ */
+export function sendDeliveryMessage(pluginId: string, msg: DeliveryMessage): void {
+  const s = lensStore.getState();
+  const d = s.deliveries[msg.deliveryId];
+  if (!d || d.sendStatus !== 'prepared') return;
+  const same =
+    d.pluginId === pluginId &&
+    d.blob === msg.blob &&
+    d.bytes === msg.bytes &&
+    d.scene === msg.scene &&
+    d.objectLabel === msg.objectLabel &&
+    d.width === msg.width &&
+    d.height === msg.height;
+  if (!same) {
+    console.warn(`[plugins] 전달 메시지가 스토어 Delivery와 다름(${pluginId}, ${msg.deliveryId})`);
+    s.markDelivery(d.id, 'failed');
+    return;
+  }
+  sendDelivery(msg.deliveryId);
+}
+
 /** Delivery.sha256(소문자 16진). crypto.subtle(LAN HTTP에서는 없음)이 없으면 순수 JS. */
 export async function sha256Hex(blob: Blob): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());

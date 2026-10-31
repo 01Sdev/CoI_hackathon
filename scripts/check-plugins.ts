@@ -9,9 +9,10 @@ import { build } from 'esbuild';
 import { PLUGIN_MESSAGE_LIMITS } from '../src/core/constants';
 import { buildCsp, buildSrcdoc, safeConnectList } from '../src/plugins/host/csp';
 import { parsePluginMessage, violationReason } from '../src/plugins/host/validate';
+import { CALORIE_FALLBACK_TABLE, UNKNOWN_FOOD_TEXT, caloriePlugin } from '../src/plugins/calorie';
 import { pluginSourceFor } from '../src/plugins/registry';
 import { sha256Pure } from '../src/plugins/sdk/sha256';
-import { buildWorkerSource } from '../src/plugins/sdk/source';
+import { buildWorkerSource, pluginCall } from '../src/plugins/sdk/source';
 
 let passed = 0;
 async function check(name: string, fn: () => void | Promise<void>) {
@@ -134,7 +135,7 @@ interface FakeWorker {
   posted: Record<string, unknown>[];
   dispatch(data: unknown): void;
 }
-function runWorker(source: string, withSubtle: boolean): FakeWorker {
+function runWorker(source: string, withSubtle: boolean, extra: Record<string, unknown> = {}): FakeWorker {
   const posted: Record<string, unknown>[] = [];
   const listeners: ((e: { data: unknown }) => void)[] = [];
   const ctx: Record<string, unknown> = {
@@ -144,6 +145,7 @@ function runWorker(source: string, withSubtle: boolean): FakeWorker {
     clearTimeout,
     Blob,
     crypto: withSubtle ? webcrypto : undefined,
+    ...extra,
   };
   ctx.self = ctx;
   vm.createContext(ctx);
@@ -235,6 +237,93 @@ async function sdkSuite(label: string, make: (plugin: string, test?: Parameters<
     assert.equal(w.posted[2]!.source, 'fallback');
   });
 }
+
+
+// ── 칼로리 플러그인(가짜 fetch) ──
+interface FetchCall {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body: unknown;
+}
+async function runCalorie(apiBase: string | null, fetchImpl: (call: FetchCall, signal: AbortSignal) => Promise<Response>, label = 'pizza') {
+  const calls: FetchCall[] = [];
+  const fetchMock = (url: string, init: { method: string; headers: Record<string, string>; body: unknown; signal: AbortSignal }) => {
+    const call = { url, method: init.method, headers: init.headers, body: init.body };
+    calls.push(call);
+    return fetchImpl(call, init.signal);
+  };
+  // 시간 제한은 50ms로 줄여 넣는다(제품은 CALORIE_CLIENT_TIMEOUT_MS = 3초).
+  const src = buildWorkerSource(pluginCall(caloriePlugin, CALORIE_FALLBACK_TABLE, 50, UNKNOWN_FOOD_TEXT));
+  const w = runWorker(src, true, { fetch: fetchMock, AbortController, Response });
+  w.dispatch({ ...init, apiBase });
+  await tick();
+  w.dispatch({ ...delivery('d1'), objectLabel: label });
+  await tick(150);
+  return { posted: w.posted.slice(1), calls };
+}
+const never = (_c: FetchCall, signal: AbortSignal) =>
+  new Promise<Response>((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+
+await check('칼로리: 200 → 서버 한 줄(api), Blob 그대로·image/jpeg·x-label', async () => {
+  const r = await runCalorie('https://h.example', async () => new Response('피자 약 300kcal\n', { status: 200 }), 'hot dog');
+  assert.equal(r.calls.length, 1);
+  assert.equal(r.calls[0]!.url, 'https://h.example/api/calorie');
+  assert.equal(r.calls[0]!.method, 'POST');
+  assert.ok(r.calls[0]!.body instanceof Blob);
+  assert.equal((r.calls[0]!.body as Blob).size, fixture.length);
+  assert.deepEqual({ ...r.calls[0]!.headers }, { 'Content-Type': 'image/jpeg', 'x-label': 'hot dog' });
+  assert.deepEqual(r.posted[1], { type: 'result', deliveryId: 'd1', text: '피자 약 300kcal', source: 'api' });
+});
+await check('칼로리: 비 200(502·429) → 고정표, 기록 없음', async () => {
+  for (const status of [502, 429, 413]) {
+    const r = await runCalorie('https://h.example', async () => new Response('x', { status }));
+    assert.deepEqual(r.posted.slice(1), [{ type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' }]);
+  }
+});
+await check('칼로리: 요청 실패(CSP·네트워크) → violation fetch + 고정표', async () => {
+  const r = await runCalorie('https://h.example', async () => {
+    throw new TypeError('Failed to fetch');
+  });
+  assert.deepEqual(r.posted.slice(1), [
+    { type: 'violation', attempt: 'fetch', target: 'https://h.example/api/calorie' },
+    { type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' },
+  ]);
+});
+await check('칼로리: 시간 초과(abort) → 고정표, 기록 없음', async () => {
+  const r = await runCalorie('https://h.example', never);
+  assert.deepEqual(r.posted.slice(1), [{ type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' }]);
+});
+await check('칼로리: apiBase null(비교 모드) → 요청 0, 고정표', async () => {
+  const r = await runCalorie(null, async () => new Response('x'));
+  assert.equal(r.calls.length, 0);
+  assert.deepEqual(r.posted.slice(1), [{ type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' }]);
+});
+await check('칼로리: 고정표 밖·헤더에 못 싣는 라벨 → 고정표 밖 문구, x-label 없음', async () => {
+  const r = await runCalorie('https://h.example', async () => new Response('x', { status: 502 }), 'Bowl!');
+  assert.deepEqual({ ...r.calls[0]!.headers }, { 'Content-Type': 'image/jpeg' });
+  assert.equal(r.posted[1]!.text, UNKNOWN_FOOD_TEXT);
+});
+
+// ── 변조 플러그인(Worker처럼 document·navigator·importScripts가 없는 vm) ──
+await check('변조: 켜면 4종 자기 보고, 차단 실패 없음', async () => {
+  const w = runWorker(buildWorkerSource(pluginSourceFor('tamper')!), true, {
+    fetch: async () => {
+      throw new TypeError('Failed to fetch');
+    },
+  });
+  w.dispatch(init);
+  await tick(50);
+  const v = w.posted.filter((m) => m.type === 'violation');
+  assert.deepEqual(
+    v.map((m) => m.attempt),
+    ['camera', 'hostDom', 'fetch', 'script'],
+  );
+  assert.equal(v[0]!.target, 'navigator.mediaDevices.getUserMedia → 없음');
+  assert.equal(v[1]!.target, 'document=ReferenceError · parent=ReferenceError · top=ReferenceError · localStorage=ReferenceError');
+  assert.equal(v[2]!.target, 'https://example.com/famelet-tamper');
+  assert.equal(v[3]!.target, 'https://example.com/famelet-tamper.js');
+});
 
 await sdkSuite('SDK(원본)', (plugin, test) => buildWorkerSource(plugin, test));
 
