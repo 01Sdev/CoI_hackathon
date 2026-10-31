@@ -60,7 +60,7 @@ flowchart LR
 | `drawImage(video…)`·`getImageData`·`getUserMedia`·`srcObject`·`captureStream`·`createImageBitmap`·`toBlob` | `input/`, `vision/` (`toBlob`은 `vision/`·`broker/`) |
 | `sendDelivery()` 호출(플러그인에 바이트를 보내는 유일한 함수) | `broker/` 한 곳 |
 | iframe으로의 `postMessage` | `plugins/host` 안 `sendInit`·`sendDelivery`만 |
-| 호스트 코드의 `fetch`·`XMLHttpRequest`·`WebSocket` | 없음(모델·WASM 정적 로드 제외) |
+| 호스트 코드의 `fetch`·`XMLHttpRequest`·`WebSocket` | 없음(모델·WASM 정적 로드 제외). **라이브러리가 몰래 보내는 요청도 막는다(P0, 2026-10-31 추가):** MediaPipe tasks-vision 1.2.0이 `https://odml.pa.googleapis.com/v1/log`로 POST를 시도한다(독립 데모 실측, 본문 미확인). 막는 방법은 아래 "호스트 페이지 CSP"와 V15 |
 | 플러그인이 보낸 문자열 렌더링 | `textContent`만(`innerHTML` 금지. 호스트 XSS는 곧 원본 접근이다) |
 | 카메라 미리보기 | A가 `mountPreview(container)`를 export하고 C는 컨테이너만 넘긴다. `<video>`·MediaStream 참조는 스토어에 넣지 않는다. 미리보기는 좌우 반전하지 않는다 [제안]. HUD 대상 위치(`SceneDecision.targetBox`, 소스 프레임 기준 0~1)를 그대로 겹치기 위해서다 |
 | `/dev/*` 테스트 페이지(목 호출 포함) | 프로덕션 빌드에서 제외 |
@@ -126,6 +126,15 @@ type PluginToHost =
 **발표 문구:** 위반 로그는 플러그인 자기 보고라 플러그인이 지어낼 수도 있다. 그래서 "차단은 브라우저가 강제하고, 로그는 플러그인 보고, 증거는 네트워크 탭"으로만 말한다. 보고를 위조하기 어렵게 만드는 장치(전용 포트, IIFE)는 이번 범위에서 두지 않는다.
 
 **플러그인 입력 위생:** 플러그인에서 온 모든 문자열 필드(`text`, `target`, `pluginId`)는 `textContent`로만 쓴다. 시작값 [제안]은 플러그인당 받는 메시지 초당 20건, 메시지 하나의 직렬화 크기 8KiB, `text` 200자, ID 128자, `target` 512자다. Blob·`MessagePort` 같은 정해지지 않은 타입은 받지 않는다. 형식이 틀린 메시지는 버리고 기록하며, 한도를 넘거나 위반이 반복되면 그 iframe을 종료하고 LogEntry(`enforcedBy: host`)를 남긴다. 이것은 앱의 처리량 제한이지 브라우저 차원의 CPU·메모리 격리 보장은 아니다. 부트스트랩은 `event.source === parent`인 `init`만, 1번만 받고 리스너를 지운다.
+
+**트랙 연결 기준 (2026-10-31 확정, 사용자 승인):**
+- **A → B 전달.** A의 중개기는 `connectPluginHost(send)`(`src/broker/broker.ts`, `src/vision`에서도 export)로 연결을 받는다. `send`의 모양은 `(pluginId, msg: DeliveryMessage) => void`이고, 돌아오기 전에 `markDelivery`를 써야 한다. B는 `startPluginHost()`와 `sendDelivery(deliveryId): boolean`을 export하고 A를 import하지 않는다. 둘은 `main.tsx`에서 허브가 잇는다: `connectPluginHost((_id, msg) => { sendDelivery(msg.deliveryId); })`. B의 `sendDelivery`가 안에서 `markDelivery`를 쓰므로 A의 요구를 지킨다.
+- **C → A 미리보기.** C는 A의 `src/input/preview.ts`의 `mountPreview(container)`를 부른다(런타임 시작 포함). 원본 픽셀은 A 안에 머문다.
+- **시작 배선.** `main.tsx`가 React 밖에서 시작 함수를 한 번씩 부른다. 시작 함수는 여러 번 불러도 한 번만 붙고 해제 함수를 돌려준다.
+
+**스토어가 막는 것 (2026-10-31 추가, 사용자 승인):**
+- `setResult`는 그 플러그인에 실제로 보낸(`dispatched`) 전달의 **첫** 결과만 받는다. 없는 전달·`prepared` 전달·다른 플러그인·두 번째 결과·새 세션 전 전달의 결과는 버리고 `false`를 돌려준다. 늦게 온 옛 결과가 새 세션 화면에 뜨거나 `apiSends`가 부풀어 "전달 수 = API 요청 수" 대조가 어긋나는 것을 막는다.
+- `setPluginRuntime`에 `gateOpen: true`와 함께 `desired`(그 iframe을 만든 때의 `selectDesiredRuntime` 값)를 주면, 지금 값과 다를 때 게이트를 열지 않는다. B가 `ready` 처리 중에 대조와 쓰기 사이에 await를 끼워도 낡은 정책으로 게이트가 열리지 않게 하는 보험이다. B는 게이트를 열 때 `desired`를 넘긴다.
 
 ### 플러그인 SDK (Worker 안의 전역 `famelet`, 2026-10-31 추가)
 
@@ -244,6 +253,7 @@ type OutwardMessage = { type: 'outward'; apps: number; compareMode: boolean; at:
    ```
    `clamped`일 때만 `X-Famelet-Kcal-Clamped: 1`을 붙인다. 한 판을 한 조각 값으로 덮어쓰지 않도록 기준값에 `portion`을 반영했다. 바꿀 때는 이름도 표의 이름으로 바꿔 숫자와 이름의 출처가 섞이지 않게 한다.
 7. 본문은 `${name} 약 ${kcal}kcal` 한 줄이다.
+8. **502일 때 로그 한 줄(2026-10-31 추가, 사용자 승인).** 서버는 `console.error`에 원인 한 줄만 남긴다. 예: `calorie 502 upstream=400 type=invalid_request_error` 또는 `calorie 502 timeout`. 이미지, 요청·응답 본문, 키는 남기지 않는다. 모델 이름이나 출력 형식이 틀려 매번 고정표로 빠져도 조용히 지나가지 않게 하기 위해서다. 배포 직후 실제 키로 1번 호출해 200을 확인한다(배포 체크리스트).
 
 `X_LABEL_RE = /^[a-z]+( [a-z]+)*$/`와 길이 32자 이하(`src/core/calorie.ts`). 소문자 단어를 공백 하나로 이은 것만 받는다. COCO 이름(가장 긴 것 14자, `hot dog` 포함)은 모두 통과하고, 줄바꿈·연속 공백·대문자·쉼표(중복 헤더가 `, `로 이어진 값)는 거른다. 플러그인도 같은 정규식을 통과할 때만 `x-label`을 붙인다.
 
@@ -284,6 +294,10 @@ declare function validateManifest(json: string, pluginId: string): { ok: true; m
 | 통과하면 A가 `manifest.version`을 올리고 B가 iframe을 다시 만든다 | 다음 전달부터 반영(F11) |
 
 iframe 문서 CSP(B가 생성해 `srcdoc`의 `<meta>`에 넣는다): `default-src 'none'; script-src 'nonce-<랜덤>'; worker-src blob:; connect-src <network 치환 결과 또는 'none'>` [제안: `script-src`·`worker-src` 추가분, 검토 메모 1]. nonce는 B가 iframe을 만들 때마다 `crypto.getRandomValues`로 새로 만들어 meta와 부트스트랩 `<script nonce>`에 같이 넣는다. 서버가 필요 없다. 이 구성은 iPhone Safari 실측(S1·S2·S3)에서 확인됐다. 팀원 v2가 Chrome에서 시험한 `script-src 'unsafe-inline'`은 대안이며 Safari에서는 미검증이다. 매니페스트 문자열이 `content="..."` 속성에 들어가므로 아래 `network` 정규식이 따옴표 주입도 막는다.
+
+**호스트 페이지의 외부 요청 차단 (P0, 2026-10-31 추가, 방법은 V15로 확정):** MediaPipe의 로그 요청(`odml.pa.googleapis.com`)이 나가면 "밖으로 나간 것은 조각 한 장뿐"이라는 발표 주장과 네트워크 탭 증거가 깨진다. 두 겹으로 막는다.
+1. **호스트 코드 가드:** `main.tsx`가 MediaPipe를 불러오기 전에, 호스트 창의 `fetch`·`XMLHttpRequest`·`navigator.sendBeacon`이 같은 origin이 아닌 주소로 가면 막고 `console.warn`을 남기게 감싼다. 브라우저가 강제하는 경계는 아니지만 라이브러리 요청은 이것으로 멈춘다.
+2. **호스트 CSP `connect-src`:** `script-src`는 여전히 두지 않고 `connect-src`만 둔다. 다만 srcdoc iframe에는 호스트 CSP가 교집합으로 걸리므로(S2), `connect-src 'self'`가 origin `null`인 Worker의 `$ORIGIN` 요청까지 막을 수 있다. **V15에서 iPhone Safari·Chrome으로 확인하기 전에는 넣지 않는다.** 막히면 `connect-src`에 호스트 origin을 절대 주소로 적는 방식(배포 주소가 정해진 뒤 Vercel 헤더)으로 바꾸고, 그것도 안 되면 1번만 쓴다.
 
 **호스트 페이지 CSP [제안]:** 호스트 페이지에는 `script-src`를 제한하는 CSP 헤더를 두지 않는다. iPhone Safari 실측(S2)에서 srcdoc iframe에는 호스트 CSP와 iframe CSP의 교집합이 적용됐다. 호스트 nonce와 iframe nonce가 다르면 부트스트랩이 실행되지 않아 메시지가 0건이었다. Vercel 정적 배포는 요청마다 nonce를 만들 수 없으므로 호스트 CSP를 두면 부트스트랩이 막힌다. 호스트 CSP가 꼭 필요하면 부트스트랩의 `sha256-` 해시를 호스트와 iframe 양쪽에 넣는다(미검증). iframe 속성 `sandbox="allow-scripts"`, `allow=""`는 붙인 직후 다시 읽어 확인한다(추가결정 §6 점검 항목). 호스트 CSP가 없으므로 호스트 코드의 `/api` POST는 §1 코드 규칙으로 막는다. blob Worker를 못 만들면 그 플러그인은 켜지 않는다(fail-closed, iframe 메인 스레드 폴백 금지. 자기 이동·WebRTC 탈출로가 다시 열리기 때문이다). 재로드 감지는 첫 `load` 이후의 `load`만 센다. iframe은 `srcdoc`과 `load` 리스너를 먼저 설정한 뒤 DOM에 붙인다. iPhone Safari 실측(S5)에서 이 순서로 만든 srcdoc 5개는 모두 최초 `load`가 1회였다. 다른 순서와 장시간 반복 실행은 미검증이다.
 
