@@ -8,7 +8,7 @@ import { selectActiveConsents } from '../core/selectors';
 import { lensStore, type NewDetection } from '../core/store';
 import type { Box, Consent, FaceCheck, SceneDecision } from '../core/types';
 import { deliver, hold, skip } from '../broker/broker';
-import { getInputEpoch, getVideo } from '../input/adapter';
+import { getInputEpoch, grabFrame } from '../input/adapter';
 import { cooldownUntil, decideBranch, headRegion, type ProtectedBranch } from './branch';
 import { VISION_CONFIG } from './config';
 import { area, clampToFrame, expand, fitLongSide, intersect, matchTarget, scaleBox, translate, type Found } from './geometry';
@@ -348,14 +348,15 @@ async function runCapture(t: Stage0Tick, decision: SceneDecision, objectLabel: s
   let frame: HTMLCanvasElement | null = null;
   const crops: HTMLCanvasElement[] = [];
   try {
-    const v = getVideo();
     const m = getModels();
-    if (!v || !m || v.videoWidth === 0 || getInputEpoch() !== token.inputEpoch) return;
-    const W = v.videoWidth;
-    const H = v.videoHeight;
+    // 광각이 켜져 있으면 휜 프레임. 0단계 박스·흰 틀(0~1)·조각 px가 모두 이 프레임 기준이다.
+    const src = m && getInputEpoch() === token.inputEpoch ? grabFrame() : null;
+    if (!m || !src) return;
+    const W = src.width;
+    const H = src.height;
     const f = canvasOf(W, H);
     frame = f.canvas;
-    f.ctx.drawImage(v, 0, 0, W, H);
+    f.ctx.drawImage(src.source, 0, 0, W, H);
     const frameRect = frameToPx(captureFrame, W, H);
 
     const raws = targets.filter((c) => c.raw);

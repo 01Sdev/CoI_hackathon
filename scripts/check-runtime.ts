@@ -13,6 +13,8 @@ import { selectActiveConsents } from '../src/core/selectors';
 import { sha256HexSync } from '../src/broker/sha256';
 import { blendMasked, dilate, dilateRadius, shapeMask } from '../src/vision/shape';
 import { createLensStore } from '../src/core/store';
+import { WIDE_WARP } from '../src/input/config';
+import { applyCpuMap, buildCpuMap, sourceUv, warpOutputSize, warpParams, type WarpSettings } from '../src/input/warp';
 import { gazeHeld, matchBoxes, pickConsent, pickGazeTarget, stepGaze, stepTracks, type Track } from '../src/vision/track';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -503,6 +505,101 @@ check('게이트: 코디 스캔(outfit)은 켜면 person 장면에서만 포착 
   const person = planCapture(st.getState(), 'person', 0);
   assert.deepEqual(person.capture.map((c) => [c.pluginId, c.kind, c.maxSide, c.raw]), [['outfit', 'outfit', 512, false]]);
   assert.ok(planCapture(st.getState(), 'food', 0).undeclared.includes('outfit'));
+});
+
+// ── 광각(양옆 휘어짐, docs/designs/input-wide-warp.md). 인계 landscape-wrap.cjs의 핵심 검사를 CPU 수식으로 옮겼다 ──
+const warpSet = (o: Partial<WarpSettings> = {}): WarpSettings => ({ periphery: 0, strength: 0, framing: 1, lookX: 0, lookY: 0, fit: 'cover', ...o });
+/** 640×360 시험 그림(landscape-wrap.cjs paint): 바탕 (64,96,128), 40px마다 세로선, y=90·270 노란 가로선(두께 4), 위 모서리 빨강·초록. */
+function warpFixture(): Uint8ClampedArray {
+  const W = 640, H = 360;
+  const px = new Uint8ClampedArray(W * H * 4);
+  const put = (x: number, y: number, r: number, g: number, b: number) => {
+    const i = 4 * (y * W + x);
+    px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = 255;
+  };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) put(x, y, 64, 96, 128);
+  for (let x = 40; x < W; x += 40) for (let y = 0; y < H; y++) put(x, y, 0x8d, 0xac, 0xc9);
+  for (const ly of [90, 270]) for (let y = ly - 2; y < ly + 2; y++) for (let x = 0; x < W; x++) put(x, y, 255, 255, 0);
+  for (let y = 10; y < 34; y++) for (let x = 10; x < 34; x++) put(x, y, 0xff, 0x33, 0x33);
+  for (let y = 10; y < 34; y++) for (let x = W - 34; x < W - 10; x++) put(x, y, 0x33, 0xff, 0x33);
+  return px;
+}
+function warpRender(src: Uint8ClampedArray, w: number, h: number, s: WarpSettings): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(w * h * 4);
+  applyCpuMap(buildCpuMap(w, h, 640, 360, warpParams(640 / 360, w / h, s)), src, out);
+  return out;
+}
+
+check('광각 기본값: cover·strength 0·framing 1·시선 0/0·periphery 0.82(인계 기본 0.80과 구분), 켜짐', () => {
+  assert.deepEqual(
+    [WIDE_WARP.enabled, WIDE_WARP.fit, WIDE_WARP.strength, WIDE_WARP.framing, WIDE_WARP.lookX, WIDE_WARP.lookY, WIDE_WARP.periphery],
+    [true, 'cover', 0, 1, 0, 0, 0.82],
+  );
+});
+
+check('광각 출력 크기: 원본 비율·긴 변 1280 이하·키우지 않음·세로 입력은 세로 그대로(자동 회전 없음)', () => {
+  assert.deepEqual(warpOutputSize(1280, 720, 1280), { width: 1280, height: 720 });
+  assert.deepEqual(warpOutputSize(1920, 1080, 1280), { width: 1280, height: 720 });
+  assert.deepEqual(warpOutputSize(720, 1280, 1280), { width: 720, height: 1280 });
+  assert.deepEqual(warpOutputSize(640, 480, 1280), { width: 640, height: 480 });
+  assert.deepEqual(warpOutputSize(1280, 720, 640), { width: 640, height: 360 });
+});
+
+check('광각 0 효과(periphery 0): 확대 1·이동 0, 같은 RGBA 입력과 픽셀 오차 0', () => {
+  const p = warpParams(640 / 360, 640 / 360, warpSet());
+  assert.deepEqual([p.z, p.ox, p.oy], [1, 0, 0]);
+  const src = warpFixture();
+  const out = warpRender(src, 640, 360, warpSet());
+  let max = 0;
+  for (let i = 0; i < src.length; i++) max = Math.max(max, Math.abs((out[i] ?? 0) - (src[i] ?? 0)));
+  assert.equal(max, 0);
+});
+
+check('광각 0.82·0.80: 위쪽 노란 가로선이 양옆에서 안쪽으로 15px 넘게 휘고 좌우 대칭(2px 미만)', () => {
+  const src = warpFixture();
+  for (const periphery of [0.82, 0.8]) {
+    const out = warpRender(src, 640, 360, warpSet({ periphery }));
+    const lineY = (x: number) => {
+      let total = 0, n = 0;
+      for (let y = 15; y < 150; y++) {
+        const i = 4 * (y * 640 + x);
+        if ((out[i] ?? 0) > 180 && (out[i + 1] ?? 0) > 180 && (out[i + 2] ?? 0) < 70) { total += y; n++; }
+      }
+      return total / n;
+    };
+    const [l, c, r] = [lineY(64), lineY(320), lineY(575)];
+    assert.ok(l - c > 15 && r - c > 15, `${periphery}: ${l} ${c} ${r}`);
+    assert.ok(Math.abs(l - r) < 2, `${periphery}: ${l} ${r}`);
+  }
+});
+
+check('광각 cover 극값 5조합: 검은(원본 밖) 픽셀 0', () => {
+  const src = warpFixture();
+  const cases: [number, number, number, number, number, number][] = [
+    [0, 0, 16 / 9, 1, 0, 0],
+    [0.9, 0.5, 4 / 3, 1, 0, 0],
+    [0.9, 0.5, 7 / 3, 1, 0, 0],
+    [0.9, 0.5, 16 / 9, 2, 1, -1],
+    [0.9, 0.5, 16 / 9, 2, -1, 1],
+  ];
+  for (const [periphery, strength, aspect, framing, lookX, lookY] of cases) {
+    const w = 640;
+    const h = Math.max(2, Math.round(640 / aspect / 2) * 2);
+    const out = warpRender(src, w, h, warpSet({ periphery, strength, framing, lookX, lookY }));
+    let black = 0;
+    for (let i = 0; i < out.length; i += 4) if ((out[i] ?? 0) + (out[i + 1] ?? 0) + (out[i + 2] ?? 0) < 10) black++;
+    assert.equal(black, 0, JSON.stringify({ periphery, strength, aspect, framing, lookX, lookY }));
+  }
+});
+
+check('광각 기본값(cover 0.82)은 출력 어디서도 원본 밖을 읽지 않는다(16:9·9:16, 모서리·가장자리 표본)', () => {
+  for (const [sw, sh] of [[1280, 720], [720, 1280]] as const) {
+    const { width: w, height: h } = warpOutputSize(sw, sh, 1280);
+    const p = warpParams(sw / sh, w / h, { ...WIDE_WARP });
+    for (const [x, y] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0], [0, 0.5], [1, 0.5], [0.5, 1], [0.5, 0.5]] as const) {
+      assert.ok(sourceUv(x, y, p), `${sw}×${sh} (${x},${y})`);
+    }
+  }
 });
 
 console.log(`\n${passed}개 통과`);

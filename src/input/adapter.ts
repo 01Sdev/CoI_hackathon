@@ -1,10 +1,13 @@
 // 입력 어댑터(F1·F10). 웹캠·후면 카메라·녹화 mp4를 같은 <video playsInline muted autoplay> 하나로 연다.
 // 근거: docs/specs/03-SRS.md FR-001~005, 02-SSRD §1(원본 접근은 A만, mountPreview, 좌우 반전 없음).
 // <video>와 MediaStream은 이 모듈 밖으로는 vision/에만 나간다. 스토어에는 숫자(InputSource)만 쓴다.
+// 광각(WIDE_WARP)이 켜져 있으면 <video> 대신 휜 캔버스를 미리보기에 붙이고 vision에도 그 캔버스를 준다
+// (docs/designs/input-wide-warp.md). 보이는 화면과 판정·포착·가림이 같은 픽셀을 쓴다.
 
 import { lensStore } from '../core/store';
 import type { InputKind, InputSource } from '../core/types';
-import { CAMERA_IDEAL, DEFAULT_VIDEO_URL, OPEN_TIMEOUT_MS, PHONE_MAX_WIDTH } from './config';
+import { CAMERA_IDEAL, DEFAULT_VIDEO_URL, OPEN_TIMEOUT_MS, PHONE_MAX_WIDTH, WIDE_WARP } from './config';
+import { createWarpRenderer, type WarpRenderer } from './warpRenderer';
 
 let video: HTMLVideoElement | null = null;
 let stream: MediaStream | null = null;
@@ -13,6 +16,10 @@ let videoUrl = DEFAULT_VIDEO_URL;
 let epoch = 0;
 let openSeq = 0;
 let stopSubscription: (() => void) | null = null;
+let warpOn: boolean = WIDE_WARP.enabled;
+/** undefined = 아직 안 만듦, null = 만들 수 없음(휘지 않음). */
+let warp: WarpRenderer | null | undefined;
+let previewLoop: number | null = null;
 
 function ensureVideo(): HTMLVideoElement {
   if (video) return video;
@@ -36,6 +43,59 @@ function ensureVideo(): HTMLVideoElement {
 /** vision 전용. 원본 프레임에 닿으므로 A 디렉터리 밖에서 import하지 않는다. */
 export function getVideo(): HTMLVideoElement | null {
   return video;
+}
+
+/** /dev 전용: 광각을 켜고 끈다. 미리보기를 붙이기 전에 부른다(붙인 뒤에는 다음 mountPreview부터). */
+export function setWideWarp(on: boolean): void {
+  warpOn = on;
+}
+
+function getWarp(): WarpRenderer | null {
+  if (!warpOn) return null;
+  if (warp === undefined) {
+    warp = createWarpRenderer();
+    if (warp) warp.canvas.dataset.warp = warp.mode;
+  }
+  return warp;
+}
+
+/** 지금 광각 경로('gpu' | 'cpu'), 꺼져 있으면 null. /dev 표시용. */
+export function getWarpMode(): 'gpu' | 'cpu' | null {
+  return getWarp()?.mode ?? null;
+}
+
+export interface Frame {
+  /** drawImage로 읽을 원본(휜 캔버스 또는 <video>). 같은 task 안에서 읽는다. */
+  source: HTMLCanvasElement | HTMLVideoElement;
+  width: number;
+  height: number;
+}
+
+/**
+ * vision 전용: 지금 프레임. 광각이 켜져 있으면 이 호출에서 지금 <video> 프레임을 휘어 그린 캔버스를 준다.
+ * 판정(0단계)·포착이 모두 이것만 읽으므로 좌표는 휜 프레임 기준으로 한결같다. 영상이 아직 없으면 null.
+ */
+export function grabFrame(): Frame | null {
+  const v = video;
+  if (!v || v.readyState < 2 || !v.videoWidth || !v.videoHeight) return null;
+  const w = getWarp();
+  if (w && w.render(v)) return { source: w.canvas, width: w.canvas.width, height: w.canvas.height };
+  return { source: v, width: v.videoWidth, height: v.videoHeight };
+}
+
+/** 미리보기 캔버스를 previewFps 이하로 다시 그린다. 캔버스가 문서에서 빠지면 멈춘다. */
+function startPreviewLoop(w: WarpRenderer) {
+  if (previewLoop !== null) return;
+  let last = -Infinity;
+  const gap = 1000 / (w.mode === 'gpu' ? WIDE_WARP.previewFps : 15) - 4;
+  const step = (now: number) => {
+    previewLoop = null;
+    if (!w.canvas.isConnected) return;
+    const v = video;
+    if (v && !v.paused && now - last >= gap && w.render(v)) last = now;
+    previewLoop = requestAnimationFrame(step);
+  };
+  previewLoop = requestAnimationFrame(step);
 }
 
 export function getInputEpoch(): number {
@@ -63,10 +123,22 @@ export function defaultInputKind(): InputKind {
  */
 export function mountPreview(container: HTMLElement): () => void {
   const v = ensureVideo();
-  container.appendChild(v);
+  const w = getWarp();
+  if (w) {
+    // 광각: 보이는 것은 휜 캔버스다. <video>는 같은 컨테이너에 1px·투명으로 남겨 둔다(문서 안에 있어야 iPhone이 프레임을 계속 낸다).
+    Object.assign(v.style, { position: 'absolute', left: '0', top: '0', width: '1px', height: '1px', opacity: '0', pointerEvents: 'none' });
+    Object.assign(w.canvas.style, { width: '100%', height: '100%', display: 'block', background: '#000' });
+    container.appendChild(v);
+    container.appendChild(w.canvas);
+    startPreviewLoop(w);
+  } else {
+    Object.assign(v.style, { position: '', left: '', top: '', width: '100%', height: '100%', opacity: '', pointerEvents: '' });
+    container.appendChild(v);
+  }
   // DOM에 옮겨 붙이면 일부 브라우저가 재생을 멈춘다.
   void v.play().catch(() => undefined);
   return () => {
+    if (w && w.canvas.parentElement === container) container.removeChild(w.canvas);
     if (v.parentElement !== container) return;
     container.removeChild(v);
     // 문서에서 떼면 브라우저가 잠시 뒤(안정 상태에서) 재생을 멈춘다. 미리보기가 없는 화면에서도 판정은 이어져야 하므로
