@@ -1,5 +1,5 @@
 // src/plugins assertion 스크립트. 실행: npm run check:plugins
-// 테스트 프레임워크 없이 경계 조건만 확인한다(AGENTS.md "테스트"). 브라우저 시험은 개발 서버의 /dev/(M0).
+// 테스트 프레임워크 없이 경계 조건만 확인한다(AGENTS.md "테스트"). 브라우저 시험은 개발 서버의 /dev/m0.html(M0).
 
 import assert from 'node:assert/strict';
 import { createHash, webcrypto } from 'node:crypto';
