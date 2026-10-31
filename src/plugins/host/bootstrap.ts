@@ -26,7 +26,7 @@ export function iframeBootstrap(): void {
     window.addEventListener('message', (ev) => {
       if (ev.source !== host) return;
       const d = ev.data as Record<string, unknown> | null;
-      if (typeof d === 'object' && d !== null && d.type === 'delivery') worker.postMessage(d);
+      if (typeof d === 'object' && d !== null && (d.type === 'delivery' || d.type === 'question')) worker.postMessage(d);
     });
     worker.postMessage({ type: 'init', pluginId: m.pluginId, manifest: m.manifest, apiBase: m.apiBase });
   };

@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { selectFaceM, selectOutwardApps, selectThroughput } from '../src/core/selectors';
+import { GAZE_CENTER_RADIUS } from '../src/core/constants';
+import { selectConsentCount, selectFaceM, selectOutwardApps, selectThroughput } from '../src/core/selectors';
 import { lensStore, useLensStore } from '../src/core/store';
 import type { InputKind } from '../src/core/types';
 import { getVideoUrl, setVideoUrl } from '../src/input/adapter';
 import { MODEL_PATHS } from '../src/vision/config';
 import { loadModels, loadSegmenter, mountPreview, subscribeModelState, subscribeSegmenterState, type ModelState, type SegmenterState } from '../src/vision';
 import { getStage0Stats } from '../src/vision/stage0';
+import { getTracks } from '../src/vision/gaze';
 
 const box: CSSProperties = { border: '1px solid #333', borderRadius: 6, padding: 8, marginBottom: 8 };
 const mono: CSSProperties = { fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12, whiteSpace: 'pre-wrap' };
@@ -34,6 +36,7 @@ export function DevPage() {
       <section>
         <ModelStatus />
         <LiveObservation />
+        <GazeConsent />
         <SceneDecisions />
         <Throughput />
         <Plugins />
@@ -110,7 +113,39 @@ function Preview() {
       />
       {/* 판정 영역(가운데 60%) */}
       <div style={{ position: 'absolute', left: '20%', top: '20%', width: '60%', height: '60%', border: '1px dotted #666', pointerEvents: 'none' }} />
+      <GazeOverlay width={input?.width ?? 16} height={input?.height ?? 9} />
     </div>
+  );
+}
+
+/** 응시 원(짧은 변 × GAZE_CENTER_RADIUS)과 응시 대상 위 "마스크 해제" 칩(C 칩의 개발용 대역). 사람에게 박스는 그리지 않는다. */
+function GazeOverlay({ width, height }: { width: number; height: number }) {
+  const gaze = useLensStore((s) => s.gaze);
+  const r = Math.min(width, height) * GAZE_CENTER_RADIUS;
+  return (
+    <>
+      <div
+        style={{
+          position: 'absolute',
+          left: `${(0.5 - r / width) * 100}%`,
+          top: `${(0.5 - r / height) * 100}%`,
+          width: `${((2 * r) / width) * 100}%`,
+          height: `${((2 * r) / height) * 100}%`,
+          border: `1px dashed ${gaze ? '#f6c' : '#888'}`,
+          borderRadius: '50%',
+          pointerEvents: 'none',
+        }}
+      />
+      {gaze && (
+        <button
+          data-gaze-chip=""
+          onClick={() => lensStore.getState().grantConsent(gaze.trackId)}
+          style={{ position: 'absolute', left: `${(gaze.box.x + gaze.box.w / 2) * 100}%`, top: `${gaze.box.y * 100}%`, transform: 'translate(-50%, -110%)', fontSize: 12 }}
+        >
+          마스크 해제 ({gaze.trackId})
+        </button>
+      )}
+    </>
   );
 }
 
@@ -148,6 +183,43 @@ function LiveObservation() {
           ? `확정 장면: ${obs.label}\n대상: ${obs.objectLabel ?? '-'} ${obs.targetBox ? fmtBox(obs.targetBox) : ''}\n화면 속 ${obs.peopleCount}명`
           : '없음'}
       </div>
+    </div>
+  );
+}
+
+/** 응시·동의(docs/designs/outfit-pipelines.md 파이프라인 1). Enter = 응시 대상에게 동의(글래스 버튼 대용). */
+function GazeConsent() {
+  const gaze = useLensStore((s) => s.gaze);
+  const consents = useLensStore((s) => s.consents);
+  const count = useLensStore((s) => selectConsentCount(s));
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || (e.target as HTMLElement | null)?.tagName === 'INPUT') return;
+      const g = lensStore.getState().gaze;
+      if (g) lensStore.getState().grantConsent(g.trackId);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const now = performance.now();
+  const tracks = getTracks();
+  return (
+    <div style={box}>
+      <b>응시·동의 (사람 수 {count})</b>
+      <div style={mono}>
+        {`추적: ${tracks.length === 0 ? '없음' : tracks.map((t) => `${t.id}${now - t.lastSeenAt > 300 ? '(안 보임)' : ''}`).join(', ')}
+`}
+        {`응시 대상: ${gaze ? `${gaze.trackId} ${((now - gaze.since) / 1000).toFixed(1)}초 ${fmtBox(gaze.box)} (Enter·칩 = 동의)` : '없음'}
+`}
+        {Object.values(consents).length === 0
+          ? '동의: 없음'
+          : Object.values(consents).map((c) => `동의 ${c.trackId}: 남은 ${Math.max(0, (c.expiresAt - now) / 1000).toFixed(0)}초, ${((now - c.lastSeenAt) / 1000).toFixed(1)}초 전 봄`).join('\n')}
+      </div>
+      {Object.values(consents).map((c) => (
+        <button key={c.trackId} onClick={() => lensStore.getState().revokeConsent(c.trackId)} style={{ marginRight: 6 }}>
+          {c.trackId} 동의 끄기
+        </button>
+      ))}
     </div>
   );
 }

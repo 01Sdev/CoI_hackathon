@@ -1,5 +1,7 @@
-// 휴대폰·데스크톱 화면(/). 배치도 /dev/screens.html "휴대폰"·"데스크톱".
-// 휴대폰: 후면 카메라 전체 화면 + HUD + 하단 시트. 데스크톱: 왼쪽 카메라+HUD, 오른쪽 탭, 아래 발표자 컨트롤.
+// 메인 화면(/). 휴대폰 웹은 스마트 글래스가 없어 그 시야를 휴대폰 브라우저로 그대로 흉내 내는 화면이다(앱 화면이 아니다).
+// 그래서 기본은 카메라 전체 화면 + 글래스 HUD(#44 흰 틀·동의 수, 플러그인 화면, 코디 스캔)뿐이다(사용자 결정 2026-11-01: 지금 UI는
+// 최대한 걷어 내고 플랫폼은 #44를 따른다). 휴대폰·데스크톱 모두 같다.
+// ?tools를 붙이면 예전 도구 배치(위쪽 줄·하단 시트, 데스크톱은 오른쪽 탭·발표자 컨트롤)를 보인다. 기록·확인 화면·앱 관리·비교 모드는 거기 있다.
 
 import { useState } from 'react';
 import { useLensStore } from '../core/store';
@@ -18,13 +20,15 @@ import { TopBar } from './TopBar';
 import { useLayoutMode } from './useLayoutMode';
 import { useStoreTick } from './useSignals';
 
+/** 예전 도구 배치를 보일지(?tools). 시연 기본 화면에는 글래스 시야만 둔다. */
+const TOOLS = typeof location !== 'undefined' && new URLSearchParams(location.search).has('tools');
+
 export function MainScreen({ autostart = false }: { autostart?: boolean }) {
   const layout = useLayoutMode();
   const selectInput = useLensStore((s) => s.selectInput);
   const [started, setStarted] = useState(autostart);
   const [tab, setTab] = useState<SideTab>('log');
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [frameEditing, setFrameEditing] = useState(false);
   useStoreTick();
   // 바깥 표시(/outward)는 휴대폰·데스크톱 메인 창만 보낸다. /hud 창까지 보내면 두 값이 번갈아 보인다.
   useOutwardPublisher();
@@ -38,6 +42,17 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
     return <StartScreen layout={layout.mode} onStart={start} />;
   }
 
+  if (!TOOLS) {
+    return (
+      <div className="fm-glassview">
+        <Stage className="fm-glassview__stage">
+          <EngineGate ready={<Hud variant="phone" />} />
+          <CameraFallbackNotice />
+        </Stage>
+      </div>
+    );
+  }
+
   if (layout.mode === 'desktop') {
     return (
       <div className="fm-desk">
@@ -45,11 +60,9 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
           <Stage>
             <div className="fm-hud-guide" aria-hidden="true" />
             <EngineGate
-              ready={
-                <Hud variant="desktop" onOpenConfirm={() => setTab('confirm')} frameEditing={frameEditing} onFrameEditing={setFrameEditing} />
-              }
+ready={<Hud variant="desktop" />}
             />
-            <TopBar layout={layout} frameEditing={frameEditing} onFrameEditing={setFrameEditing} />
+            <TopBar layout={layout} />
             <CameraFallbackNotice />
           </Stage>
         </section>
@@ -64,14 +77,12 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
   }
 
   return (
-    <div className="fm-phone" data-frame-editing={frameEditing}>
+    <div className="fm-phone">
       <Stage className="fm-phone__stage">
         <EngineGate
-          ready={
-            <Hud variant="phone" onOpenConfirm={() => setConfirmOpen(true)} frameEditing={frameEditing} onFrameEditing={setFrameEditing} />
-          }
+ready={<Hud variant="phone" />}
         />
-        <TopBar layout={layout} frameEditing={frameEditing} onFrameEditing={setFrameEditing} />
+        <TopBar layout={layout} />
         <CameraFallbackNotice />
       </Stage>
       <LogSheet onOpenConfirm={() => setConfirmOpen(true)} />

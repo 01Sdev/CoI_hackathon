@@ -73,6 +73,7 @@ The fine-tuned weights were modified by training on Nutrition5k and FlavoriaFood
 | 서비스 | 쓰는 곳 | 비고 |
 | --- | --- | --- |
 | Anthropic Claude API (`claude-haiku-5-5`) | `/api/calorie` 서버 함수의 칼로리 추정 | 유료 API. 이미 가린 조각만 보낸다. 키는 서버 환경 변수에만 둔다 |
+| Google Gemini API (`gemini-3.5-flash-lite`, REST `generateContent`, 패키지 없음) | `/api/outfit` 서버 함수의 코디 스캔 답(02-SSRD IF-11) | 유료 API(Google 약관). 착용자가 동의한 사람의 얼굴을 가린 조각과 질문만 보낸다. 키는 서버 환경 변수 `GEMINI_API_KEY`에만 둔다. https://ai.google.dev/gemini-api/docs |
 | Vercel (예정) | 배포 | 배포 방식 확정 전 |
 
 ## 6. 발표용 구분

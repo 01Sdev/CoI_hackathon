@@ -10,7 +10,7 @@ import { useLensStore } from '../core/store';
 import { PLUGIN_ICON, PLUGIN_NAME } from '../ui/labels';
 import { sanitizeAppText } from '../ui/sanitize';
 import { ConfirmBody } from './ConfirmScreen';
-import { GUARANTEE_EXCEPTION, GUARANTEES, NO_RECALL_NOTE, protocolRows, receiverText, SERVER_NOTE } from './protocol';
+import { GUARANTEE_EXCEPTION, GUARANTEES, NO_RECALL_NOTE, protocolRows, receiverText, SERVER_UPSTREAM, serverNote, SPEECH_NOTE } from './protocol';
 
 export function ProtocolView({ pluginId, onClose }: { pluginId: string; onClose(): void }) {
   const ref = useRef<HTMLElement>(null);
@@ -45,10 +45,11 @@ export function ProtocolView({ pluginId, onClose }: { pluginId: string; onClose(
 
   const name = PLUGIN_NAME[p.kind];
   const split = (v: string) => (v ? v.split('\n') : []);
-  const receiver = receiverText(split(p.network), split(p.allowed), location.origin, p.connectNone);
+  const receiver = receiverText(split(p.network), split(p.allowed), location.origin, p.connectNone, SERVER_UPSTREAM[p.kind]);
   const rows = protocolRows(
     { scenes: p.scenes.split(',') as Array<'food' | 'person'>, maxSide: p.maxSide, maxPerMinute: p.maxPerMinute },
     receiver,
+    p.kind,
   );
 
   return (
@@ -108,7 +109,8 @@ export function ProtocolView({ pluginId, onClose }: { pluginId: string; onClose(
             ))}
           </tbody>
         </table>
-        {receiver.viaServer && <p className="fm-protocol__note">{SERVER_NOTE}</p>}
+        {receiver.viaServer && <p className="fm-protocol__note">{serverNote(p.kind)}</p>}
+        {p.kind === 'outfit' && <p className="fm-protocol__note">{SPEECH_NOTE}</p>}
         <p className="fm-protocol__small">{NO_RECALL_NOTE}</p>
       </section>
 

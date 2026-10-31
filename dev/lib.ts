@@ -23,13 +23,14 @@ declare global {
     __m0?: Report;
     __plugins?: Report;
     __onDevice?: Report;
+    __outfit?: Report;
   }
 }
 
 export const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /** 표(#rows)와 요약(#summary)에 쓰고 window[key]에 같은 내용을 둔다. */
-export function createReport(key: '__m0' | '__plugins' | '__onDevice') {
+export function createReport(key: '__m0' | '__plugins' | '__onDevice' | '__outfit') {
   const report: Report = { done: false, pass: false, rows: [] };
   window[key] = report;
   const record = (name: string, pass: boolean, detail: string) => {

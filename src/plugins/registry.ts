@@ -8,6 +8,7 @@ import { caloriePlugin } from './calorie';
 import { calorieOnDevice, type OnDeviceConfig } from './calorie-model';
 import { PORTION_TABLE, clampApiKcal, portionKcal } from './portion';
 import { helloPlugin } from './hello';
+import { OUTFIT_CLIENT_TIMEOUT_MS, OUTFIT_FALLBACK_TEXT, OUTFIT_KEEP_DELIVERIES, outfitPlugin } from './outfit';
 import { pluginCall } from './sdk/source';
 import { TAMPER_TARGETS, tamperPlugin } from './tamper';
 
@@ -36,6 +37,8 @@ export function pluginSourceFor(kind: PluginKind): string | null {
       return pluginCall(tamperPlugin, TAMPER_TARGETS);
     case 'hello':
       return pluginCall(helloPlugin);
+    case 'outfit':
+      return pluginCall(outfitPlugin, OUTFIT_CLIENT_TIMEOUT_MS, OUTFIT_KEEP_DELIVERIES, OUTFIT_FALLBACK_TEXT);
     default:
       return null;
   }

@@ -5,11 +5,28 @@ import assert from 'node:assert/strict';
 import { APP_NAME, CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE, ORIGIN_TOKEN } from '../src/core/constants';
 import type { Box } from '../src/core/types';
 import { entryMeta, frameText, logReason, usageMeta, wallClock } from '../src/proof/format';
-import { GUARANTEES, protocolRows, receiverText } from '../src/proof/protocol';
-import { boxCenter, coverBox, coverPointToSource, cornerPoint, dragCornerFromScreen, faceWindowRemaining, nudgeCorner } from '../src/ui/geometry';
+import { GUARANTEES, OUTFIT_REGION, protocolRows, receiverText, SERVER_UPSTREAM } from '../src/proof/protocol';
+import {
+  boxCenter,
+  coverBox,
+  coverPointToSource,
+  cornerPoint,
+  dragCornerFromScreen,
+  faceWindowRemaining,
+  gazeChipPoint,
+  nudgeCorner,
+  PANEL_MIN_H,
+  talkPanelPlacement,
+  talkPanelWidth,
+  sameBox as sameFrame,
+  sourceToView,
+  viewToSource,
+} from '../src/ui/geometry';
+import { isGlassButtonKey } from '../src/ui/glassKeys';
 import { calorieView, formatBytes, josa, parseCalorieLine } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
-import { APP_TEXT_MAX, sanitizeAppText } from '../src/ui/sanitize';
+import { ANSWER_TEXT_MAX, APP_TEXT_MAX, sanitizeAnswerText, sanitizeAppText } from '../src/ui/sanitize';
+import { joinSpeech, transcriptOf } from '../src/ui/useSpeechInput';
 
 let passed = 0;
 /** ASCII 숫자를 전각 숫자로(NFKC 확인용). */
@@ -263,8 +280,100 @@ check('protocolRows: 칼로리 시드 값이면 설계 §3.2 표 문구가 나�
     ['빈도', '분당 6장', '분당 6장까지'],
     ['받는 곳', `${APP_NAME} 서버`, `${APP_NAME} 서버만`],
   ]);
-  assert.equal(GUARANTEES.length, 4);
+  assert.equal(GUARANTEES.length, 5);
+  assert.ok(GUARANTEES.includes('사람 조각은 동의한 사람만 보내요. 얼굴은 늘 가려요'));
   assert.ok(!GUARANTEES.some((g) => g.includes('모든 얼굴')), '얼굴 검출은 놓칠 수 있어 "모든 얼굴"이라고 쓰지 않는다');
+});
+
+check('receiverText·protocolRows: 코디 스캔은 "framelet 서버 → Google Gemini", 영역은 동의한 사람만', () => {
+  const self = 'https://framelet-demo.vercel.app';
+  const r = receiverText([ORIGIN_TOKEN], [self], self, false, SERVER_UPSTREAM.outfit);
+  assert.deepEqual(r, { requested: `${APP_NAME} 서버 → Google Gemini`, allowed: `${APP_NAME} 서버 → Google Gemini만`, viaServer: true });
+  assert.equal(SERVER_UPSTREAM.calorie, undefined, '칼로리 문구는 그대로');
+  const rows = protocolRows({ scenes: ['person'], maxSide: 512, maxPerMinute: 6 }, r, 'outfit');
+  assert.deepEqual(rows[0], ['장면', '사람', '사람 앞에 있을 때만']);
+  assert.deepEqual(rows[1], ['영역', '사람 하나', OUTFIT_REGION]);
+});
+
+check('sourceToView·viewToSource: 흰 틀 값이 잘린 cover 화면에서도 왕복하고, 같은 값은 다시 쓰지 않는다', () => {
+  const src = { w: 1280, h: 720 };
+  const dst = { w: 390, h: 844 };
+  const f: Box = { x: 0.4, y: 0.25, w: 0.2, h: 0.5 };
+  const v = sourceToView(f, src, dst);
+  const r = coverBox(f, src, dst);
+  assert.ok(Math.abs(v.x * dst.w - r.left) < 1e-9 && Math.abs(v.w * dst.w - r.width) < 1e-9);
+  assert.ok(sameFrame(viewToSource(v, src, dst), f));
+  assert.ok(!sameFrame(viewToSource({ ...v, x: v.x + 0.01 }, src, dst), f));
+  assert.deepEqual(sourceToView(f, src, { w: 0, h: 0 }), f, '크기 0이면 그대로');
+});
+
+check('gazeChipPoint: 칩은 상자 위쪽 가운데, 화면 가장자리·위쪽 줄 밖으로 나가지 않는다', () => {
+  const dst = { w: 400, h: 800 };
+  assert.deepEqual(gazeChipPoint({ x: 0.25, y: 0.5, w: 0.5, h: 0.4 }, null, dst), { x: 200, y: 392 });
+  const edge = gazeChipPoint({ x: 0, y: 0, w: 0.1, h: 0.2 }, null, dst);
+  assert.equal(edge.x, 72);
+  assert.equal(edge.y, 56);
+  assert.equal(gazeChipPoint({ x: 0.9, y: 0.99, w: 0.1, h: 0.01 }, null, dst).x, 328);
+});
+
+check('isGlassButtonKey: Enter·Space만, 입력창·버튼 초점·조합 중·단축키·이미 받은 키는 넘긴다', () => {
+  const key = (k: string, extra: Partial<Parameters<typeof isGlassButtonKey>[0]> = {}) => ({
+    key: k,
+    defaultPrevented: false,
+    repeat: false,
+    altKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    isComposing: false,
+    target: null,
+    ...extra,
+  });
+  assert.equal(isGlassButtonKey(key('Enter'), ['Enter']), true);
+  assert.equal(isGlassButtonKey(key(' '), ['Enter']), false);
+  assert.equal(isGlassButtonKey(key(' '), ['Enter', ' ']), true);
+  assert.equal(isGlassButtonKey(key('Enter', { isComposing: true }), ['Enter']), false);
+  assert.equal(isGlassButtonKey(key('Enter', { repeat: true }), ['Enter']), false);
+  assert.equal(isGlassButtonKey(key('Enter', { metaKey: true }), ['Enter']), false);
+  assert.equal(isGlassButtonKey(key('Enter', { defaultPrevented: true }), ['Enter']), false);
+  const inInput = { closest: (sel: string) => (sel.includes('input') ? {} : null) } as unknown as EventTarget;
+  assert.equal(isGlassButtonKey(key('Enter', { target: inInput }), ['Enter']), false);
+  const onBody = { closest: () => null } as unknown as EventTarget;
+  assert.equal(isGlassButtonKey(key('Enter', { target: onBody }), ['Enter']), true);
+});
+
+check('transcriptOf·joinSpeech: 확정·중간 결과를 이어 붙이고, 다시 켠 인식은 앞 글자 뒤에 붙는다', () => {
+  const r = (t: string, isFinal: boolean) => ({ isFinal, 0: { transcript: t } });
+  assert.equal(transcriptOf({ length: 2, 0: r('저 사람 ', true), 1: r(' 무슨 옷이야', false) }), '저 사람 무슨 옷이야');
+  assert.equal(transcriptOf({ length: 0 }), '');
+  assert.equal(joinSpeech('저 사람', '브랜드 알려줘'), '저 사람 브랜드 알려줘');
+  assert.equal(joinSpeech('', '브랜드'), '브랜드');
+  assert.equal(joinSpeech('브랜드', ''), '브랜드');
+});
+
+check('sanitizeAnswerText: 줄바꿈은 남기고 제어·방향 문자와 보호 표시 문구는 지우며 1,000자로 줄인다', () => {
+  assert.equal(sanitizeAnswerText('상의: 니트\r\n하의: 데님'), '상의: 니트\n하의: 데님');
+  assert.equal(sanitizeAnswerText('a\n\n\n\nb'), 'a\n\nb');
+  assert.equal(sanitizeAnswerText(`\u202E반대\u200B로 ${APP_NAME} 보호됨 캐주얼`), '반대로 캐주얼');
+  assert.equal(sanitizeAnswerText('  \t 앞뒤  공백 \n '), '앞뒤 공백');
+  const long = sanitizeAnswerText('가'.repeat(ANSWER_TEXT_MAX + 5));
+  assert.equal(Array.from(long).length, ANSWER_TEXT_MAX);
+  assert.ok(long.endsWith('…'));
+});
+
+check('talkPanelPlacement: 답 패널은 흰 틀의 사람 수를 덮지 않는다(위 공간이 넉넉하면 위, 아니면 숫자 아래)', () => {
+  const phone = { w: 390, h: 844 };
+  assert.equal(talkPanelWidth(phone), 260);
+  // 틀 위쪽 169px: 숫자(177~201) 위에 154px이 남아 그 높이로 줄인다.
+  assert.deepEqual(talkPanelPlacement({ top: 169, right: 337 }, phone), { top: 16, maxHeight: 153 });
+  // 틀이 위에 붙으면 숫자 아래(60 + 8 + 24 + 8 = 100)로 내린다.
+  const low = talkPanelPlacement({ top: 60, right: 337 }, phone);
+  assert.equal(low.top, 100);
+  assert.ok(low.maxHeight >= PANEL_MIN_H);
+  // 숫자가 패널 왼쪽 밖이면(넓은 화면, 좁은 틀) 그대로 위에 둔다.
+  const wide = { w: 1280, h: 800 };
+  assert.deepEqual(talkPanelPlacement({ top: 100, right: 700 }, wide), { top: 16, maxHeight: 400 });
+  // 숫자가 패널보다 아래에 있어 세로로 안 겹치면 그대로.
+  assert.equal(talkPanelPlacement({ top: 900, right: 337 }, { w: 390, h: 1400 }).top, 16);
 });
 
 console.log(`\n${passed}개 통과`);

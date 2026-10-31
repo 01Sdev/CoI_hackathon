@@ -7,6 +7,7 @@ import type { Box, SceneDecision } from '../core/types';
 import { getInputEpoch, getVideo } from '../input/adapter';
 import { VISION_CONFIG } from './config';
 import { classifyScene, fitLongSide, scaleBox, type Found } from './geometry';
+import { observePeople, resetPeople } from './gaze';
 import { detectObjects, getModels, reportEngine } from './models';
 import { loadSegmenter } from './segmenter';
 import { SCENE_NONE, stepScene, type SceneState } from './scene';
@@ -86,6 +87,7 @@ export function getLastStage0Tick(): Stage0Tick | null {
 function resetScene() {
   scene = SCENE_NONE;
   decision = null;
+  resetPeople();
 }
 
 /** 직전 틱 이후 화면에 나온 소스 프레임 수. 알 수 없으면 0(처리량 비율이 null이 된다). */
@@ -152,6 +154,14 @@ function runTick(v: HTMLVideoElement) {
     store.recordRuns({ stage0Runs: 1, sourceFrames: takeSourceFrames(v) });
 
     const view = classifyScene(found, width, height);
+    try {
+      const people = found
+        .filter((f) => f.label === 'person' && f.score >= VISION_CONFIG.stage0ScoreMin)
+        .map((f) => ({ box: scaleBox(f.box, 1 / width, 1 / height), score: f.score }));
+      observePeople(people, width, height, now);
+    } catch (e) {
+      console.error('[vision] 응시·동의 갱신 오류', e);
+    }
     const step = stepScene(scene, view.label, now, VISION_CONFIG.confirmMs);
     scene = step.next;
     const targetBox = view.target ? scaleBox(view.target.box, 1 / width, 1 / height) : null;

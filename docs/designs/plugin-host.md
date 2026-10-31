@@ -130,6 +130,16 @@ calorie-lens(MIT, 백본 DINOv2 Apache-2.0) ONNX int8(94MB, 조각 2개)을 칼�
 | 파일 | onnxruntime-web 1.30.0(정확히 고정)의 `dist`에서 wasm판 3개를 postinstall `scripts/copy-ort.mjs`가 `public/ort/`로 복사한다(MediaPipe `copy-wasm.mjs`와 같은 방식, `.gitignore`). 모델 조각·`model.json`·라이선스 3개는 `public/models/calorie-lens/`(레포에 넣음). CORS는 `vercel.json`과 개발 서버(`vite.config.ts`)가 `/models/*`·`/ort/*`(개발 서버는 `/dev/fixtures/*`도)에 붙인다 |
 | 자리표시 | `dev/fixtures/calorie-lens-placeholder/`(`scripts/make-placeholder-model.ts`가 protobuf를 직접 쓴다. 실제 모델과 같은 입출력 이름·크기, totals = 300 + 100·평균, mass = 150, 조각 2개). 개발 페이지의 빠른 시험용 |
 
+### 2.11 코디 스캔 말로 묻기 (2026-11-01, docs/designs/outfit-pipelines.md)
+
+| 부분 | 결정 |
+| --- | --- |
+| 호스트 → 플러그인 | `outfitTurns`를 구독해 `asking`이고 처음 보는 turn을 `sendQuestions`가 IF-09로 보낸다. 그 플러그인의 지금 iframe이 ready가 아니거나 그 조각(`deliveryId`)을 받은 iframe이 아니면 바로 `failTurn`. 보낸 질문은 `rt.asked`에 두고 `OUTFIT_ANSWER_TIMEOUT_MS`(20초) 타이머를 건다 |
+| 플러그인 → 호스트 | IF-10 `answer`는 그 iframe에 보낸 questionId에만 받는다(아니면 형식 오류). 한 번만. `cleanAnswerText`(validate.ts)로 줄바꿈은 남기고(CRLF → LF) C0·C1 제어 문자와 방향·보이지 않는 서식 문자를 지운 뒤 1,000자로 잘라 `recordAnswer`. iframe이 사라지면(끄기·전환·종료) 기다리던 질문은 바로 `failTurn` |
+| 부트스트랩 | iframe이 `delivery`와 `question`만 Worker로 넘긴다 |
+| 플러그인(`outfit.ts`) | `onDelivery`로 받은 Blob을 deliveryId별로 최근 4개. `onQuestion`에서 그 Blob을 base64로 `POST {apiBase}/api/outfit`(JSON). 200이고 `answer`가 비지 않으면 그대로(`source`는 서버 값), 그 밖·18초 초과·조각 없음·비교 모드는 대체 문구 `fallback`. `reportViolation`은 부르지 않는다 |
+| 서버(`api/outfit.ts`) | 02-SSRD IF-11 "B 결정". Gemini REST `generateContent`, `gemini-3.5-flash-lite`, 15초, 키 없음·실패도 200 대체 문구 |
+
 ## 3. 고르지 않은 방법
 
 | 방법 | 고르지 않은 이유 |
@@ -166,7 +176,7 @@ calorie-lens(MIT, 백본 DINOv2 Apache-2.0) ONNX int8(94MB, 조각 2개)을 칼�
 
 ## 5. 확인 방법
 
-- `npm run check:plugins`(`scripts/check-plugins.ts`) 53개(기기 안 19개 포함): `sha256Pure` 표준 벡터·무작위 길이·600KB·M0 JPEG, 메시지 검증기 경계(200/201자, UTF-16 이모지, 128·512자, 크기, 모르는 키, Blob 값, 빈 프로토타입), CSP 생성과 주입 거부, srcdoc 순서, violation reason 대조, 칼로리(가짜 fetch: 200·비 200·요청 실패·시간 초과·apiBase null·헤더 규칙·core `fallbackText`와 같은 문구), 변조 4종, SDK를 원본·축소판으로 `vm`에서 돌려 ready·ack·result·violation·순수 JS·corrupt·suppress·해시 실패·느린 핸들러와 다음 ack·onInit 예외·hello 결과 줄. 기기 안: wasm CSP 조건, `model.json` 검사(실제 모델·자리표시), NCHW 변환, 양 규칙(피자 3.37 → 1365, 1.5 → 1001, 표 밖, API 자르기 242~2400), 칼로리 순서(준비 전·실행 중·시간 초과·연달아 2번·16초 멈춤·failed·계산할 수 없는 출력·API 줄 자르기·비교 모드·F14), 하위 Worker(가짜 ort로 wasm판·no-cache·단일 스레드·조각 잇기·letterbox 좌표와 fill·kcal·mass·느린 기기·404), 자리표시 모델을 실제 onnxruntime-web(Node)으로, 축소판.
+- `npm run check:plugins`(`scripts/check-plugins.ts`) 58개(기기 안 19개, 코디 스캔 5개 포함): `sha256Pure` 표준 벡터·무작위 길이·600KB·M0 JPEG, 메시지 검증기 경계(200/201자, UTF-16 이모지, 128·512자, 크기, 모르는 키, Blob 값, 빈 프로토타입), CSP 생성과 주입 거부, srcdoc 순서, violation reason 대조, 칼로리(가짜 fetch: 200·비 200·요청 실패·시간 초과·apiBase null·헤더 규칙·core `fallbackText`와 같은 문구), 변조 4종, SDK를 원본·축소판으로 `vm`에서 돌려 ready·ack·result·violation·순수 JS·corrupt·suppress·해시 실패·느린 핸들러와 다음 ack·onInit 예외·hello 결과 줄. 기기 안: wasm CSP 조건, `model.json` 검사(실제 모델·자리표시), NCHW 변환, 양 규칙(피자 3.37 → 1365, 1.5 → 1001, 표 밖, API 자르기 242~2400), 칼로리 순서(준비 전·실행 중·시간 초과·연달아 2번·16초 멈춤·failed·계산할 수 없는 출력·API 줄 자르기·비교 모드·F14), 하위 Worker(가짜 ort로 wasm판·no-cache·단일 스레드·조각 잇기·letterbox 좌표와 fill·kcal·mass·느린 기기·404), 자리표시 모델을 실제 onnxruntime-web(Node)으로, 축소판. 코디 스캔: answer 거르기, 질문 → `/api/outfit` → answer, 서버 대체·실패 4종, 최근 조각·비교 모드·받지 않은 조각, 제품 소스.
 - 개발 서버 `/dev/m0.html` M0 페이지 15줄, `/dev/plugins.html` 9줄(칼로리 정상·도메인 삭제·고정표 밖 라벨·비교 모드 켜기/끄기·변조 4종·변조 조각 외부 전송·apiSends), `/dev/on-device.html` 6줄(CSP, 첫 on-device, 5회 시간, 모델 없음, 비교 모드, 단계별 시간. `?model=/models/calorie-lens/`로 실제 모델).
 
 ## 6. 리뷰 기록
