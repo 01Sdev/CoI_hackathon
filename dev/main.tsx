@@ -12,6 +12,7 @@ import { mountPreview as mountPreviewForC } from '../src/input/preview';
 import { VISION_CONFIG } from '../src/vision/config';
 import { getStage0Stats } from '../src/vision/stage0';
 import { detectFaces, detectObjects, getModels } from '../src/vision/models';
+import { segmentCategories } from '../src/vision/segmenter';
 import { DevPage } from './DevPage';
 import { startMockHost } from './mockHost';
 
@@ -24,7 +25,7 @@ if (inputParam === 'webcam' || inputParam === 'rear' || inputParam === 'video') 
 }
 
 // 콘솔 확인용(개발 서버 전용 페이지라 프로덕션에는 없다). config는 FR-055 주입 시험(일부러 덜 가리기)에 쓴다.
-Object.assign(window, { __devA: { getModels, detectFaces, detectObjects, config: VISION_CONFIG, store: lensStore, startRuntime, mountPreviewForC, getVideo, getStage0Stats } });
+Object.assign(window, { __devA: { getModels, detectFaces, detectObjects, segmentCategories, config: VISION_CONFIG, store: lensStore, startRuntime, mountPreviewForC, getVideo, getStage0Stats } });
 
 // React 밖에서 한 번(StrictMode 이중 실행과 무관하게).
 if (params.get('mock') !== '0') startMockHost();

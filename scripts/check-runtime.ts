@@ -8,6 +8,7 @@ import { SCENE_NONE, stepScene, type SceneState } from '../src/vision/scene';
 import { cooldownUntil, decideBranch, headRegion } from '../src/vision/branch';
 import { planCapture } from '../src/vision/plan';
 import { sha256HexSync } from '../src/broker/sha256';
+import { blendMasked, dilate, dilateRadius, shapeMask } from '../src/vision/shape';
 import { createLensStore } from '../src/core/store';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -283,6 +284,60 @@ check('sha256HexSync: "abc", 빈 입력, 55·56·64바이트 경계, M0 JPEG', (
   }
   const jpg = new Uint8Array(readFileSync(new URL('../dev/fixtures/m0-test.jpg', import.meta.url)));
   assert.equal(sha256HexSync(jpg), '358dbf25d013fc82e1a6e8fdeca1f735cf1b8aad35a445c63f01aa39033605e8');
+});
+
+// ── Selfie 모양 가림(FR-016a) ──
+// 조각 10×10, 카테고리 마스크도 10×10. 3 = 얼굴 피부, 1 = 머리카락, 5 = 기타.
+const grid = (fill: (x: number, y: number) => number, w = 10, h = 10) => {
+  const a = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) a[y * w + x] = fill(x, y);
+  return a;
+};
+const ones = (m: Uint8Array | null) => (m ? m.reduce((n, v) => n + v, 0) : -1);
+
+check('shapeMask: 사각형 안에 머리카락·피부가 없으면 null(사각형 전체로 대체)', () => {
+  const cats = grid((x) => (x < 3 ? 3 : 5));
+  assert.equal(shapeMask(cats, 10, 10, 10, 10, { x: 5, y: 0, w: 5, h: 10 }, 0, [1, 3]), null);
+  // 몸 피부(2)·옷(4)은 가릴 클래스가 아니다
+  assert.equal(shapeMask(grid(() => 2), 10, 10, 10, 10, { x: 0, y: 0, w: 10, h: 10 }, 0, [1, 3]), null);
+});
+
+check('shapeMask: 팽창 0이면 클래스 픽셀만, 사각형 밖은 결과에 없음', () => {
+  const cats = grid((x, y) => (x >= 4 && x < 6 && y >= 4 && y < 6 ? 3 : 5));
+  const m = shapeMask(cats, 10, 10, 10, 10, { x: 0, y: 0, w: 10, h: 10 }, 0, [1, 3]);
+  assert.equal(ones(m), 4);
+  const part = shapeMask(cats, 10, 10, 10, 10, { x: 5, y: 5, w: 5, h: 5 }, 0, [1, 3]);
+  assert.equal(ones(part), 1);
+});
+
+check('shapeMask: 팽창은 사각형 밖 픽셀에서도 번져 들어오고 결과는 사각형 크기', () => {
+  // 피부는 x=4 한 줄. 사각형은 x 5..9. 팽창 1이면 x=5 줄이 덮인다(사각형 안 피부가 0이면 null이므로 x=5에도 피부 1픽셀).
+  const cats = grid((x, y) => (x === 4 || (x === 5 && y === 0) ? 3 : 5));
+  const m = shapeMask(cats, 10, 10, 10, 10, { x: 5, y: 0, w: 5, h: 10 }, 1, [1, 3]);
+  assert.equal(m?.length, 50);
+  // x=5(사각형 안 0열) 10칸 + x=6 y=0,1 두 칸(x=5,y=0 피부에서 번짐)
+  assert.equal(ones(m), 12);
+});
+
+check('shapeMask: 마스크 해상도가 조각과 달라도 최근접으로 읽는다', () => {
+  // 마스크 2×2(왼쪽 위만 피부)를 조각 10×10에 늘림 → 왼쪽 위 5×5
+  const cats = new Uint8Array([3, 5, 5, 5]);
+  assert.equal(ones(shapeMask(cats, 2, 2, 10, 10, { x: 0, y: 0, w: 10, h: 10 }, 0, [1, 3])), 25);
+});
+
+check('dilate·dilateRadius: 정사각형 팽창, 반지름은 긴 변 2%·최소 3px', () => {
+  const m = grid((x, y) => (x === 5 && y === 5 ? 1 : 0));
+  assert.equal(ones(dilate(m, 10, 10, 1)), 9);
+  assert.equal(ones(dilate(m, 10, 10, 0)), 1);
+  assert.equal(dilateRadius(100, 80, 0.02, 3), 3);
+  assert.equal(dilateRadius(700, 650, 0.02, 3), 14);
+});
+
+check('blendMasked: 마스크 1인 픽셀만 픽셀화 결과로 바뀐다', () => {
+  const dst = new Uint8ClampedArray([1, 1, 1, 255, 2, 2, 2, 255]);
+  const src = new Uint8ClampedArray([9, 9, 9, 255, 8, 8, 8, 255]);
+  blendMasked(dst, src, new Uint8Array([0, 1]));
+  assert.deepEqual([...dst], [1, 1, 1, 255, 8, 8, 8, 255]);
 });
 
 console.log(`\n${passed}개 통과`);

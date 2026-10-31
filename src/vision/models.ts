@@ -57,14 +57,14 @@ export function reportEngine(patch: EnginePatch): void {
   s.setEngine?.(patch);
 }
 
-class MissingModel extends Error {
+export class MissingModel extends Error {
   constructor(readonly path: string) {
     super(`모델 파일 없음: ${path}`);
   }
 }
 
 /** 개발 서버는 없는 파일에 index.html(200)을 돌려주므로 응답 형식까지 본다. */
-async function fetchModel(path: string, progress: (loaded: number, total: number | null) => void): Promise<Uint8Array> {
+export async function fetchModel(path: string, progress: (loaded: number, total: number | null) => void = () => undefined): Promise<Uint8Array> {
   const res = await fetch(path);
   const type = res.headers.get('content-type') ?? '';
   if (!res.ok || type.includes('text/html')) throw new MissingModel(path);

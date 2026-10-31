@@ -2,6 +2,7 @@
 // 대상 캔버스 위에 바로 덮어쓰므로 가리기 전 픽셀은 남지 않는다.
 
 import type { Box } from '../core/types';
+import { blendMasked } from './shape';
 
 export function pixelate(ctx: CanvasRenderingContext2D, r: Box, grid: number): void {
   if (r.w < 1 || r.h < 1) return;
@@ -19,6 +20,25 @@ export function pixelate(ctx: CanvasRenderingContext2D, r: Box, grid: number): v
   ctx.restore();
   small.width = 0;
   small.height = 0;
+}
+
+/**
+ * 모양 가림(FR-016a ②③): 사각형을 grid×grid로 픽셀화한 결과를 shape가 1인 픽셀에만 덮는다.
+ * shape는 r.w × r.h(r은 정수 px). 픽셀화 사본은 바로 비운다.
+ */
+export function pixelateShaped(ctx: CanvasRenderingContext2D, r: Box, grid: number, shape: Uint8Array): void {
+  if (r.w < 1 || r.h < 1) return;
+  const tmp = canvasOf(r.w, r.h);
+  try {
+    tmp.ctx.drawImage(ctx.canvas, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+    pixelate(tmp.ctx, { x: 0, y: 0, w: r.w, h: r.h }, grid);
+    const pix = tmp.ctx.getImageData(0, 0, r.w, r.h);
+    const orig = ctx.getImageData(r.x, r.y, r.w, r.h);
+    blendMasked(orig.data, pix.data, shape);
+    ctx.putImageData(orig, r.x, r.y);
+  } finally {
+    release(tmp.canvas);
+  }
 }
 
 /** 캔버스 픽셀 버퍼를 놓는다. */

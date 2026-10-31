@@ -7,7 +7,7 @@ import { lensStore, useLensStore } from '../src/core/store';
 import type { InputKind } from '../src/core/types';
 import { getVideoUrl, setVideoUrl } from '../src/input/adapter';
 import { MODEL_PATHS } from '../src/vision/config';
-import { loadModels, mountPreview, subscribeModelState, type ModelState } from '../src/vision';
+import { loadModels, loadSegmenter, mountPreview, subscribeModelState, subscribeSegmenterState, type ModelState, type SegmenterState } from '../src/vision';
 import { getStage0Stats } from '../src/vision/stage0';
 
 const box: CSSProperties = { border: '1px solid #333', borderRadius: 6, padding: 8, marginBottom: 8 };
@@ -102,7 +102,9 @@ function Preview() {
 
 function ModelStatus() {
   const [st, setSt] = useState<ModelState>({ status: 'idle' });
+  const [seg, setSeg] = useState<SegmenterState>({ status: 'idle' });
   useEffect(() => subscribeModelState(setSt), []);
+  useEffect(() => subscribeSegmenterState(setSeg), []);
   return (
     <div style={box}>
       <b>모델</b>
@@ -114,6 +116,10 @@ function ModelStatus() {
         {st.status === 'error' && `오류: ${st.message}`}
       </div>
       {(st.status === 'missing' || st.status === 'error') && <button onClick={() => void loadModels()}>다시 불러오기</button>}
+      <div style={mono}>
+        {`Selfie: ${seg.status}${seg.status === 'ready' ? ` · ${seg.delegate} · 로드 ${seg.loadMs}ms · 예열 ${seg.warmMs}ms` : ''}${seg.status === 'missing' ? ` (${seg.path}, 박스·사각형 전체로 가림)` : ''}${seg.status === 'error' ? ` ${seg.message}` : ''}`}
+      </div>
+      {(seg.status === 'missing' || seg.status === 'error') && <button onClick={() => void loadSegmenter()}>Selfie 다시 불러오기</button>}
     </div>
   );
 }

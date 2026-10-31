@@ -8,6 +8,7 @@ import { startStage0 } from './stage0';
 export { mountPreview } from '../input/adapter';
 export { getModelState, loadModels, subscribeModelState, type ModelState } from './models';
 export { connectPluginHost, type SendDelivery, type DeliveryMessage } from '../broker/broker';
+export { getSegmenterState, loadSegmenter, subscribeSegmenterState, type SegmenterState } from './segmenter';
 
 let stop: (() => void) | null = null;
 
