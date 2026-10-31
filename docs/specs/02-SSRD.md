@@ -152,7 +152,7 @@ type PluginToHost =
 
 **사용 기록 (F25, 2026-10-31 추가, 사용자 승인. 우선순위 [제안] P1):**
 - 스토어가 `markDelivery`(`dispatched`)마다 `Counter.usage`에 이미지 없는 줄 `{at, pluginId, deliveryId, objectLabel, bytes, frameW, frameH}`를 더한다. 이 줄은 증가 전용이고, 화면 로그 100건과 따로 세션 동안 남는다.
-- 대표 조각은 `usageSamples[pluginId]`에 최근 3장 [제안]만 둔다. 각 항목은 `{deliveryId, at, thumbnailRef}`이다. 보낸 Blob으로 만든 별도 object URL을 쓴다. 넘치면 가장 오래된 것을 해제한다.
+- 대표 조각은 `usageSamples[pluginId]`에 최근 3장 [제안]만 둔다. 각 항목은 `{pluginId, deliveryId, at, thumbnailRef}`이다. `thumbnailRef`는 그 Delivery의 썸네일 URL을 같이 쓴다. 로그 100건에서 밀려나도 대표 조각에 남아 있으면 해제하지 않고, 대표 조각에서 빠질 때 그 Delivery가 이미 밀려났으면 그때 해제한다.
 - branch `raw`(비교 모드)는 남기지 않는다. 남기는 것은 이미 가린 조각(2b·2c)이나 가릴 필요가 없던 조각(2a)뿐이다.
 - 새 세션 시작과 새로고침 때 둘 다 비운다(영구 저장 없음).
 - C는 폰 하단 시트에 "사용 기록"을 두고 "OO 플러그인에서 사용됨 · 시각 · 대상 · 바이트 · 프레임 크기"로 보여 준다. 플러그인 이름은 `textContent`로만 넣는다.
@@ -161,6 +161,7 @@ type PluginToHost =
 - `Session.captureFrame`, `setCaptureFrame`
 - `Delivery.frameRect`, `LogEntry.frameRect`
 - `Counter.usage`, `usageSamples`
+- `src/core/frame.ts`: `clampFrame`, `frameToPx`, `intersectBox`(A의 자르기와 C의 끌기가 같은 좌표 함수를 쓴다)
 
 ### 플러그인 SDK (Worker 안의 전역 `famelet`, 2026-10-31 추가)
 
@@ -417,7 +418,7 @@ sequenceDiagram
 | 전달 일시 정지 (F20) | 발표자 화면의 버튼이 `Session.paused = true`로 바꾼다. 게이트와 iframe은 그대로 두고, 보낼 수 있는지는 `selectCanSend`(`ready` ∧ 게이트 열림 ∧ 일시 정지 아님)가 판단한다. 일시 정지 중 포착은 하지 않는다 |
 | 새 세션 시작 (F20) | 전환 공통 절차를 모든 플러그인에 적용하고, 카운터를 0으로 되돌리고, `compareMode = false`로 시작한다 |
 | 대상 재검출 실패 | 포착한 프레임에서 대상(피자)을 다시 찾지 못하면 `hold`(branch 없음, reason "대상 재검출 실패")로 끝내고 쿨다운을 시작한다. 2d와 같은 취급이다 |
-| 프레임 밖 (F24) | 넓힌 대상 박스가 전송 범위 프레임과 겹치지 않으면 `hold`(branch 없음, reason "프레임 밖", `frameRect` 포함)로 끝내고 쿨다운을 시작한다. `sendDelivery` 호출도, Delivery도 없다. 같은 사유는 10초에 1번만 남긴다 |
+| 프레임 밖 (F24) | 넓힌 대상 박스가 전송 범위 프레임과 겹치지 않으면 `hold`(branch 없음, reason "프레임 밖", `frameRect` 포함)로 끝내고 쿨다운을 시작한다. `sendDelivery` 호출도, Delivery도 없다. 쿨다운을 시작하므로 같은 플러그인에서 `60 / maxPerMinute`초에 1번만 남는다 |
 | **전환 공통 절차** | 매니페스트 적용, 비교 모드 켜기·끄기, 플러그인 켜기, 새 세션 시작은 모두 같은 순서를 따른다(입력 전환은 iframe을 다시 만들지 않고 A가 진행 중 포착만 버린다). B는 플러그인마다 `selectDesiredRuntime` 하나를 구독하고 최신 값만 처리한다. 스토어의 `prepareDelivery`는 `runtimeId`·`manifestVersion`이 지금 iframe과 다르거나, `raw`가 통신이 막힌 비교 모드 칼로리 iframe이 아니면 거부한다(`docs/designs/core-store.md` §2.2·§2.3). ① 전달 게이트를 닫는다. ② 진행 중인 포착·인코딩·해시를 버린다(시작 때의 `runtimeId`와 다르면 `sendDelivery`가 거부). ③ 옛 iframe·Worker를 종료한다. ④ 새 정책으로 iframe을 만든다(`runtimeId` 새로). ⑤ 새 `ready`가 오면 게이트를 연다. 새 `ready`가 3초 [제안] 안에 오지 않으면 그 플러그인은 `stopped`로 멈추고, **옛 권한으로 되돌아가지 않는다.** 사용자가 다시 켜야 풀린다. 이미 보낸 데이터를 회수하지는 못한다 |
 | 매니페스트 변경 (F11·F14) | C `applyManifest(pluginId, json)` → A `validateManifest(json, pluginId)` → 잘못된 JSON·범위 위반이면 기존 값을 유지하고 iframe은 그대로 둔다. 통과하면 `version+1` 후 전환 공통 절차. 같은 플러그인 적용은 하나씩 처리한다 |
 | 비교 모드 켜기·끄기 (F17) | [팀원 D1] 스위치는 데스크톱 모드 발표자 화면에만 두고, 플러그인 메시지로 켜는 경로는 없다. `Session.compareMode`는 새로고침하면 항상 `false`로 시작한다. 켜면 전환 공통 절차로 칼로리 iframe을 `connect-src 'none'`, `apiBase: null`로 다시 만들고, 새 `ready` 뒤에만 A가 `raw`(칼로리에만, 축소 여부 미정)를 보낸다. 플러그인은 원본을 받지만 서버로 보내지 않으므로 결과 줄은 고정표(`source: 'fallback'`)다. 입력은 팀원만 찍힌 녹화 영상을 쓴다. 끌 때도 전환 공통 절차로 원래 `network`의 iframe으로 돌아간다. "보호 중" 표시는 끄는 즉시 바뀌지만, 이미 보낸 `raw` 전달은 지우지 않으므로 M·`outwardApps`는 최근 10초 창이 지나면서 0이 된다. `raw` 썸네일은 끌 때 해제하고 숫자 기록은 남긴다 |

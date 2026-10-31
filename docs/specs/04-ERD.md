@@ -171,7 +171,7 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | --- | --- | --- |
 | pluginId (FK), deliveryId (FK) | string | F25 |
 | at | number | F25 |
-| thumbnailRef | object URL (보낸 Blob으로 만든 별도 URL. 로그 썸네일이 해제돼도 남음) | F25 |
+| thumbnailRef | object URL (그 Delivery의 `thumbnailRef`를 같이 씀. 로그 100건에서 밀려나도 여기 남아 있으면 해제하지 않음) | F25 |
 
 ## 4. 파생값 계산 (Counter)
 
