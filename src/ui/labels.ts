@@ -21,6 +21,18 @@ export const PLUGIN_NAME: Record<PluginKind, string> = {
   hello: '장면 기록',
 };
 
+/** 앱 카드 머리줄의 글자 하나짜리 단색 아이콘(app-structure §3.1). 앱별 강조색은 쓰지 않는다. */
+export const PLUGIN_ICON: Record<PluginKind, string> = {
+  calorie: '칼',
+  tamper: '변',
+  hello: '장',
+};
+
+/** /hud 앱 결과 줄. 앱 이름으로 시작해 framelet 줄과 구분한다. "칼로리 · 피자 약 285kcal · 고정표". */
+export function appResultLine(name: string, text: string, fallback: boolean): string {
+  return `${name} · ${text}${fallback ? ' · 고정표' : ''}`;
+}
+
 /** 플러그인 상태 글자와 톤. 전환 중 = 적용 중, stopped = 멈춤(사용자가 다시 켜야 함). */
 export const PLUGIN_STATUS: Record<PluginStatus, [string, 'safe' | 'hold']> = {
   loading: ['적용 중', 'hold'],

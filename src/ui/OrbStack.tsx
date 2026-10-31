@@ -1,4 +1,5 @@
-// 카운터 오브 + 캡션 캡슐 + 결과 캡슐. 상태색 글자는 오브의 큰 숫자에만 쓰고, 캡션은 Text 색 + 상태 점이다(design-system §2).
+// 카운터 오브 + 캡션 캡슐. 상태색 글자는 오브의 큰 숫자에만 쓰고, 캡션은 Text 색 + 상태 점이다(design-system §2).
+// result는 /hud의 앱 결과 줄만 받는다. 휴대폰·데스크톱의 앱 결과는 카운터와 떨어진 앱 카드다(Hud.tsx AppResults).
 
 import type { CSSProperties, ReactNode, Ref } from 'react';
 

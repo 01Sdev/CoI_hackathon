@@ -1,6 +1,8 @@
 // 글래스 HUD 한 컴포넌트(F8, FR-034·036). 세 화면에 같은 컴포넌트를 쓰고 배치만 variant로 바꾼다.
 // 다섯 요소: 장면 · 입력 · 대상 위치 · 카운터(M, "화면 속 N명") · 결과. 요소 밖: 비교 모드 띠, 보류 줄, 전달 신호,
 // 전송 범위 프레임(F24, 흰 뷰파인더 틀). 플러그인 결과는 틀과 상관없는 자리에 둔다(PRD F24 표시 규칙).
+// 결과는 framelet과 앱을 나눠 보이려고 카운터에서 떼어 앱 카드에 둔다(app-structure §3.1). 휴대폰·데스크톱은
+// 카운터 아래 따로 띄운 카드, /hud는 배치를 그대로 두고 앱 이름으로 시작하는 줄이다.
 // 사람에게는 박스나 표시를 그리지 않는다(사용자 결정). 대상 프레임은 장면이 음식일 때만 그린다.
 // 휴대폰·데스크톱의 "입력" 요소는 위쪽 줄 입력 캡슐(TopBar)이고, /hud에서는 오른쪽 위 글자다.
 
@@ -8,10 +10,10 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 're
 import { useShallow } from 'zustand/react/shallow';
 import { selectFaceM } from '../core/selectors';
 import { lensStore, useLensStore, type LensState } from '../core/store';
-import type { Delivery } from '../core/types';
+import type { Delivery, PluginKind } from '../core/types';
 import { CaptureFrame } from './CaptureFrame';
 import { coverBox, faceWindowRemaining, type Size } from './geometry';
-import { formatBytes, INPUT_LABEL, objectName, PLUGIN_NAME, SCENE_LABEL } from './labels';
+import { appResultLine, formatBytes, INPUT_LABEL, objectName, PLUGIN_ICON, PLUGIN_NAME, SCENE_LABEL } from './labels';
 import { OrbStack } from './OrbStack';
 import { useDeliverySignal, useHoldSignal, useRecent } from './useSignals';
 
@@ -73,6 +75,7 @@ export function Hud({
             보류{glass && hold.last?.reason ? ` · ${hold.last.reason}` : ''}
           </span>
         )}
+        {glass && <AppResults />}
       </div>
       {delivery.count > 0 && <div key={`flash-${delivery.count}`} className="fm-hud__flash fm-flash" aria-hidden="true" />}
     </div>
@@ -162,13 +165,7 @@ function Counter({ variant, onOpenConfirm }: { variant: HudVariant; onOpenConfir
   const m = useLensStore((s) => selectFaceM(s));
   // 차단 수는 오브 숫자가 아니라 배지에. 세션의 violation 로그 수라 100건에서 밀려나면 줄 수 있다(design-system §4 #5).
   const blocked = useLensStore((s) => s.logs.reduce((n, l) => n + (l.kind === 'violation' ? 1 : 0), 0));
-  const result = useLensStore(
-    useShallow((s) => {
-      const id = s.pluginOrder.find((pid) => s.plugins[pid]?.kind === 'calorie');
-      const r = id ? s.results[id] : undefined;
-      return { text: r?.text ?? null, fallback: r?.source === 'fallback' };
-    }),
-  );
+  const results = useAppResults();
   const orbRef = useRef<HTMLDivElement>(null);
 
   // 10초 창 남은 시간 호. 다시 그리지 않고 CSS 변수만 바꾼다.
@@ -192,19 +189,17 @@ function Counter({ variant, onOpenConfirm }: { variant: HudVariant; onOpenConfir
         차단 {blocked}
       </span>
     ) : undefined;
-  const resultNode = result.text ? (
-    hud ? (
-      <span className="fm-result">
-        {result.text}
-        {result.fallback ? ' · 고정표' : ''}
+  // /hud만 오브 아래 줄로 둔다. 휴대폰·데스크톱의 결과는 AppResults(카운터와 떨어진 앱 카드)다.
+  const resultNode =
+    hud && results.length > 0 ? (
+      <span className="fm-hud__applines">
+        {results.map((r) => (
+          <span key={r.pluginId} className="fm-hud__appline">
+            {appResultLine(r.name, r.text, r.fallback)}
+          </span>
+        ))}
       </span>
-    ) : (
-      <span className="fm-capsule fm-glass fm-glass--panel">
-        <span className="fm-result">{result.text}</span>
-        {result.fallback && <span className="fm-readout">고정표</span>}
-      </span>
-    )
-  ) : undefined;
+    ) : undefined;
 
   return (
     <OrbStack
@@ -217,6 +212,58 @@ function Counter({ variant, onOpenConfirm }: { variant: HudVariant; onOpenConfir
       orbLabel={`${caption}. 확인 화면 열기`}
       onOrbClick={m > 0 && onOpenConfirm ? onOpenConfirm : undefined}
     />
+  );
+}
+
+interface AppResult {
+  pluginId: string;
+  kind: PluginKind;
+  name: string;
+  text: string;
+  fallback: boolean;
+}
+
+/** 켜져 있는 앱의 마지막 결과(앱마다 1줄, pluginOrder 순). "고정표"는 칼로리의 미리 정한 표라 칼로리에만 붙인다. */
+function useAppResults(): AppResult[] {
+  const results = useLensStore((s) => s.results);
+  const plugins = useLensStore((s) => s.plugins);
+  const order = useLensStore((s) => s.pluginOrder);
+  const out: AppResult[] = [];
+  for (const id of order) {
+    const p = plugins[id];
+    const r = results[id];
+    if (!p?.enabled || !r) continue;
+    out.push({ pluginId: id, kind: p.kind, name: PLUGIN_NAME[p.kind], text: r.text, fallback: p.kind === 'calorie' && r.source === 'fallback' });
+  }
+  return out;
+}
+
+/**
+ * 앱 카드(휴대폰·데스크톱). 바깥 칸과 머리줄(글자 아이콘·앱 이름·"앱이 보낸 결과")은 framelet이 그리고,
+ * 안쪽 칸에만 앱 문자열이 textContent로 들어간다. 안쪽 칸은 테마와 상관없이 바깥 칸과 밝기가 반대다.
+ * 앱이 둘 이상이면 옆으로 넘긴다.
+ */
+function AppResults() {
+  const results = useAppResults();
+  if (results.length === 0) return null;
+  return (
+    <section className="fm-appresults" aria-label="앱 결과">
+      {results.map((r) => (
+        <article key={r.pluginId} className="fm-appcard fm-glass fm-glass--panel" aria-label={`${r.name} 앱이 보낸 결과`}>
+          <div className="fm-appcard__head">
+            <span className="fm-appicon" aria-hidden="true">
+              {PLUGIN_ICON[r.kind]}
+            </span>
+            <span className="fm-appcard__name">{r.name}</span>
+            <span className="fm-appcard__tag">앱이 보낸 결과</span>
+          </div>
+          <div className="fm-appcard__body">
+            <span className="fm-appcard__text">{r.text}</span>
+            {r.fallback && <span className="fm-appcard__note">고정표</span>}
+          </div>
+        </article>
+      ))}
+    </section>
   );
 }
 
