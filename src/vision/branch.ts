@@ -9,7 +9,8 @@ import { area, center, expand, intersect, type Found } from './geometry';
 export type ProtectedBranch = '2a' | '2b' | '2c' | '2d';
 
 export interface MaskRect {
-  kind: 'face' | 'head';
+  /** body = 코디 스캔 조각 안의 동의하지 않은 사람 몸 전체(docs/designs/outfit-pipelines.md). */
+  kind: 'face' | 'head' | 'body';
   /** 원본 프레임 px. 조각 밖으로 나갈 수 있다(가릴 때 조각 안으로 자른다). */
   rect: Box;
 }
@@ -43,8 +44,16 @@ function toCropUnit(b: Box, crop: Box): Box {
  * - O인 사람마다: 대응 얼굴 있음 → 얼굴 가림(R2), 없고 P → 2d(R4), 없고 P 아님 → 머리 영역 가림(R3)
  * - 사람에 대응되지 않은 얼굴도 가린다(R5)
  * - 하나라도 2d면 조각 전체 2d. 아니면 머리 가림 → 2c, 얼굴 가림 → 2b, 없음 → 2a
+ * - body(코디 스캔): 이 집합의 사람은 조각과 조금이라도 겹치면 사람 박스 전체를 가린다. 몸 전체를 가리므로 R3·R4를 보지 않는다.
+ *   얼굴 가림(R2·R5)과 얼굴-사람 대응 불확실 보류는 그대로다. 몸 가림만 있으면(얼굴·머리 없음) 2b.
  */
-export function decideBranch(crop: Box, persons: readonly Found[], faces: readonly Found[], cfg: VisionConfig = VISION_CONFIG): BranchResult {
+export function decideBranch(
+  crop: Box,
+  persons: readonly Found[],
+  faces: readonly Found[],
+  cfg: VisionConfig = VISION_CONFIG,
+  body: ReadonlySet<Found> = new Set(),
+): BranchResult {
   const cropArea = area(crop);
   const masks: MaskRect[] = [];
   const detections: NewDetection[] = [];
@@ -56,6 +65,11 @@ export function decideBranch(crop: Box, persons: readonly Found[], faces: readon
   for (const p of persons) {
     const overlap = cropArea > 0 ? area(intersect(p.box, crop)) / cropArea : 0;
     if (overlap <= 0) continue;
+    if (body.has(p)) {
+      masks.push({ kind: 'body', rect: p.box });
+      detections.push({ kind: 'person', box: toCropUnit(p.box, crop), score: p.score, overlap, masked: 'body' });
+      continue;
+    }
     const hasFace = faceOwners.some((owners) => owners.includes(p));
     let masked: 'none' | 'head' = 'none';
     if (overlap > cfg.overlapMin && !hasFace) {
