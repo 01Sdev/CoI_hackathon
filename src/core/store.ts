@@ -9,11 +9,20 @@
 import { useStore } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { createStore } from 'zustand/vanilla';
-import { LOG_LIMIT, RECENT_WINDOW_MS, SKIP_DEDUP_MS, THROUGHPUT_WINDOW_MS } from './constants';
+import {
+  CAPTURE_FRAME_DEFAULT,
+  LOG_LIMIT,
+  RECENT_WINDOW_MS,
+  SKIP_DEDUP_MS,
+  THROUGHPUT_WINDOW_MS,
+  USAGE_SAMPLES_PER_PLUGIN,
+} from './constants';
+import { clampFrame } from './frame';
 import { resolveAllowedOrigins, validateManifest, type ManifestResult } from './manifest';
 import { PLUGIN_SEEDS, type PluginSeed } from './plugins';
 import { selectCanSend, selectDesiredRuntime, type DesiredRuntime } from './selectors';
 import type {
+  Box,
   Counter,
   Delivery,
   Detection,
@@ -26,6 +35,7 @@ import type {
   SceneDecision,
   Session,
   ThroughputRecord,
+  UsageSample,
   ViewMode,
 } from './types';
 
@@ -57,6 +67,8 @@ export interface LensState {
   results: Record<string, ResultLine>;
   /** `${pluginId}|${reason}` → 마지막으로 받은 skip 시각. 버려진 skip은 시각을 바꾸지 않는다. */
   lastSkipAt: Record<string, number>;
+  /** F25 pluginId → 대표 조각(오래된 것이 앞, 최대 USAGE_SAMPLES_PER_PLUGIN). raw는 넣지 않는다. */
+  usageSamples: Record<string, UsageSample[]>;
 
   // ── C(UI) ──
   /** 부를 때마다 inputRequest.seq가 오른다. 같은 입력을 다시 눌러도 A가 처리한다. */
@@ -69,6 +81,8 @@ export interface LensState {
   setCompareMode(on: boolean): void;
   setPaused(on: boolean): void;
   setViewMode(mode: ViewMode): void;
+  /** F24 프레임(0~1). clampFrame으로 범위·최소 크기를 맞춘다. 숫자가 아니면 무시한다. */
+  setCaptureFrame(frame: Box): void;
   /** 새 session.id. 로그·전달·판정·결과·Counter를 비우고 compareMode·paused를 false로, 모든 게이트를 닫는다. 플러그인 행·매니페스트·enabled는 유지. */
   startNewSession(): void;
   /** C가 1초마다 부른다. 10초·60초 창에서 지난 기록을 뺀다. */
@@ -102,7 +116,10 @@ export interface LensState {
    * gateOpen: true와 함께 desired를 주면, 지금 selectDesiredRuntime과 다를 때 게이트를 열지 않는다(낡은 정책 방지).
    */
   setPluginRuntime(pluginId: string, patch: RuntimePatch): void;
-  /** prepared에서만 바뀌고 true. dispatched일 때만 Counter에 쌓는다. 바뀐 뒤 스토어의 Blob 참조를 놓는다. */
+  /**
+   * prepared에서만 바뀌고 true. dispatched일 때만 Counter(사용 기록 포함)에 쌓고, raw가 아니면 대표 조각에 넣는다.
+   * 바뀐 뒤 스토어의 Blob 참조를 놓는다.
+   */
   markDelivery(deliveryId: string, status: 'dispatched' | 'failed'): boolean;
   /** dispatched·pending일 때만 받고 true. sha256 = null이면 timeout(타이머는 B). 불일치면 violation 로그. */
   setAck(deliveryId: string, sha256: string | null): boolean;
@@ -133,7 +150,7 @@ export function newId(prefix: string): string {
 }
 
 function emptyCounter(sessionId: string): Counter {
-  return { sessionId, recent10s: [], window60s: [], perPlugin: {}, rawServerSends: 0, apiSends: 0 };
+  return { sessionId, usage: [], recent10s: [], window60s: [], perPlugin: {}, rawServerSends: 0, apiSends: 0 };
 }
 
 function throughput(at: number, patch: Partial<Omit<ThroughputRecord, 'at'>>): ThroughputRecord {
@@ -194,11 +211,19 @@ export function createLensStore(opts: LensStoreOptions = {}) {
     inputRequest: prev?.inputRequest ?? null,
     compareMode: false,
     paused: false,
+    captureFrame: prev?.captureFrame ?? { ...CAPTURE_FRAME_DEFAULT },
   });
 
-  /** logs에 한 줄 붙이고 LOG_LIMIT를 넘은 오래된 줄을 밀어낸다. 밀려난 줄의 Delivery·Detection·고아 SceneDecision을 지운다. */
+  /** 대표 조각이 쓰고 있는 썸네일 URL. 로그 밀어내기는 이 URL을 해제하지 않는다. */
+  const sampleUrls = (samples: Record<string, UsageSample[]>) =>
+    new Set(Object.values(samples).flatMap((list) => list.map((x) => x.thumbnailRef)));
+
+  /**
+   * logs에 한 줄 붙이고 LOG_LIMIT를 넘은 오래된 줄을 밀어낸다. 밀려난 줄의 Delivery·Detection·고아 SceneDecision을 지운다.
+   * 밀려난 Delivery의 썸네일이 대표 조각(F25)에 남아 있으면 해제하지 않는다.
+   */
   const appendLog = (
-    s: Pick<LensState, 'logs' | 'detections' | 'deliveries' | 'sceneDecisions'>,
+    s: Pick<LensState, 'logs' | 'detections' | 'deliveries' | 'sceneDecisions' | 'usageSamples'>,
     entry: LogEntry,
     dets: readonly NewDetection[] | undefined,
   ): Pick<LensState, 'logs' | 'detections' | 'deliveries' | 'sceneDecisions'> => {
@@ -213,10 +238,12 @@ export function createLensStore(opts: LensStoreOptions = {}) {
       deliveries = { ...deliveries };
       sceneDecisions = { ...sceneDecisions };
       const stillUsed = new Set(logs.map((l) => l.sceneDecisionId));
+      const sampled = sampleUrls(s.usageSamples);
       for (const old of evicted) {
         delete detections[old.id];
         if (old.deliveryId) {
-          revoke(deliveries[old.deliveryId]?.thumbnailRef ?? null);
+          const thumb = deliveries[old.deliveryId]?.thumbnailRef ?? null;
+          if (thumb && !sampled.has(thumb)) revoke(thumb);
           delete deliveries[old.deliveryId];
         }
         if (old.sceneDecisionId && !stillUsed.has(old.sceneDecisionId)) delete sceneDecisions[old.sceneDecisionId];
@@ -263,6 +290,7 @@ export function createLensStore(opts: LensStoreOptions = {}) {
         liveObservation: null,
         results: {},
         lastSkipAt: {},
+        usageSamples: {},
 
         // ── C ──
         selectInput: (kind) =>
@@ -319,10 +347,18 @@ export function createLensStore(opts: LensStoreOptions = {}) {
         setViewMode: (mode) =>
           set((s) => (s.session.viewMode === mode ? {} : { session: { ...s.session, viewMode: mode } })),
 
+        setCaptureFrame: (frame) => {
+          const captureFrame = clampFrame(frame);
+          if (captureFrame) set((s) => ({ session: { ...s.session, captureFrame } }));
+        },
+
         startNewSession: () =>
           set((s) => {
             answered.clear();
-            for (const d of Object.values(s.deliveries)) revoke(d.thumbnailRef);
+            // 대표 조각은 Delivery 썸네일을 같이 쓰므로 한 URL을 두 번 해제하지 않는다.
+            const thumbs = sampleUrls(s.usageSamples);
+            for (const d of Object.values(s.deliveries)) if (d.thumbnailRef) thumbs.add(d.thumbnailRef);
+            for (const url of thumbs) revoke(url);
             const session = freshSession(s.session);
             const plugins: Record<string, Plugin> = {};
             for (const [id, p] of Object.entries(s.plugins)) {
@@ -339,6 +375,7 @@ export function createLensStore(opts: LensStoreOptions = {}) {
               liveObservation: null,
               results: {},
               lastSkipAt: {},
+              usageSamples: {},
             };
           }),
 
@@ -405,6 +442,7 @@ export function createLensStore(opts: LensStoreOptions = {}) {
             reason: logInfo.reason ?? '',
             enforcedBy: null,
             at,
+            ...(d.frameRect ? { frameRect: d.frameRect } : {}),
           };
           set((cur) => appendLog({ ...cur, deliveries: { ...cur.deliveries, [delivery.id]: delivery } }, log, dets));
           return { delivery, log };
@@ -442,10 +480,35 @@ export function createLensStore(opts: LensStoreOptions = {}) {
             // faceCheck가 error인 Delivery는 보호 모드에서 만들지 않는다. 그래도 들어오면 얼굴 수를 모르므로 덜 세지 않게 1로 센다.
             const faces = d.faceCheck.status === 'checked' ? d.faceCheck.detectedFaces : 1;
             const prev = s.counter.perPlugin[d.pluginId] ?? { deliveries: 0, faceDeliveries: 0 };
+            // F25 대표 조각: raw(가리지 않은 원본)는 남기지 않는다. 넘쳐서 빠진 조각은 그 Delivery가 이미 밀려났을 때만 해제한다.
+            let usageSamples = s.usageSamples;
+            if (d.branch !== 'raw' && d.thumbnailRef) {
+              const list = [
+                ...(s.usageSamples[d.pluginId] ?? []),
+                { pluginId: d.pluginId, deliveryId: d.id, at, thumbnailRef: d.thumbnailRef },
+              ];
+              for (const dropped of list.splice(0, Math.max(0, list.length - USAGE_SAMPLES_PER_PLUGIN))) {
+                if (!s.deliveries[dropped.deliveryId]) revoke(dropped.thumbnailRef);
+              }
+              usageSamples = { ...s.usageSamples, [d.pluginId]: list };
+            }
             return {
               deliveries,
+              usageSamples,
               counter: {
                 ...s.counter,
+                usage: [
+                  ...s.counter.usage,
+                  {
+                    at,
+                    pluginId: d.pluginId,
+                    deliveryId: d.id,
+                    objectLabel: d.objectLabel,
+                    bytes: d.bytes,
+                    frameW: d.frameRect?.w ?? null,
+                    frameH: d.frameRect?.h ?? null,
+                  },
+                ],
                 recent10s: [...s.counter.recent10s, { at, pluginId: d.pluginId, detectedFaces: faces }],
                 window60s: [...s.counter.window60s, throughput(at, { deliveries: 1 })],
                 perPlugin: {

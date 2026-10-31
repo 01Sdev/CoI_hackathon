@@ -79,6 +79,22 @@
 | 새 필드 | — | Session `inputRequest`, Plugin `enabled`·`runtimePolicy`, Delivery `runtimeId`·`scene`·`width`·`height`·`blob`, Counter `window60s` 이벤트 배열 |
 | skip 중복 키 | 같은 사유 | 같은 플러그인·같은 사유 |
 
+### 2.6 전송 범위 프레임(F24)과 사용 기록(F25) (2026-10-31 추가, 사용자 승인 명세 PR #18)
+
+| 무엇 | 어디 | 정한 것 |
+| --- | --- | --- |
+| 프레임 상태 | `session.captureFrame`(0\~1) | 기본 가운데 60% [제안]. 새 세션에도 유지하고 새로고침하면 기본값 |
+| 프레임 쓰기 | `setCaptureFrame(box)` (C) | `clampFrame`으로 0\~1 안, 한 변 0.1 [제안] 이상. 유한한 숫자가 아니면 무시 |
+| 좌표 함수 | `src/core/frame.ts` | `clampFrame`, `frameToPx`(네 변을 각각 반올림), `intersectBox`(넓이 0이면 null = "프레임 밖"). A의 자르기와 C의 끌기가 같은 함수를 쓴다 |
+| 프레임 기록 | `Delivery.frameRect?`, `LogEntry.frameRect?` | **선택 필드.** A·B·C가 이미 `prepareDelivery`·`addLog`를 부르고 있어서 필수로 두면 구현 전 브랜치가 타입 검사에서 깨진다. `prepareDelivery`는 Delivery에 있으면 deliver 로그에 복사한다 |
+| 사용 기록 줄 | `counter.usage` | `markDelivery(dispatched)`마다 `{at, pluginId, deliveryId, objectLabel, bytes, frameW, frameH}`. 증가 전용, 새 세션에 비움 |
+| 대표 조각 | `usageSamples[pluginId]` | 최근 3장 [제안], raw 제외. **Delivery의 `thumbnailRef`를 같이 쓴다.** 스토어가 새 object URL을 만들면 액션에 부수 효과가 늘기 때문이다 |
+
+썸네일 URL 해제 규칙(대표 조각과 로그가 URL 하나를 같이 쓰기 때문)
+- 로그 밀어내기: 대표 조각에 남아 있는 URL은 해제하지 않는다.
+- 대표 조각에서 빠질 때: 그 Delivery가 이미 로그에서 밀려났으면 그때 해제한다. 아직 로그에 있으면 나중에 밀려날 때 해제된다.
+- 새 세션: 로그 URL과 대표 조각 URL을 합쳐 한 번씩만 해제한다.
+
 ## 3. 고르지 않은 방법
 
 | 방법 | 고르지 않은 이유 |
@@ -87,6 +103,8 @@
 | 이벤트 버스 따로 두기 | 상태와 이벤트가 두 군데로 나뉘고, 늦게 붙은 구독자는 지난 이벤트를 못 받는다 |
 | 트리거마다 핸들러 + 전환 FIFO 큐 | 낡은 정책으로 게이트가 열리거나 같은 iframe을 두 번 만든다(EGM 설계 리뷰 3번). 선택자 하나 + 최신 값 조정기가 코드도 적다 |
 | 입력 전환에도 iframe 재생성 | 정책이 안 바뀌는데 다시 만드는 것은 마감 앞에서 낭비다 |
+| 대표 조각마다 새 object URL(F25) | 스토어 액션에 URL 만들기라는 부수 효과가 생기고, 기존 해제 시험의 기대값이 모두 바뀐다. URL을 같이 쓰고 해제 규칙 셋으로 푼다 |
+| `frameRect` 필수 필드(F24) | 구현 전 트랙 브랜치 세 곳이 타입 검사에서 깨진다. 선택 필드로 두고 A의 구현과 시험으로 늘 채우게 한다 |
 
 ## 4. 남은 위험
 
@@ -101,6 +119,8 @@
 - `validateManifest` 15개: 기본값, 잘못된 JSON, 모르는 필드, 범위, CSP 주입 문자열, purpose 40자
 - `resolveAllowedOrigins` 3개
 - 스토어 17개: 시드, `applyManifest`, 두 번 `markDelivery`, 100건 밀어내기와 revoke·`perPlugin` 유지, skip 9,999/10,000ms, hold, `setAck` 세 결과와 늦은 ack, M·바깥 표시 10초 경계와 tick, 처리량 null, runtimeId·version 변경 시 거부, raw 조건(G1), 비교 모드 끌 때 해제, 일시 정지와 canSend, stopped → enabled false, inputRequest seq, 새 세션 초기화, apiSends
+- F24·F25 6개(2.6): `clampFrame` 경계, `frameToPx`·`intersectBox`(프레임 안·넓이 0), `setCaptureFrame`과 새 세션 유지, 사용 기록 줄과 deliver 로그 `frameRect`, 대표 조각 3장·raw 제외·URL 해제 순서, 새 세션의 중복 없는 해제
+- 이후 추가된 칼로리·`setResult`·게이트 시험을 합쳐 지금은 48개다
 
 ## 6. 리뷰 기록
 
