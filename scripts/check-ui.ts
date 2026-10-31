@@ -6,7 +6,7 @@ import { CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE } from '../src/core/const
 import type { Box } from '../src/core/types';
 import { entryMeta, frameText, usageMeta, wallClock } from '../src/proof/format';
 import { coverBox, coverPointToSource, cornerPoint, dragCornerFromScreen, faceWindowRemaining, nudgeCorner } from '../src/ui/geometry';
-import { formatBytes, josa } from '../src/ui/labels';
+import { appResultLine, formatBytes, josa } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 
 let passed = 0;
@@ -159,6 +159,11 @@ check('wallClock: performance 시각을 같은 순간의 벽시계로 바꾼다'
   const dateNow = new Date(2026, 9, 31, 21, 43, 10).getTime();
   assert.equal(wallClock(5_000, 10_000, dateNow), '21:43:05');
   assert.equal(wallClock(10_000, 10_000, dateNow), '21:43:10');
+});
+
+check('appResultLine: /hud 앱 결과 줄은 앱 이름으로 시작하고, 고정표면 꼬리를 붙인다', () => {
+  assert.equal(appResultLine('칼로리', '피자 약 285kcal', false), '칼로리 · 피자 약 285kcal');
+  assert.equal(appResultLine('칼로리', '피자 약 285kcal', true), '칼로리 · 피자 약 285kcal · 고정표');
 });
 
 console.log(`\n${passed}개 통과`);
