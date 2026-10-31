@@ -499,7 +499,7 @@ button.fm-capsule:focus-visible,
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  border-radius: 24px;
+  border-radius: var(--fm-r-panel);
 }
 .fm-appcard__head {
   display: flex;
@@ -512,10 +512,10 @@ button.fm-capsule:focus-visible,
   flex: none;
   inline-size: 28px;
   block-size: 28px;
-  border-radius: 8px;
+  border-radius: var(--fm-r-capsule);
   display: grid;
   place-items: center;
-  font-size: 14px;
+  font-size: var(--fm-size-label);
   font-weight: 600;
   background: color-mix(in srgb, var(--fm-text) 16%, transparent);
 }
@@ -527,21 +527,21 @@ button.fm-capsule:focus-visible,
 .fm-appcard__tag {
   padding: 2px 8px;
   border: 1px solid color-mix(in srgb, var(--fm-text) 40%, transparent);
-  border-radius: 999px;
-  font-size: 12px;
+  border-radius: var(--fm-r-capsule);
+  font-size: var(--fm-size-caption);
   color: var(--fm-sub);
   white-space: nowrap;
 }
-/* 안쪽 칸은 바깥 칸과 밝기가 반대(어두운 테마 = 밝은 칸, 밝은 테마 = 어두운 칸) */
+/* 안쪽 칸은 바깥 칸과 밝기가 반대(어두운 테마 = 밝은 칸, 밝은 테마 = 어두운 칸). 글자는 Text 바탕 위 글자 토큰 */
 .fm-appcard__body {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 12px 16px;
-  border-radius: 12px;
+  border-radius: var(--fm-r-card);
   background: var(--fm-text);
-  color: var(--fm-bg);
+  color: var(--fm-on-text);
 }
 .fm-appcard__text {
   min-inline-size: 0;
@@ -553,9 +553,9 @@ button.fm-capsule:focus-visible,
 .fm-appcard__note {
   flex: none;
   padding: 4px 8px;
-  border-radius: 8px;
-  font-size: 12px;
-  background: color-mix(in srgb, var(--fm-bg) 12%, transparent);
+  border-radius: var(--fm-r-capsule);
+  font-size: var(--fm-size-caption);
+  background: color-mix(in srgb, var(--fm-on-text) 12%, transparent);
 }
 /* /hud: 오브 아래 줄 자리는 그대로, framelet 줄(.fm-result)과 다른 클래스 */
 .fm-hud__applines {
@@ -1016,7 +1016,7 @@ button.fm-logcard:focus-visible,
   padding-inline-start: 18px;
 }
 
-/* ── 규약 보기(안 B, app-structure §3.2). 새 화면이라 §3.5 간격·모서리(8·12·16·24)와 44px 누르는 영역을 따른다 ── */
+/* ── 규약 보기(안 B, app-structure §3.2). 모서리·색·글자 크기는 기존 토큰(--fm-*), 누르는 영역 44px ── */
 .fm-protocol-open {
   flex: none;
   min-block-size: 44px;
@@ -1035,7 +1035,6 @@ button.fm-logcard:focus-visible,
 .fm-appicon.fm-appicon--lg {
   inline-size: 48px;
   block-size: 48px;
-  border-radius: 16px;
   font-size: 20px;
 }
 .fm-protocol__who {
@@ -1052,7 +1051,7 @@ button.fm-logcard:focus-visible,
   display: grid;
   gap: 12px;
   padding: 16px;
-  border-radius: 16px;
+  border-radius: var(--fm-r-card);
   background: var(--fm-glass-capsule);
   border: var(--fm-line) solid var(--fm-glass-line);
 }
@@ -1064,7 +1063,7 @@ button.fm-logcard:focus-visible,
 }
 .fm-protocol__fixed {
   margin-inline-start: auto;
-  font-size: 12px;
+  font-size: var(--fm-size-caption);
   color: var(--fm-sub);
 }
 .fm-protocol__list {
@@ -1072,7 +1071,7 @@ button.fm-logcard:focus-visible,
   padding-inline-start: 20px;
   display: grid;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--fm-size-label);
   line-height: 1.4;
 }
 .fm-protocol__list > li::marker {
@@ -1080,7 +1079,7 @@ button.fm-logcard:focus-visible,
 }
 .fm-protocol__small {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fm-size-caption);
   line-height: 1.5;
   color: var(--fm-sub);
 }
@@ -1090,7 +1089,7 @@ button.fm-logcard:focus-visible,
 }
 /* fm-kicker는 대문자로 바꾸므로 쓰지 않는다(영문 이름은 문장형 대소문자, §3.5) */
 .fm-protocol__th {
-  font-size: 12px;
+  font-size: var(--fm-size-caption);
   font-weight: 500;
   color: var(--fm-sub);
 }
