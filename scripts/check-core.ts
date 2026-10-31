@@ -455,11 +455,55 @@ check('setEngine: 넘긴 필드만 바뀌고 새 세션에도 유지', () => {
   assert.deepEqual(store.getState().engine, { status: 'ready', loadedBytes: 100, totalBytes: 100, detail: null });
 });
 
-check('setResult: source api일 때만 apiSends +1', () => {
-  const { store } = setup();
-  store.getState().setResult('calorie', { deliveryId: 'x', text: 'a', source: 'fallback', at: 0 });
-  store.getState().setResult('calorie', { deliveryId: 'y', text: 'b', source: 'api', at: 0 });
+check('setResult: 보낸 전달의 첫 결과만 받고, source api일 때만 apiSends +1', () => {
+  const { store, ready, send } = setup();
+  ready();
+  const a = send();
+  const b = send();
+  const line = (deliveryId: string, source: 'api' | 'fallback') => ({ deliveryId, text: '피자 약 285kcal', source, at: 0 });
+  assert.equal(store.getState().setResult('calorie', line(a.delivery.id, 'fallback')), true);
+  assert.equal(store.getState().setResult('calorie', line(b.delivery.id, 'api')), true);
   assert.equal(store.getState().counter.apiSends, 1);
+  assert.equal(store.getState().setResult('calorie', line(b.delivery.id, 'api')), false, '두 번째 결과는 버린다');
+  assert.equal(store.getState().counter.apiSends, 1);
+});
+
+check('setResult: 없는·보내지 않은·다른 플러그인·새 세션 전 전달의 결과는 버린다', () => {
+  const { store, ready, delivery, send } = setup();
+  ready();
+  const line = (deliveryId: string) => ({ deliveryId, text: 'x', source: 'api' as const, at: 0 });
+  assert.equal(store.getState().setResult('calorie', line('dlv-none')), false);
+  const prepared = store.getState().prepareDelivery(delivery(), { sceneDecisionId: null })!;
+  assert.equal(store.getState().setResult('calorie', line(prepared.delivery.id)), false, 'prepared는 아직 보내지 않음');
+  const sent = send();
+  assert.equal(store.getState().setResult('hello', line(sent.delivery.id)), false, '다른 플러그인');
+  store.getState().startNewSession();
+  assert.equal(store.getState().setResult('calorie', line(sent.delivery.id)), false, '새 세션 전 전달');
+  assert.deepEqual(store.getState().results, {});
+  assert.equal(store.getState().counter.apiSends, 0);
+});
+
+check('게이트: desired가 지금 값과 다르면 gateOpen: true를 받아도 닫아 둔다', () => {
+  const { store } = setup();
+  const before = selectDesiredRuntime(store.getState(), 'calorie')!;
+  store.getState().setCompareMode(true); // 칼로리의 connect가 'none'으로 바뀐다
+  store.getState().setPluginRuntime('calorie', {
+    status: 'ready',
+    runtimeId: 'old',
+    runtimePolicy: { connect: 'network', manifestVersion: 1 },
+    gateOpen: true,
+    desired: before,
+  });
+  assert.equal(store.getState().plugins.calorie!.gateOpen, false);
+  const now = selectDesiredRuntime(store.getState(), 'calorie')!;
+  store.getState().setPluginRuntime('calorie', {
+    status: 'ready',
+    runtimeId: 'new',
+    runtimePolicy: { connect: 'none', manifestVersion: 1 },
+    gateOpen: true,
+    desired: now,
+  });
+  assert.equal(store.getState().plugins.calorie!.gateOpen, true);
 });
 
 console.log(`\n${passed}개 통과`);
