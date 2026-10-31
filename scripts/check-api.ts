@@ -67,14 +67,14 @@ const baseURL = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
 const big = { count: 1_000, windowMs: 60_000 };
 const handler = createCalorieHandler({ baseURL, apiKey: 'test-key-not-real', rateLimit: big });
 const post = (body: BodyInit | null, headers: Record<string, string> = { 'content-type': 'image/jpeg' }, h = handler) =>
-  h(new Request('https://famelet.test/api/calorie', { method: 'POST', body, headers }));
+  h(new Request('https://framelet.test/api/calorie', { method: 'POST', body, headers }));
 const ok = (answer: unknown) => {
   behave = { message: msg(answer) };
 };
 const pizza = { is_food: true, food_ko: '피자', portion: '한 조각', kcal: 290 };
 
 await check('OPTIONS → 204, CORS·Allow-Methods·Allow-Headers·Max-Age (Vercel 내보내기도 같음)', async () => {
-  for (const r of [await handler(new Request('https://famelet.test/api/calorie', { method: 'OPTIONS' })), OPTIONS()]) {
+  for (const r of [await handler(new Request('https://framelet.test/api/calorie', { method: 'OPTIONS' })), OPTIONS()]) {
     assert.equal(r.status, 204);
     assert.equal(r.headers.get('access-control-allow-origin'), '*');
     assert.equal(r.headers.get('access-control-allow-methods'), 'POST');
@@ -89,14 +89,14 @@ await check('정상 JPEG → 200 한 줄, 받은 본문 헤더, CORS', async () 
   assert.equal(r.status, 200);
   assert.equal(await r.text(), '피자 약 290kcal');
   assert.equal(r.headers.get('content-type'), 'text/plain; charset=utf-8');
-  assert.equal(r.headers.get('x-famelet-body-bytes'), String(jpeg.length));
-  assert.equal(r.headers.get('x-famelet-body-sha256'), jpegSha);
+  assert.equal(r.headers.get('x-framelet-body-bytes'), String(jpeg.length));
+  assert.equal(r.headers.get('x-framelet-body-sha256'), jpegSha);
   assert.equal(r.headers.get('access-control-allow-origin'), '*');
   assert.equal(
     r.headers.get('access-control-expose-headers'),
-    'X-Famelet-Body-Bytes, X-Famelet-Body-SHA256, X-Famelet-Kcal-Clamped',
+    'X-Framelet-Body-Bytes, X-Framelet-Body-SHA256, X-Framelet-Kcal-Clamped',
   );
-  assert.equal(r.headers.get('x-famelet-kcal-clamped'), null);
+  assert.equal(r.headers.get('x-framelet-kcal-clamped'), null);
 });
 
 await check('상류 요청 모양: 모델·effort low·json_schema·max_tokens·시스템 프롬프트·이미지 먼저·thinking 없음', async () => {
@@ -131,7 +131,7 @@ await check('판정 순서: 405 → 429 → 413 → 415 → 502(상류에 가기
   let t = 0;
   const h = createCalorieHandler({ baseURL, apiKey: 'test-key-not-real', rateLimit: { count: 2, windowMs: 60_000 }, now: () => t });
   const before = seen.length;
-  assert.equal((await h(new Request('https://famelet.test/api/calorie'))).status, 405);
+  assert.equal((await h(new Request('https://framelet.test/api/calorie'))).status, 405);
   assert.equal((await post('x', { 'content-type': 'text/plain' }, h)).status, 415);
   assert.equal((await post('x', { 'content-type': 'text/plain' }, h)).status, 415);
   assert.equal((await post(jpeg, undefined, h)).status, 429); // 3번째: 고정 창 60초에 2건
@@ -148,7 +148,7 @@ await check('413: 614,400B 초과(Content-Length·실제 본문), 받은 본문 
   over.set([0xff, 0xd8, 0xff]);
   const r = await post(over);
   assert.equal(r.status, 413);
-  assert.equal(r.headers.get('x-famelet-body-bytes'), null);
+  assert.equal(r.headers.get('x-framelet-body-bytes'), null);
   const exact = new Uint8Array(MAX_BODY_BYTES);
   exact.set([0xff, 0xd8, 0xff]);
   ok({ is_food: false, food_ko: '', portion: '알 수 없음', kcal: 0 });
@@ -161,11 +161,11 @@ await check('415: image/jpeg 아님·0바이트·FF D8 FF 아님, 받은 본문 
   const before = seen.length;
   const r1 = await post('hello', { 'content-type': 'text/plain' });
   assert.equal(r1.status, 415);
-  assert.equal(r1.headers.get('x-famelet-body-bytes'), '5');
+  assert.equal(r1.headers.get('x-framelet-body-bytes'), '5');
   assert.equal((await post(new Uint8Array(0))).status, 415);
   const r3 = await post(new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
   assert.equal(r3.status, 415);
-  assert.equal(r3.headers.get('x-famelet-body-sha256'), createHash('sha256').update(new Uint8Array([0x89, 0x50, 0x4e, 0x47])).digest('hex'));
+  assert.equal(r3.headers.get('x-framelet-body-sha256'), createHash('sha256').update(new Uint8Array([0x89, 0x50, 0x4e, 0x47])).digest('hex'));
   assert.equal(seen.length - before, 0);
 });
 
@@ -179,7 +179,7 @@ await check(`502: 상류 8초 지연 → ${UPSTREAM_TIMEOUT_MS}ms에 끊고 재�
   assert.equal(r.status, 502);
   assert.equal(await r.text(), 'upstream timeout');
   assert.ok(ms >= UPSTREAM_TIMEOUT_MS - 100 && ms < UPSTREAM_TIMEOUT_MS + 500, `${Math.round(ms)}ms`);
-  assert.equal(r.headers.get('x-famelet-body-sha256'), jpegSha);
+  assert.equal(r.headers.get('x-framelet-body-sha256'), jpegSha);
   await new Promise((res) => setTimeout(res, 300));
   assert.equal(seen.length - before, 1);
   assert.deepEqual(logs, ['calorie 502 timeout']);
@@ -262,7 +262,7 @@ await check('응답 처리 4~7: 음식 아님, 이름 공백 정리·12자, 빈 
     const r = await post(jpeg, label ? { 'content-type': 'image/jpeg', 'x-label': label } : { 'content-type': 'image/jpeg' });
     assert.equal(r.status, 200);
     assert.equal(await r.text(), expected);
-    assert.equal(r.headers.get('x-famelet-kcal-clamped'), clamped ? '1' : null, expected);
+    assert.equal(r.headers.get('x-framelet-kcal-clamped'), clamped ? '1' : null, expected);
   }
 });
 

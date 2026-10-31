@@ -1,18 +1,18 @@
-// 플러그인 SDK 타입(Worker 안의 전역 `famelet`). 규칙: docs/specs/02-SSRD.md "플러그인 SDK".
+// 플러그인 SDK 타입(Worker 안의 전역 `framelet`). 규칙: docs/specs/02-SSRD.md "플러그인 SDK".
 // 런타임 구현은 B(src/plugins/)가 Worker 코드 문자열로 만든다. 여기는 플러그인 작성자와 B가 같이 보는 계약이다.
 
 import type { Manifest } from './manifest';
 import type { ViolationAttempt } from './messages';
 import type { SceneLabel } from './types';
 
-export interface FameletInit {
+export interface FrameletInit {
   pluginId: string;
   manifest: Manifest;
   /** 호스트 origin. 비교 모드의 칼로리 iframe에서는 null이고, 그때는 요청하지 않고 고정표를 쓴다. */
   apiBase: string | null;
 }
 
-export interface FameletDelivery {
+export interface FrameletDelivery {
   deliveryId: string;
   scene: SceneLabel;
   /** COCO 영문 물체 라벨(pizza 등). x-label·고정표 키. */
@@ -24,11 +24,11 @@ export interface FameletDelivery {
   blob: Blob;
 }
 
-export interface FameletSdk {
+export interface FrameletSdk {
   /** 최상위에서 바로 등록. Promise가 끝나면 ready를 보낸다. 2.5초를 넘기거나 예외면 ready 없음. */
-  onInit(handler: (init: FameletInit) => void | Promise<void>): void;
+  onInit(handler: (init: FrameletInit) => void | Promise<void>): void;
   /** 전달마다. SDK는 이 핸들러를 부르기 전에 ack(SHA-256)를 먼저 보낸다. */
-  onDelivery(handler: (d: FameletDelivery) => void | Promise<void>): void;
+  onDelivery(handler: (d: FrameletDelivery) => void | Promise<void>): void;
   /** 결과 한 줄(IF-05). deliveryId당 1번, 200자까지. */
   result(deliveryId: string, text: string, source: 'api' | 'fallback'): void;
   /** 자기 보고(IF-06). 같은 attempt·target은 1번만. */

@@ -2,7 +2,7 @@
 
 export type ThemeMode = 'dark' | 'light';
 
-const KEY = 'famelet.theme';
+const KEY = 'framelet.theme';
 
 /** 저장된 선택. 없거나 읽을 수 없으면 dark. */
 export function storedTheme(): ThemeMode {

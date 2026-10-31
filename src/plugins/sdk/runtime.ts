@@ -1,8 +1,8 @@
-// Worker 안의 전역 `famelet` SDK. 규칙: docs/specs/02-SSRD.md "플러그인 SDK", 설계: docs/designs/plugin-host.md §2.6.
+// Worker 안의 전역 `framelet` SDK. 규칙: docs/specs/02-SSRD.md "플러그인 SDK", 설계: docs/designs/plugin-host.md §2.6.
 // Worker 소스에 toString()으로 들어가므로 인자와 Worker 전역(setTimeout, Blob, Uint8Array…)만 쓴다. import는 타입만.
 
 import type { ViolationAttempt } from '../../core/messages';
-import type { FameletDelivery, FameletInit, FameletSdk } from '../../core/sdk';
+import type { FrameletDelivery, FrameletInit, FrameletSdk } from '../../core/sdk';
 
 export interface SdkOptions {
   initTimeoutMs: number;
@@ -21,7 +21,7 @@ export interface WorkerScopeLike {
   crypto?: { subtle?: { digest(algorithm: string, data: Uint8Array): Promise<ArrayBuffer> } };
 }
 
-export function installFameletSdk(
+export function installFrameletSdk(
   scope: WorkerScopeLike,
   sha256Pure: (bytes: Uint8Array) => string,
   options: SdkOptions,
@@ -29,8 +29,8 @@ export function installFameletSdk(
   // 플러그인이 나중에 scope.postMessage를 바꿔도 SDK는 처음 것을 쓴다(그래도 자기 보고일 뿐이다).
   const post = scope.postMessage.bind(scope);
   const attempts: readonly string[] = ['camera', 'hostDom', 'fetch', 'script'];
-  let initHandler: ((init: FameletInit) => void | Promise<void>) | null = null;
-  let deliveryHandler: ((d: FameletDelivery) => void | Promise<void>) | null = null;
+  let initHandler: ((init: FrameletInit) => void | Promise<void>) | null = null;
+  let deliveryHandler: ((d: FrameletDelivery) => void | Promise<void>) | null = null;
   let initSeen = false;
   let ready = false;
   const received = new Set<string>();
@@ -56,9 +56,9 @@ export function installFameletSdk(
   };
 
   const handleInit = async (m: Record<string, unknown>) => {
-    const init: FameletInit = {
+    const init: FrameletInit = {
       pluginId: String(m.pluginId),
-      manifest: m.manifest as FameletInit['manifest'],
+      manifest: m.manifest as FrameletInit['manifest'],
       apiBase: typeof m.apiBase === 'string' ? m.apiBase : null,
     };
     const handler = initHandler;
@@ -100,9 +100,9 @@ export function installFameletSdk(
     if (options.testAckMode !== 'suppress') post({ type: 'ack', deliveryId, sha256 });
     const handler = deliveryHandler;
     if (!handler) return;
-    const d: FameletDelivery = {
+    const d: FrameletDelivery = {
       deliveryId,
-      scene: m.scene as FameletDelivery['scene'],
+      scene: m.scene as FrameletDelivery['scene'],
       objectLabel: String(m.objectLabel),
       width: Number(m.width),
       height: Number(m.height),
@@ -129,7 +129,7 @@ export function installFameletSdk(
     }
   });
 
-  const sdk: FameletSdk = {
+  const sdk: FrameletSdk = {
     onInit(handler) {
       initHandler = typeof handler === 'function' ? handler : null;
     },
@@ -151,5 +151,5 @@ export function installFameletSdk(
       post({ type: 'violation', attempt, target: t });
     },
   };
-  Object.defineProperty(scope, 'famelet', { value: Object.freeze(sdk), enumerable: true });
+  Object.defineProperty(scope, 'framelet', { value: Object.freeze(sdk), enumerable: true });
 }

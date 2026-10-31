@@ -2,10 +2,10 @@
 // caloriePlugin은 Worker 소스에 toString()으로 들어가므로 바깥 이름을 참조하지 않는다.
 // 고정표·라벨 규칙·표 밖 문구는 src/core/calorie.ts 값을 registry가 JSON 인자로 넣는다(서버와 같은 표).
 
-import type { FameletSdk } from '../core/sdk';
+import type { FrameletSdk } from '../core/sdk';
 
 export function caloriePlugin(
-  famelet: FameletSdk,
+  framelet: FrameletSdk,
   table: Record<string, { ko: string; kcal: number }>,
   labelPattern: string,
   labelMax: number,
@@ -21,14 +21,14 @@ export function caloriePlugin(
   };
 
   let apiBase: string | null = null;
-  famelet.onInit((init) => {
+  framelet.onInit((init) => {
     apiBase = init.apiBase;
   });
 
-  famelet.onDelivery(async (d) => {
+  framelet.onDelivery(async (d) => {
     // 비교 모드(connect-src 'none')에서는 요청을 시도하지 않는다.
     if (apiBase === null) {
-      famelet.result(d.deliveryId, fallbackText(d.objectLabel), 'fallback');
+      framelet.result(d.deliveryId, fallbackText(d.objectLabel), 'fallback');
       return;
     }
     const headers: Record<string, string> = { 'Content-Type': 'image/jpeg' };
@@ -43,14 +43,14 @@ export function caloriePlugin(
       if (res.ok) {
         const line = (await res.text()).split('\n')[0]?.trim() ?? '';
         if (line) {
-          famelet.result(d.deliveryId, line, 'api');
+          framelet.result(d.deliveryId, line, 'api');
           return;
         }
       }
-      famelet.result(d.deliveryId, fallbackText(d.objectLabel), 'fallback');
+      framelet.result(d.deliveryId, fallbackText(d.objectLabel), 'fallback');
     } catch {
       // 중단·네트워크 오류·CSP 차단: 고정표. reportViolation은 부르지 않는다(서버 장애가 HUD 빨강으로 보이지 않게).
-      famelet.result(d.deliveryId, fallbackText(d.objectLabel), 'fallback');
+      framelet.result(d.deliveryId, fallbackText(d.objectLabel), 'fallback');
     } finally {
       clearTimeout(timer);
     }

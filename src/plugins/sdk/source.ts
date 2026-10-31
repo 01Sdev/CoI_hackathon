@@ -1,8 +1,8 @@
 // Worker 소스 문자열 만들기: SDK + 플러그인 코드 = blob Worker 하나(IF-01 init.code).
 
 import { PLUGIN_MESSAGE_LIMITS } from '../../core/constants';
-import { SDK_INIT_TIMEOUT_MS, type FameletSdk } from '../../core/sdk';
-import { installFameletSdk, type SdkOptions } from './runtime';
+import { SDK_INIT_TIMEOUT_MS, type FrameletSdk } from '../../core/sdk';
+import { installFrameletSdk, type SdkOptions } from './runtime';
 import { sha256Pure } from './sha256';
 
 /** /dev 시험 페이지만 넣는다. 제품 코드에서는 넣지 않는다. */
@@ -32,17 +32,17 @@ export function buildWorkerSource(pluginSource: string, test: SdkTestOptions = {
   return [
     '"use strict";',
     NAME_HELPER_SHIM,
-    `(${installFameletSdk.toString()})(self, (${sha256Pure.toString()}), ${JSON.stringify(sdkOptions(test))});`,
+    `(${installFrameletSdk.toString()})(self, (${sha256Pure.toString()}), ${JSON.stringify(sdkOptions(test))});`,
     pluginSource,
     '',
   ].join('\n');
 }
 
 /**
- * 플러그인 함수를 Worker에서 부르는 문장. 첫 인자는 self.famelet, 나머지는 JSON으로 넣는다.
+ * 플러그인 함수를 Worker에서 부르는 문장. 첫 인자는 self.framelet, 나머지는 JSON으로 넣는다.
  * 함수는 바깥 이름을 참조하지 않아야 한다(docs/designs/plugin-host.md §2.1).
  */
-export function pluginCall(fn: (famelet: FameletSdk, ...data: never[]) => void, ...data: unknown[]): string {
-  const args = ['self.famelet', ...data.map((d) => JSON.stringify(d))].join(', ');
+export function pluginCall(fn: (framelet: FrameletSdk, ...data: never[]) => void, ...data: unknown[]): string {
+  const args = ['self.framelet', ...data.map((d) => JSON.stringify(d))].join(', ');
   return `(${fn.toString()})(${args});`;
 }
