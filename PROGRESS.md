@@ -79,7 +79,7 @@
 | V6 | Vercel 최소 배포(정적 + `/api/calorie` + `/hud`·`/outward` 경로 + 모델·WASM) | 배포 방식이 정해지는 즉시. V1·V9·V10·V11의 Android·배포 시험이 이것을 기다린다 | 사용자 결정 → B | 대기(배포 미정) |
 | V10 | M0: `dev/fixtures/m0-test.jpg`로 match·mismatch·timeout | 트랙 B 첫 PR(`plugins/host` + hello) | B | 대기. iPhone 계약 재현은 통과 |
 | V9 | Android Chrome 격리 S1~S6 | 트랙 B 첫 PR 뒤, 배포 주소에서 | B | 대기 |
-| V1 | MediaPipe 속도·GPU→CPU 대체(Android) | 트랙 A 첫 PR(0단계) 뒤, 모델 파일이 정해지고 배포 주소가 생기면 | A | iPhone 통과(첫 추론 11~14초). 노트북 Chrome(M3 Pro, 제품 코드 `/dev/`): GPU, 0단계 5.0fps, 추론 평균 28ms·p95 36ms. Android 대기(배포 주소 없음) |
+| V1 | MediaPipe 속도·GPU→CPU 대체(Android) | 트랙 A 첫 PR(0단계) 뒤, 모델 파일이 정해지고 배포 주소가 생기면 | A | iPhone 통과(첫 추론 11~14초). 노트북 Chrome(M3 Pro, 제품 코드 `/dev/`): GPU, 0단계 5.0fps, 추론 평균 28ms·p95 36ms, 페이지 시작→첫 판정 803ms(로컬 서버, 캐시 있음). Android 대기(배포 주소 없음) |
 | V4 | 큰 해상도 요청 시 실제 해상도·포착 시간(Android) | V1과 같이 | A | iPhone 통과. 노트북: 내장 브라우저 창이 카메라를 막아 못 잼(녹화 자동 전환은 확인). Android 대기 |
 | V8 | 녹화 mp4 재생 후 판정 | 트랙 A 입력 PR + `08-데모-소재.md`의 `pizza-alone.mp4` | A | iPhone 합성 영상 통과. 노트북 Chrome: 직접 만든 피자 그림 mp4(720×1280)로 `food·pizza` 확정(제품 코드). `pizza-alone.mp4` 없음, 실제 영상 대기 |
 | V2 | 먼·옆·잘린 얼굴의 분기 | 트랙 A 둘째 PR(포착·가림) + 얼굴 영상 3개 | A | 대기(얼굴 영상 없음). 대신 그림 얼굴(이모지)+그린 피자로 2b 가림·출구 재검사 경로만 확인 |
@@ -89,5 +89,5 @@
 | V12 | 노트북 Chrome에서 데모 5단계 네트워크 탭 | 2차 통합 뒤 리허설 | C·발표자 | 대기 |
 | V13 | Ray-Ban Display 시뮬레이터에서 `/hud` D-pad | 트랙 C `/hud` PR | C | 대기 |
 | V14 | 메인 창과 `/outward` 동기화(외부 화면) | 트랙 C `/outward` PR 뒤 리허설 | C | 대기 |
-| V15 | 호스트 외부 요청 차단: MediaPipe 로그 요청(`odml.pa.googleapis.com`)이 네트워크 탭에 0건인지. 호스트 `connect-src 'self'`가 srcdoc iframe Worker의 `$ORIGIN` 요청을 막는지(Chrome·iPhone) | 트랙 B 첫 PR(호스트 가드) + 배포 주소에서 | B(iPhone은 x20-codex 도움 가능) | 대기. 독립 데모에서 `connect-src 'self'`로 로그 요청 차단 확인(교집합 문제는 미시험) |
+| V15 | 호스트 외부 요청 차단: MediaPipe 로그 요청(`odml.pa.googleapis.com`)이 네트워크 탭에 0건인지. 호스트 `connect-src 'self'`가 srcdoc iframe Worker의 `$ORIGIN` 요청을 막는지(Chrome·iPhone) | 트랙 B 첫 PR(호스트 가드) + 배포 주소에서 | B(iPhone은 x20-codex 도움 가능) | 대기. 독립 데모에서 `connect-src 'self'`로 로그 요청 차단 확인(교집합 문제는 미시험). **우리 앱 재현(트랙 A, 10/31 21:50, 노트북 Chrome `/dev/`, 가드 없음):** 모델 생성 60초 뒤 `POST https://odml.pa.googleapis.com/v1/log` 2건(ObjectDetector·FaceDetector 하나씩), 응답 200(밖으로 나감). 이후 60초마다 반복. 본문은 약 100B `application/x-protobuf`(로그 소스 ID, 버전 "1.2.0", 작업 종류, 호출 수·시간). 이미지 바이트 없음. 헤더에 라이브러리 내장 API 키. `fetch`를 거부하면 그 작업의 로거가 스스로 멈춰 다음 주기에 다시 시도하지 않았다(180초까지 0건). MediaPipe는 `fetch`를 보낼 때 찾으므로 import 뒤에 건 가드도 잡힌다 |
 | V7 | iPhone 효과음·무음 모드 | — | — | 통과 |
