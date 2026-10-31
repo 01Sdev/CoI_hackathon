@@ -36,3 +36,6 @@
 .fm-selection__handle[data-handle='w']::after, .fm-selection__handle[data-handle='e']::after { inset: 8px 12px; border: 0; background: #fff; }
 .fm-selection__handle:focus-visible { outline: none; }
 .fm-selection__frame:focus-visible .fm-selection__handle::after, .fm-selection__handle:focus-visible::after, .fm-selection__edge:focus-visible { filter: drop-shadow(0 0 3px var(--fm-lens, #71bfff)); }
+/* 누를 수 있는 숫자(HUD: 동의 끄기). 모양은 같고 누를 자리만 44px로 넓힌다. */
+.fm-selection__count[data-pressable='true'] { min-width: 44px; min-height: 44px; justify-content: flex-end; pointer-events: auto; cursor: pointer; touch-action: manipulation; font: inherit; }
+.fm-selection__count[data-pressable='true']:focus-visible { outline: 2px solid var(--fm-lens, #71bfff); outline-offset: 2px; }

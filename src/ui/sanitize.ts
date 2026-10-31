@@ -37,3 +37,22 @@ export function sanitizeAppText(text: string, max = APP_TEXT_MAX): string {
   const chars = Array.from(s);
   return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : s;
 }
+
+/** 코디 스캔 답 최대 글자(outfit-pipelines.md 계약: answer 1,000자). */
+export const ANSWER_TEXT_MAX = 1000;
+
+/**
+ * 코디 스캔 답(플러그인 문자열)을 질문·답 패널에 넣기 전에 고친다. 여러 줄 답이라 줄바꿈은 남기고(최대 연속 2줄),
+ * 제어·방향·폭 0 문자와 framelet 보호 표시처럼 보이는 문구는 sanitizeAppText와 같이 지운다. 그림 문자는 남긴다(패널 안이라 플랫폼 표시로 오인되지 않음).
+ */
+export function sanitizeAnswerText(text: string, max = ANSWER_TEXT_MAX): string {
+  let s = String(text).normalize('NFKC').replace(/\r\n?|[\u0085\u2028\u2029]/g, '\n');
+  s = s.replace(/[\u0000-\u0009\u000B-\u001F\u007F-\u009F\u061C\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g, '');
+  for (let prev = ''; prev !== s; ) {
+    prev = s;
+    for (const re of RESERVED_RE) s = s.replace(re, '');
+  }
+  s = s.replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  const chars = Array.from(s);
+  return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : s;
+}

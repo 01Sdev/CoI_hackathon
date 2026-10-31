@@ -56,3 +56,14 @@ const [frame, setFrame] = useState({ x: .14, y: .08, w: .72, h: .88 });
 - `npx tsx scripts/check-selection-frame.ts`: 이동 제한, 네 모서리·네 중간점·최소 크기·작은 부모 검증.
 - 브라우저에서 테두리 이동, 8개 손잡이, 터치, 방향키, 부모 크기 변경, 외부 숫자 갱신과 프레임 조작 시 숫자 유지, 흰 배경 없음과 숫자 1.5px 외곽선을 확인한다. 실행 결과는 PR 본문에 기록한다.
 - 실제 카메라·모델의 검출 정확도, 전송·모자이크 연결, 실휴대폰·글래스는 이 UI 추출로 검증하지 않는다.
+
+## 앱 연결(2026-11-01, `track-c/outfit-ui`)
+
+사용자 결정(2026-11-01): 휴대폰 웹은 스마트 글래스 시야를 휴대폰 브라우저로 흉내 내는 화면이고, 플랫폼 UI는 이 프레임을 최대한 따른다. 그래서 메인 화면(`/`)의 흰 틀은 이 컴포넌트다.
+
+- `CaptureFrame`이 `SelectionFrame`을 그린다. 스토어의 `session.captureFrame`(소스 0~1)과 이 컴포넌트의 부모 0~1 값은 `geometry.ts`의 `sourceToView`·`viewToSource`(cover 변환)로 오간다.
+- 휴대폰·데스크톱에서는 늘 조절할 수 있다(조절 모드 버튼 없음). 화면에 맞춘 값(12px 여백, 최소 260×160px)도 스토어에 쓴다. 그래서 흰 틀이 곧 보내는 범위다.
+- `/hud`는 `editable={false}`로 틀과 숫자만 그리고 스토어에 쓰지 않는다. 글래스 화면은 검정이 투명이라 숫자를 흰색으로 48px로 그린다(NFR-040).
+- `peopleCount` = `selectConsentCount(s)`(지금 살아 있는 코디 스캔 동의 수, 평소 0). 1 이상이면 `onCountPress`로 숫자가 버튼이 되고, 누르면 모든 동의를 끈다(`revokeConsent`).
+- 이 컴포넌트에 더한 선택 prop: `editable`(기본 true), `countLabel`, `onCountPress`, `countPressLabel`. 개발 페이지 동작은 그대로다.
+- 플러그인 화면(금빛 상태창·코디 답 패널, z 4)보다 위(z 5)에 두어 앱 화면이 틀과 숫자를 덮지 않게 한다.

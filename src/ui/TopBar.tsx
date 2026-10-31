@@ -1,5 +1,5 @@
-// 휴대폰·데스크톱 위쪽 줄: 왼쪽 브랜드(HUD 밖, 테마·화면 메뉴), 오른쪽 전송 범위 조절 버튼(F24a)과 입력 캡슐(F10 드롭다운).
-// 전송 범위 조절은 카메라 위가 아니라 여기서 켜고 끈다(사용자 결정 2026-11-01: 카메라 위에는 흰 틀과 사람 아이콘·숫자만).
+// 도구 배치(?tools)의 위쪽 줄: 왼쪽 브랜드(HUD 밖, 테마·화면 메뉴), 오른쪽 입력 캡슐(F10 드롭다운).
+// 전송 범위는 #44 흰 틀을 바로 끌어 조절한다(F24a, 조절 모드 버튼 없음).
 
 import { useState } from 'react';
 import { APP_NAME } from '../core/constants';
@@ -12,30 +12,11 @@ import type { useLayoutMode } from './useLayoutMode';
 
 const INPUTS: InputKind[] = ['rear', 'webcam', 'video'];
 
-export function TopBar({
-  layout,
-  frameEditing = false,
-  onFrameEditing,
-}: {
-  layout: ReturnType<typeof useLayoutMode>;
-  frameEditing?: boolean;
-  onFrameEditing?: (on: boolean) => void;
-}) {
+export function TopBar({ layout }: { layout: ReturnType<typeof useLayoutMode> }) {
   return (
     <div className="fm-topbar">
       <BrandMenu layout={layout} />
       <div className="fm-topbar__end">
-        {onFrameEditing && (
-          <button
-            type="button"
-            className="fm-capsule fm-glass fm-glass--panel fm-topbar__frame"
-            aria-pressed={frameEditing}
-            aria-label={frameEditing ? '전송 범위 조절 끝내기' : '전송 범위 조절'}
-            onClick={() => onFrameEditing(!frameEditing)}
-          >
-            {frameEditing ? '조절 끝내기' : '전송 범위'}
-          </button>
-        )}
         <InputCapsule />
       </div>
     </div>

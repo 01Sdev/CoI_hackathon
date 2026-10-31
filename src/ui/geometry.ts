@@ -34,6 +34,39 @@ export function boxCenter(box: Box | null, src: Size | null, dst: Size): { x: nu
 }
 
 /**
+ * 소스 0~1 박스 → 화면(부모) 0~1 박스. 흰 틀(SelectionFrame)은 부모 기준 값을 쓰고, 스토어의 captureFrame은 소스 기준이다.
+ * 화면 크기가 0이면 박스를 그대로 돌려준다.
+ */
+export function sourceToView(box: Box, src: Size | null, dst: Size): Box {
+  if (dst.w <= 0 || dst.h <= 0) return { ...box };
+  const r = coverBox(box, src, dst);
+  return { x: r.left / dst.w, y: r.top / dst.h, w: r.width / dst.w, h: r.height / dst.h };
+}
+
+/** sourceToView의 역: 화면 0~1 박스 → 소스 0~1 박스(clampFrame은 스토어가 한다). */
+export function viewToSource(box: Box, src: Size | null, dst: Size): Box {
+  if (dst.w <= 0 || dst.h <= 0) return { ...box };
+  const a = coverPointToSource({ x: box.x * dst.w, y: box.y * dst.h }, src, dst);
+  const b = coverPointToSource({ x: (box.x + box.w) * dst.w, y: (box.y + box.h) * dst.h }, src, dst);
+  return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+}
+
+/** 두 박스가 사실상 같은지(좌표 왕복 오차는 무시). 흰 틀이 같은 값을 스토어에 다시 쓰지 않게 한다. */
+export function sameBox(a: Box, b: Box, eps = 1e-6): boolean {
+  return Math.abs(a.x - b.x) < eps && Math.abs(a.y - b.y) < eps && Math.abs(a.w - b.w) < eps && Math.abs(a.h - b.h) < eps;
+}
+
+/**
+ * 응시 칩(GazeChip)을 둘 화면 px 점: 사람 상자 위쪽 가운데. 칩은 이 점 위로 올라간다(translate -50% -100%).
+ * 가로는 화면 가장자리에서 edge만큼, 세로는 위쪽 top px 아래·아래쪽 edge 위로 붙잡는다. 상자는 그리지 않는다.
+ */
+export function gazeChipPoint(box: Box, src: Size | null, dst: Size, edge = 72, top = 56): Point {
+  const r = coverBox(box, src, dst);
+  const clamp = (v: number, lo: number, hi: number) => (hi < lo ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v)));
+  return { x: clamp(r.left + r.width / 2, edge, dst.w - edge), y: clamp(r.top - 8, top, dst.h - edge) };
+}
+
+/**
  * 카운터 바깥 호(--fm-window)의 남은 비율 1 → 0. M이 0으로 돌아가는 시각은 얼굴이 담긴 마지막 기록 + 10초다.
  * M 자체는 selectFaceM이 계산하고, 여기는 그 기록이 언제 빠지는지만 본다.
  */

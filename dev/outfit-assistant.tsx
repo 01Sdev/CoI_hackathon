@@ -1,6 +1,7 @@
 // UI만 확인하는 개발 페이지. 카메라·마이크·모델·검색 API를 열지 않는다.
 import { StrictMode, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 import { APP_NAME } from '../src/core/constants';
 import { OutfitAssistant, type OutfitMessage, type OutfitTarget, type OutfitVoice } from '../src/ui/OutfitAssistant';
 

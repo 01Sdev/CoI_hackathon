@@ -1,0 +1,270 @@
+/* 코디 스캔 말 막대·질문·답 패널(OutfitTalk). 글래스 시야 위 HUD 패널이라 폰 모양 장식(스피커·홈 바·끌기·크기 조절)은 없다.
+   겉 글로우와 테두리는 사용자가 준 zip(웹사이트 AI 챗 바 디자인) 값이다(outfit-pipelines.md "대화창 모양").
+   말풍선 모양은 #42 outfit-assistant.css의 .fm-outfit-message를 쓰고, 색 변수(--chat-*)만 여기서 정한다. */
+@property --fm-talk-a {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes fm-talk-spin {
+  to {
+    --fm-talk-a: 360deg;
+  }
+}
+@keyframes fm-talk-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fm-talk-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.fm-talk {
+  --chat-surface: #0d0e13;
+  --chat-panel: #181920;
+  --chat-user: #2a2650;
+  --chat-text: #ececf2;
+  --chat-muted: #9a9cab;
+  --chat-placeholder: #7b7d88;
+  --chat-line: transparent;
+  --chat-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --fm-talk-r: 28px;
+  position: absolute;
+  z-index: 6;
+  color: var(--chat-text);
+  font-family: var(--fm-font-sans);
+  pointer-events: auto;
+}
+.fm-talk,
+.fm-talk * {
+  box-sizing: border-box;
+}
+.fm-talk__glow,
+.fm-talk__ring {
+  border-radius: var(--fm-talk-r);
+  background: conic-gradient(from var(--fm-talk-a), #7c6cff, #3fd0ff, #ff6fd8, #ffb86b, #7c6cff);
+  animation: fm-talk-spin 6s linear infinite;
+}
+.fm-talk__glow {
+  position: absolute;
+  inset: -6px;
+  filter: blur(18px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.fm-talk__ring {
+  position: relative;
+  height: 100%;
+  padding: 1.5px;
+}
+.fm-talk__inner {
+  height: 100%;
+  border-radius: calc(var(--fm-talk-r) - 1.5px);
+  background: var(--chat-surface);
+  overflow: hidden;
+}
+.fm-talk button {
+  font: inherit;
+  color: inherit;
+}
+.fm-talk button:focus-visible {
+  outline: 2px solid #3fd0ff;
+  outline-offset: -3px;
+}
+
+/* 말 막대: 시야 아래 가운데 알약(28px) */
+.fm-talkbar {
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--fm-talk-bottom, 24px));
+  translate: -50% 0;
+  inline-size: min(560px, calc(100% - 2 * var(--fm-gutter, 16px)));
+  block-size: 56px;
+  animation: fm-talk-in 200ms ease-out both;
+}
+.fm-talkbar__speech {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: 0 22px;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  font-size: 16px;
+  line-height: 24px;
+  text-align: start;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.fm-talkbar__text {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.fm-talkbar__text[data-empty='true'] {
+  color: var(--chat-placeholder);
+}
+.fm-talkbar__dot {
+  flex: none;
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: var(--chat-placeholder);
+}
+.fm-talkbar__dot[data-state='listening'] {
+  background: #ff6fd8;
+  animation: fm-talk-pulse 1.2s ease-in-out infinite;
+}
+.fm-talkbar__form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  block-size: 100%;
+  margin: 0;
+  padding: 0 8px 0 22px;
+}
+.fm-talkbar__input {
+  flex: 1;
+  min-inline-size: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--chat-text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 24px;
+}
+.fm-talkbar__input::placeholder {
+  color: var(--chat-placeholder);
+}
+.fm-talkbar__send {
+  flex: none;
+  inline-size: 40px;
+  block-size: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--chat-text);
+  color: var(--chat-surface) !important;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.fm-talkbar__send:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.fm-talkbar__hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 14px);
+  translate: -50% 0;
+  max-inline-size: 100%;
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgb(13 14 19 / 0.8);
+  color: var(--chat-text);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 질문·답 패널: 시야 오른쪽 가장자리(22px). 글이 적으면 짧고, 많으면 시야 절반까지 자라고 안에서 스크롤한다.
+   답은 앱 화면이라 금빛 상태창처럼 플랫폼 흰 틀·사람 수(z 5) 아래에 둔다. 앱 화면이 플랫폼 표시를 덮지 않게 */
+.fm-talkpanel {
+  --fm-talk-r: 22px;
+  z-index: 4;
+  right: var(--fm-gutter, 16px);
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  inline-size: min(320px, calc(100% - 2 * var(--fm-gutter, 16px)));
+  max-block-size: min(520px, 50%);
+  display: flex;
+  flex-direction: column;
+  animation: fm-talk-in 240ms var(--chat-ease) both;
+}
+.fm-talkpanel .fm-talk__ring,
+.fm-talkpanel .fm-talk__inner {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  block-size: auto;
+}
+.fm-talkpanel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+  padding: 6px 6px 2px 16px;
+}
+.fm-talkpanel__title {
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--chat-muted);
+}
+.fm-talkpanel__close {
+  inline-size: 36px;
+  block-size: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--chat-muted) !important;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.fm-talkpanel__log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 12px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: #3a3b48 transparent;
+}
+.fm-talk .fm-outfit-message__bubble {
+  padding: 10px 12px;
+  border: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+.fm-talk .fm-outfit-message__bubble[data-status='asking'] {
+  color: var(--chat-muted);
+}
+.fm-talk .fm-outfit-message__note {
+  margin-top: 8px !important;
+}
+
+/* 휴대폰 세로: 패널을 좁고 짧게 해 가운데 사람이 덜 가리게 한다 */
+@media (max-width: 480px) {
+  .fm-talkpanel {
+    inline-size: min(260px, 68%);
+    max-block-size: 44%;
+  }
+  .fm-talk .fm-outfit-message__bubble {
+    font-size: 13px;
+    line-height: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-talk__glow,
+  .fm-talk__ring,
+  .fm-talkbar,
+  .fm-talkbar__dot,
+  .fm-talkpanel,
+  .fm-talk .fm-outfit-message {
+    animation: none !important;
+  }
+}

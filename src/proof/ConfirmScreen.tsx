@@ -4,11 +4,12 @@
 // 켜져 있거나 받은 것이 있는 앱은 모두 한 화면에 나란히 보인다(두 번째 앱 F21). 매니페스트 문자열은 텍스트 노드로만 넣는다.
 
 import { useShallow } from 'zustand/react/shallow';
-import { ORIGIN_TOKEN } from '../core/constants';
+import { APP_NAME, ORIGIN_TOKEN } from '../core/constants';
 import { selectEvictedCount, selectPluginTotals } from '../core/selectors';
 import { useLensStore } from '../core/store';
 import { MANIFEST_SCENE_LABEL, PLUGIN_NAME } from '../ui/labels';
 import { sanitizeAppText } from '../ui/sanitize';
+import { OUTFIT_REGION, SERVER_UPSTREAM, SPEECH_NOTE } from './protocol';
 
 export function ConfirmScreen({ onClose }: { onClose?: () => void }) {
   const ids = useLensStore(
@@ -95,6 +96,7 @@ function RequestGrant({ pluginId }: { pluginId: string }) {
         network: m.network.join('\n'),
         allowed: x.allowedOrigins.join('\n'),
         connectNone: x.runtimePolicy?.connect === 'none',
+        kind: x.kind,
         scenes: m.scenes.map((sc) => MANIFEST_SCENE_LABEL[sc]).join(', '),
         maxSide: m.maxSide,
         maxPerMinute: m.maxPerMinute,
@@ -105,6 +107,7 @@ function RequestGrant({ pluginId }: { pluginId: string }) {
   );
   if (!p) return null;
 
+  const upstream = SERVER_UPSTREAM[p.kind];
   const reqList = p.network ? p.network.split('\n') : [];
   const allowedList = p.allowed ? p.allowed.split('\n') : [];
   // 요청했지만 허용 목록(HOST_ALLOWED_ORIGINS) 밖이라 막힌 주소. $ORIGIN이 이 서비스 주소로 바뀌는 것은 막힘이 아니다.
@@ -112,7 +115,11 @@ function RequestGrant({ pluginId }: { pluginId: string }) {
   const requested = reqList.length ? reqList.map((o) => (o === ORIGIN_TOKEN ? `${o} (이 서비스 주소)` : o)).join('\n') : '없음';
   const granted = p.connectNone
     ? '없음 · 비교 모드라 통신을 막음'
-    : [allowedList.length ? allowedList.join('\n') : '없음', ...(denied.length ? [`막힘: ${denied.join(', ')}`] : [])].join('\n');
+    : [
+        allowedList.length ? allowedList.join('\n') : '없음',
+        ...(allowedList.length && upstream ? [`${APP_NAME} 서버 → ${upstream}`] : []),
+        ...(denied.length ? [`막힘: ${denied.join(', ')}`] : []),
+      ].join('\n');
   const networkDiffers = p.connectNone || denied.length > 0;
   const rows: Array<[string, string, string]> = [
     ['통신', requested, granted],
@@ -120,7 +127,7 @@ function RequestGrant({ pluginId }: { pluginId: string }) {
     ['조각 긴 변', `${p.maxSide}px`, `${p.maxSide}px 이하`],
     ['분당 장수', `${p.maxPerMinute}장`, `${p.maxPerMinute}장 이하`],
     ['JPEG 품질', String(p.quality), String(p.quality)],
-    ['영역', '대상', '대상 박스 + 10%'],
+    p.kind === 'outfit' ? ['영역', '사람', OUTFIT_REGION] : ['영역', '대상', '대상 박스 + 10%'],
   ];
 
   return (
@@ -157,6 +164,7 @@ function RequestGrant({ pluginId }: { pluginId: string }) {
           })}
         </tbody>
       </table>
+      {p.kind === 'outfit' && <p className="fm-readout fm-grant__note">{SPEECH_NOTE}</p>}
     </div>
   );
 }
