@@ -38,11 +38,11 @@ OFL 1.1은 폰트를 프로그램에 넣어 배포하는 것을 허용합니다.
 
 | 파일 | 역할 | 출처 URL | 라이선스 | 확인한 곳 | 넣은 날·사람 |
 | --- | --- | --- | --- | --- | --- |
-| (아직 없음) | 0단계 물체 판정 (명세 기준 EfficientDet-Lite0) | | | | |
-| (아직 없음) | 얼굴 검출 (명세 기준 BlazeFace short-range) | | | | |
+| (넣지 않음, 라이선스 미확인) | 0단계 물체 판정 (명세 기준 EfficientDet-Lite0) | 후보: https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float32/1/efficientdet_lite0.tflite (13,836,895바이트, SHA-256 `40338edf…bf58`, 트랙 A 작업 폴더 사본과 MD5 같음) | 미확인 | 찾아본 곳: MediaPipe 물체 검출 문서(모델 카드·라이선스 문구 없음. 페이지 하단의 CC BY 4.0·Apache 2.0은 문서와 코드 예제에 대한 것), `mediapipe-assets` 버킷의 모델 카드 목록(EfficientDet 없음), 파일 메타데이터(라이선스 항목 없음). 참고: Kaggle `tensorflow/efficientdet`의 TFLite lite0 변형은 Apache 2.0이지만, 이 파일과 같은 파일인지는 확인하지 못함 | 2026-10-31 허브 세션 확인. 사용자 결정 대기 |
+| `blaze_face_short_range.tflite` (229,746바이트, SHA-256 `b4578f35…152f`) | 2단계 얼굴 검출(SRS FR-014)과 출구 재검사(FR-055) | https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite | Apache-2.0 | 모델 카드 "MediaPipe BlazeFace Model Card (Short Range)"(2021-06-09)의 "LICENSED UNDER Apache License, Version 2.0" · https://storage.googleapis.com/mediapipe-assets/MediaPipe%20BlazeFace%20Model%20Card%20(Short%20Range).pdf | 2026-10-31, 허브 세션(사용자 승인). 트랙 A 작업 폴더 사본과 공식 주소 파일의 MD5가 같음 |
 | `selfie_multiclass_256x256.tflite` (16,371,837바이트, SHA-256 `c6748b12…e0e0`) | 2단계 가림 모양(머리카락·얼굴 피부), PRD F23·SRS FR-016a | https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/1/selfie_multiclass_256x256.tflite | Apache-2.0 | 모델 카드 "Model Card Multiclass Segmentation"(2023-05-10)의 "LICENSED UNDER Apache License, Version 2.0" · https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Multiclass%20Segmentation.pdf | 2026-10-31, 허브 세션(사용자 승인). 사용자 독립 데모에서 받은 파일과 같은 해시 |
 
-참고: MediaPipe 공식 모델은 Google이 Apache-2.0으로 배포한다고 모델 카드에 적혀 있습니다. 파일마다 다시 확인해서 적습니다.
+참고: MediaPipe 공식 모델 중 모델 카드가 있는 것(BlazeFace, Selfie Multiclass 등)은 카드에 Apache-2.0이 적혀 있습니다. EfficientDet-Lite0처럼 카드가 없는 모델도 있으니 파일마다 다시 확인해서 적습니다.
 
 WASM 파일(`public/wasm/`)은 `@mediapipe/tasks-vision` 패키지의 `wasm/` 폴더를 복사한 것이며, 1절의 Apache-2.0을 따릅니다.
 
