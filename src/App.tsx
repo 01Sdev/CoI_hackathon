@@ -1,11 +1,15 @@
-import { APP_NAME } from './core/constants';
+// 화면 배치와 라우팅(C). / = 휴대폰·데스크톱(폭 768px 자동 + 수동), /hud = 글래스 HUD, /outward = 바깥 표시.
+// C는 A·B 모듈을 import하지 않는다. 버튼은 스토어 액션만 부르고, 미리보기는 A의 mountPreview에 컨테이너만 넘긴다.
 
-// 화면 배치(phone/desktop/hud/outward)와 라우팅은 C 트랙이 채운다. 지금은 스캐폴드 확인용 자리표시.
-export function App() {
-  return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: 16 }}>
-      <h1>{APP_NAME}</h1>
-      <p>스캐폴드. 트랙 A·B·C 구현 전입니다.</p>
-    </main>
-  );
+import { HudScreen } from './ui/HudScreen';
+import { MainScreen } from './ui/MainScreen';
+import { OutwardScreen } from './ui/OutwardScreen';
+import { routeFromPath, type Route } from './ui/route';
+import './ui/app.css';
+
+/** route·autostart는 /dev/fake.html이 넘긴다. 실제 페이지는 경로로 고른다. */
+export function App({ route = routeFromPath(location.pathname), autostart = false }: { route?: Route; autostart?: boolean }) {
+  if (route === 'outward') return <OutwardScreen />;
+  if (route === 'hud') return <HudScreen autostart={autostart} />;
+  return <MainScreen autostart={autostart} />;
 }

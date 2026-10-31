@@ -55,6 +55,7 @@
 | 액션 | 쓰는 쪽 | 하는 일 |
 | --- | --- | --- |
 | `setInput`, `setPluginBusy`, `setLiveObservation`, `addSceneDecision`, `recordRuns` | A | 값 쓰기. 시각은 스토어 시계로 찍는다 |
+| `setEngine(patch)` | A | 판정 엔진 상태(`idle`·`loading`·`ready`·`failed`, 받은 바이트, 실패 사유). C의 로딩·실패 화면이 읽는다. 새 세션에도 유지(2026-10-31 C 추가) |
 | `addLog(hold·skip·violation)` | A, B(violation) | 100건 상한. `skip`은 같은 플러그인·같은 사유 10초에 1번(버리면 null). `hold`는 `window60s.holds` +1 |
 | `prepareDelivery` | A(broker) | 2.3 검사 후 Delivery(`prepared`, `pending`)와 LogEntry(`deliver`)를 함께 쓴다 |
 | `markDelivery(id, dispatched·failed)` | B | `prepared`에서만 바뀐다. `dispatched`일 때만 Counter(`recent10s`, `perPlugin`, `window60s.deliveries`)에 쌓는다. 바뀐 뒤 스토어는 Blob 참조를 놓는다 |
