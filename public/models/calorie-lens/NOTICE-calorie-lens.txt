@@ -1,0 +1,7 @@
+Calorie Lens
+Copyright (c) 2026 Shalev Ben Moshe (MIT, see LICENSE)
+
+The image backbone in model.safetensors was fine-tuned from these pretrained weights, licensed under the
+Apache License 2.0 (LICENSE-APACHE-2.0.txt):
+- facebook/dinov2-with-registers-base: DINOv2 (https://github.com/facebookresearch/dinov2), Copyright (c) Meta Platforms, Inc. and affiliates
+The fine-tuned weights were modified by training on Nutrition5k and FlavoriaFoodWeight1700.
