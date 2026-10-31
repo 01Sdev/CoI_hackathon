@@ -92,7 +92,7 @@
 
 ### 2.8 M0 시험 페이지
 
-`dev/index.html` + `dev/m0.ts`(Vite가 개발 서버에서 `/dev/`로 연다. 빌드 입력은 루트 `index.html`뿐이라 프로덕션에 들어가지 않는다. 확인함). 따로 만든 스토어에 hello 변형을 시드로 넣고 A 역할을 직접 한다: `dev/fixtures/m0-test.jpg`(SHA-256 `358dbf25…05e8`, `08-데모-소재.md`)의 해시를 계산해 `prepareDelivery` → `sendDelivery`. 줄은 차례로 돌고, 결과는 표와 `window.__m0 = { done, pass, rows: [{ name, pass, detail }] }`에 쓴다. 시각은 스토어 구독으로 잰다(배경 탭에서는 `setTimeout` 폴링이 1초 단위로 늦어진다).
+`dev/m0.html` + `dev/m0.ts`(Vite가 개발 서버에서 `/dev/m0.html`로 연다. `dev/index.html`은 트랙 A 확인 페이지라 이름을 나눴다. 빌드 입력은 루트 `index.html`뿐이라 프로덕션에 들어가지 않는다. 확인함). 따로 만든 스토어에 hello 변형을 시드로 넣고 A 역할을 직접 한다: `dev/fixtures/m0-test.jpg`(SHA-256 `358dbf25…05e8`, `08-데모-소재.md`)의 해시를 계산해 `prepareDelivery` → `sendDelivery`. 줄은 차례로 돌고, 결과는 표와 `window.__m0 = { done, pass, rows: [{ name, pass, detail }] }`에 쓴다. 시각은 스토어 구독으로 잰다(배경 탭에서는 `setTimeout` 폴링이 1초 단위로 늦어진다).
 
 | 플러그인 | SDK 옵션·코드 | 기대 |
 | --- | --- | --- |
@@ -138,7 +138,7 @@
 ## 5. 확인 방법
 
 - `npm run check:plugins`(`scripts/check-plugins.ts`) 29개: `sha256Pure` 표준 벡터·무작위 길이·600KB·M0 JPEG, 메시지 검증기 경계(200/201자, 이모지, 128·512자, 크기, 모르는 키, Blob 값, 빈 프로토타입), CSP 생성과 주입 거부, srcdoc 순서, violation reason 대조, 칼로리(가짜 fetch: 200·비 200·요청 실패·시간 초과·apiBase null·헤더 규칙), 변조 4종, SDK를 원본·축소판으로 `vm`에서 돌려 ready·ack·result·violation·순수 JS·corrupt·suppress·onInit 예외·hello 결과 줄.
-- 개발 서버 `/dev/` M0 페이지 15줄, `/dev/plugins.html` 9줄(칼로리 정상·도메인 삭제·고정표 밖 라벨·비교 모드 켜기/끄기·변조 4종·변조 조각 외부 전송·apiSends).
+- 개발 서버 `/dev/m0.html` M0 페이지 15줄, `/dev/plugins.html` 9줄(칼로리 정상·도메인 삭제·고정표 밖 라벨·비교 모드 켜기/끄기·변조 4종·변조 조각 외부 전송·apiSends).
 
 ## 6. 리뷰 기록
 

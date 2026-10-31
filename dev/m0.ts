@@ -1,4 +1,4 @@
-// M0 관문 시험 페이지(02-SSRD §5, 05 V10, docs/designs/plugin-host.md §2.8). 개발 서버의 /dev/에서만 열린다.
+// M0 관문 시험 페이지(02-SSRD §5, 05 V10, docs/designs/plugin-host.md §2.8). 개발 서버의 /dev/m0.html에서만 열린다.
 // 따로 만든 스토어에 hello 변형을 넣고, 이 페이지가 A(broker) 역할을 한다. 결과는 표와 window.__m0.
 
 import { PLUGIN_SEEDS, type PluginSeed } from '../src/core/plugins';
