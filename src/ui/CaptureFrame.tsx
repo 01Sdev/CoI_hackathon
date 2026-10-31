@@ -3,8 +3,9 @@
 // 조절: 크기 표시를 누르면 조절 모드가 되고 네 꼭짓점을 끈다(터치·마우스·화살표 키). 끌기 규칙은 core dragCorner
 // (맞은편 꼭짓점 고정, 0~1 안, 최소 0.1에서 멈춤)이고, 끄는 동안 미리 보인 뒤 손을 떼면 setCaptureFrame으로 한 번 쓴다. A는 포착을 시작할 때 한 번 읽는다. 틀 위에서는 스크롤·확대를 막는다(touch-action: none).
 // /hud는 틀만 그린다(어둡게 하지 않음, 조절 없음).
+// badge(사람 아이콘·숫자)는 틀 오른쪽 위 가장자리에 붙인다. 끄는 동안에도 따라가고, 화면 밖으로 나가면 안쪽으로 붙잡는다.
 
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { frameToPx, type FrameCorner } from '../core/frame';
 import { useLensStore } from '../core/store';
@@ -21,12 +22,14 @@ export function CaptureFrame({
   adjustable,
   editing = false,
   onEditing,
+  badge,
 }: {
   size: Size;
   /** 휴대폰·데스크톱은 true, /hud는 false. */
   adjustable: boolean;
   editing?: boolean;
   onEditing?: (on: boolean) => void;
+  badge?: ReactNode;
 }) {
   const v = useLensStore(
     useShallow((s) => ({
@@ -76,6 +79,17 @@ export function CaptureFrame({
   return (
     <div ref={rootRef} className="fm-capture" data-adjustable={adjustable} data-editing={editing}>
       <div className="fm-capture__rect" style={{ left: r.left, top: r.top, width: r.width, height: r.height }} aria-hidden="true" />
+      {badge && (
+        <div
+          className="fm-capture__badge"
+          style={{
+            left: `clamp(var(--fm-badge-min-left), ${r.left + r.width}px, calc(100% - var(--fm-gutter)))`,
+            top: `max(${r.top}px, var(--fm-badge-min-top))`,
+          }}
+        >
+          {badge}
+        </div>
+      )}
       {adjustable && (
         <button
           type="button"

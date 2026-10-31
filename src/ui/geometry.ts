@@ -26,6 +26,13 @@ export function coverBox(box: Box, src: Size | null, dst: Size): { left: number;
   };
 }
 
+/** 박스 중심을 화면 비율(0~1)로. 칼로리 화면 연결선의 시작점이다. 박스가 없으면 NaN이라 선을 그리지 않는다. */
+export function boxCenter(box: Box | null, src: Size | null, dst: Size): { x: number; y: number } {
+  if (!box || dst.w === 0 || dst.h === 0) return { x: NaN, y: NaN };
+  const r = coverBox(box, src, dst);
+  return { x: (r.left + r.width / 2) / dst.w, y: (r.top + r.height / 2) / dst.h };
+}
+
 /**
  * 카운터 바깥 호(--fm-window)의 남은 비율 1 → 0. M이 0으로 돌아가는 시각은 얼굴이 담긴 마지막 기록 + 10초다.
  * M 자체는 selectFaceM이 계산하고, 여기는 그 기록이 언제 빠지는지만 본다.
