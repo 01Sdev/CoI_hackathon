@@ -1,0 +1,352 @@
+/*
+ * famelet 디자인 토큰. 근거: docs/designs/design-system.md (팀 시안 "LensGate OS" Dark/Light를 따르고 다듬은 것).
+ * 테마는 <html data-theme="dark|light">. 기본은 dark(시안: 어두운 실내·야간·기본값). /hud는 항상 dark + 유리 없음.
+ * 색은 의미에만 쓴다: safe = 아무도 넘어가지 않음, exposed = 비교 모드·노출, blocked = 차단, hold = 보류(색 없음).
+ */
+
+@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
+@import '@fontsource/noto-serif-kr/400.css';
+
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --fm-bg: #0c0b0a;
+  --fm-text: #ffffff;
+  --fm-sub: #b5a99a;
+  --fm-safe: #4ade80;
+  --fm-exposed: #f2b45a;
+  --fm-blocked: #f87171;
+  /* 브랜드 표시 전용. HUD 안에서는 쓰지 않는다(차단 빨강과 헷갈림). */
+  --fm-clay: #e08a7a;
+  /* 채운 버튼의 글자색 */
+  --fm-on-text: #0c0b0a;
+
+  /* 재질: 실제 시야 위에 떠 있는 유리. 진하게 74% · 보통 55% · 얇게 32% */
+  --fm-glass-panel: rgb(30 26 22 / 0.74);
+  --fm-glass-capsule: rgb(36 31 27 / 0.55);
+  --fm-glass-hint: rgb(44 38 33 / 0.32);
+  --fm-glass-line: rgb(255 255 255 / 0.18);
+  --fm-glass-highlight: rgb(255 255 255 / 0.08);
+  --fm-shadow: 0 12px 32px -10px rgb(0 0 0 / 0.55), 0 1px 2px rgb(0 0 0 / 0.35);
+  --fm-glow: 0.38;
+  --fm-hairline: rgb(255 255 255 / 0.1);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --fm-bg: #eeeae4;
+  --fm-text: #0a0a0a;
+  --fm-sub: #5a4f42;
+  --fm-safe: #15803d;
+  --fm-exposed: #a15c07;
+  --fm-blocked: #c53030;
+  --fm-clay: #b85a45;
+  --fm-on-text: #ffffff;
+
+  --fm-glass-panel: rgb(255 253 250 / 0.74);
+  --fm-glass-capsule: rgb(255 253 250 / 0.55);
+  --fm-glass-hint: rgb(255 253 250 / 0.32);
+  --fm-glass-line: rgb(255 255 255 / 0.92);
+  --fm-glass-highlight: rgb(255 255 255 / 0.7);
+  --fm-shadow: 0 12px 30px -12px rgb(70 55 40 / 0.32), 0 0 0 0.5px rgb(60 50 40 / 0.1);
+  --fm-glow: 0.18;
+  --fm-hairline: rgb(60 50 40 / 0.12);
+}
+
+:root {
+  --fm-font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo',
+    'Noto Sans KR', sans-serif;
+  /* 보조 설명 전용. 12px 미만으로 쓰지 않는다. */
+  --fm-font-serif: 'Noto Serif KR', 'AppleMyungjo', serif;
+
+  --fm-blur: 22px;
+  --fm-line: 1.5px;
+
+  --fm-r-capsule: 999px;
+  --fm-r-card: 18px;
+  --fm-r-frame: 14px;
+  --fm-r-panel: 28px;
+
+  /* 휴대폰·데스크톱 패널 크기 */
+  --fm-size-counter: 62px;
+  --fm-size-counter-sm: 36px;
+  --fm-size-scene: 22px;
+  --fm-size-result: 16px;
+  --fm-size-label: 14px;
+  --fm-size-caption: 12px;
+
+  --fm-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --fm-dur-state: 180ms;
+  --fm-dur-flash: 300ms;
+  --fm-dur-toast-in: 420ms;
+  /* 전달 알림이 떠 있는 시간 */
+  --fm-dur-toast: 3000ms;
+}
+
+/* 글래스 HUD(/hud, 600×600): 가산형 디스플레이라 검은 배경이 곧 투명이다. 유리·흐림 없이 밝은 글자만. */
+[data-view='hud'] {
+  color-scheme: dark;
+  --fm-bg: #000000;
+  --fm-text: #ffffff;
+  --fm-sub: #c9bfb2;
+  --fm-safe: #4ade80;
+  --fm-exposed: #f2b45a;
+  --fm-blocked: #f87171;
+  --fm-on-text: #000000;
+  --fm-glass-panel: transparent;
+  --fm-glass-capsule: transparent;
+  --fm-glass-hint: transparent;
+  --fm-glass-line: rgb(255 255 255 / 0.5);
+  --fm-glass-highlight: transparent;
+  --fm-shadow: none;
+  --fm-blur: 0px;
+  /* PRD HUD 규칙: 본문 24px 이상, 카운터 40px 이상 */
+  --fm-size-counter: 72px;
+  --fm-size-counter-sm: 48px;
+  --fm-size-scene: 28px;
+  --fm-size-result: 24px;
+  --fm-size-label: 24px;
+  --fm-size-caption: 24px;
+}
+
+/* 성능이 모자라거나 투명도 줄이기를 켠 기기: 흐림을 끄고 유리를 거의 불투명하게 */
+[data-glass='solid'] {
+  --fm-blur: 0px;
+  --fm-glass-panel: color-mix(in srgb, var(--fm-bg) 94%, transparent);
+  --fm-glass-capsule: color-mix(in srgb, var(--fm-bg) 90%, transparent);
+  --fm-glass-hint: color-mix(in srgb, var(--fm-bg) 82%, transparent);
+}
+
+html,
+body {
+  background: var(--fm-bg);
+  color: var(--fm-text);
+  font-family: var(--fm-font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── 재질 ── */
+.fm-glass {
+  background: var(--fm-glass-capsule);
+  border: var(--fm-line) solid var(--fm-glass-line);
+  box-shadow: inset 0 1px 0 var(--fm-glass-highlight), var(--fm-shadow);
+  -webkit-backdrop-filter: blur(var(--fm-blur)) saturate(140%);
+  backdrop-filter: blur(var(--fm-blur)) saturate(140%);
+}
+.fm-glass--panel {
+  background: var(--fm-glass-panel);
+}
+/* 얇게(32%)는 글자 없는 장식에만. 밝은 장면 위에서 글자 대비가 1~2.4:1까지 떨어진다(design-system.md §5). */
+.fm-glass--hint {
+  background: var(--fm-glass-hint);
+}
+
+/* ── 상태 톤: data-tone="safe|exposed|blocked|hold" ── */
+[data-tone='safe'] {
+  --fm-tone: var(--fm-safe);
+}
+[data-tone='exposed'] {
+  --fm-tone: var(--fm-exposed);
+}
+[data-tone='blocked'] {
+  --fm-tone: var(--fm-blocked);
+}
+[data-tone='hold'] {
+  --fm-tone: var(--fm-sub);
+}
+
+/* ── 글자 ── */
+.fm-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+.fm-scene {
+  font-size: var(--fm-size-scene);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.fm-result {
+  font-size: var(--fm-size-result);
+  font-weight: 500;
+}
+.fm-label {
+  font-size: var(--fm-size-label);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.fm-caption {
+  font-family: var(--fm-font-serif);
+  font-size: var(--fm-size-caption);
+  color: var(--fm-sub);
+  letter-spacing: 0;
+}
+[data-view='hud'] .fm-caption {
+  font-family: var(--fm-font-sans);
+}
+
+/* ── 상태 점: 색과 글자를 항상 함께 쓴다 ── */
+.fm-dot {
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: 50%;
+  background: var(--fm-tone, var(--fm-text));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fm-tone, var(--fm-text)) 22%, transparent);
+  flex: none;
+}
+[data-tone='hold'] .fm-dot,
+.fm-dot[data-tone='hold'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--fm-sub);
+}
+
+.fm-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-block-size: 36px;
+  padding: 0 14px;
+  border-radius: var(--fm-r-capsule);
+  font-size: var(--fm-size-label);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── 카운터 오브 ── */
+.fm-orb {
+  --orb: 132px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  inline-size: var(--orb);
+  block-size: var(--orb);
+  border-radius: 50%;
+  border: 2.5px solid var(--fm-tone, var(--fm-safe));
+  box-shadow:
+    0 0 0 7px color-mix(in srgb, var(--fm-tone, var(--fm-safe)) 12%, transparent),
+    0 0 36px color-mix(in srgb, var(--fm-tone, var(--fm-safe)) calc(var(--fm-glow) * 100%), transparent),
+    var(--fm-shadow);
+  color: var(--fm-tone, var(--fm-safe));
+  font-size: var(--fm-size-counter);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  transition:
+    color var(--fm-dur-state) var(--fm-ease),
+    border-color var(--fm-dur-state) var(--fm-ease),
+    box-shadow var(--fm-dur-state) var(--fm-ease);
+}
+.fm-orb--sm {
+  --orb: 88px;
+  font-size: var(--fm-size-counter-sm);
+  border-width: 2px;
+}
+
+/* ── 대상 프레임: 14px 모서리, 가운데 위에 물체 이름표 ── */
+.fm-frame {
+  position: absolute;
+  border: 2px solid var(--fm-text);
+  border-radius: var(--fm-r-frame);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--fm-bg) 30%, transparent),
+    0 0 24px color-mix(in srgb, var(--fm-text) 18%, transparent);
+  transition: inset var(--fm-dur-state) var(--fm-ease);
+}
+.fm-frame__tag {
+  position: absolute;
+  inset-block-start: -13px;
+  inset-inline-start: 12px;
+  padding: 3px 9px;
+  border-radius: var(--fm-r-capsule);
+  background: var(--fm-text);
+  color: var(--fm-on-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ── 버튼 ── */
+.fm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 44px;
+  padding: 0 22px;
+  border-radius: var(--fm-r-capsule);
+  font: 600 15px/1 var(--fm-font-sans);
+  color: var(--fm-text);
+  cursor: pointer;
+}
+.fm-btn--primary {
+  background: var(--fm-text);
+  color: var(--fm-on-text);
+  border: var(--fm-line) solid var(--fm-text);
+  box-shadow: var(--fm-shadow);
+}
+.fm-btn:focus-visible {
+  outline: 2px solid var(--fm-text);
+  outline-offset: 3px;
+}
+
+/* ── 전달 신호(F9): 테두리가 300ms 밝아진다. 기본 신호이고 소리·알림은 보조 ── */
+.fm-flash {
+  animation: fm-flash var(--fm-dur-flash) var(--fm-ease);
+}
+@keyframes fm-flash {
+  0% {
+    box-shadow: inset 0 0 0 4px var(--fm-text), inset 0 0 40px color-mix(in srgb, var(--fm-text) 35%, transparent);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 transparent, inset 0 0 0 transparent;
+  }
+}
+
+/* ── 전달 알림: 위에서 내려와 3초 뒤 사라짐(휴대폰·데스크톱만, /hud에서는 쓰지 않음) ── */
+.fm-toast {
+  animation:
+    fm-toast-in var(--fm-dur-toast-in) var(--fm-ease) both,
+    fm-toast-out 280ms ease-in var(--fm-dur-toast) both;
+}
+@keyframes fm-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-120%);
+  }
+}
+@keyframes fm-toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(-40%);
+  }
+}
+
+/* ── 비교 모드 띠(F17): 화면 맨 위, 켜진 동안 계속 ── */
+.fm-band {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-block-size: 34px;
+  padding: 0 16px;
+  background: var(--fm-exposed);
+  color: #1a1206;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+}
+[data-theme='light'] .fm-band {
+  color: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-flash,
+  .fm-toast {
+    animation-duration: 1ms;
+  }
+  .fm-toast {
+    animation:
+      fm-toast-out 1ms linear var(--fm-dur-toast) both;
+  }
+}

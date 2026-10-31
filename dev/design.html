@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>famelet 디자인 시스템 미리보기</title>
+    <script type="module">
+      import '/src/ui/theme.css';
+      document.querySelectorAll('[data-replay]').forEach((btn) =>
+        btn.addEventListener('click', () => {
+          const col = btn.closest('.col');
+          for (const el of col.querySelectorAll('.stage, .toast-slot > .fm-toast')) {
+            const cls = el.classList.contains('stage') ? 'fm-flash' : 'fm-toast';
+            el.classList.remove(cls);
+            void el.offsetWidth;
+            el.classList.add(cls);
+          }
+        }),
+      );
+    </script>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 28px; }
+      .page-head { display: flex; align-items: baseline; gap: 14px; margin: 0 0 22px; }
+      .page-head h1 { font-size: 26px; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
+      .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); gap: 24px; }
+      .col { background: var(--fm-bg); color: var(--fm-text); border-radius: 32px; padding: 22px; border: 1px solid var(--fm-hairline); }
+      .col-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+      .col-head h2 { margin: 0; font-size: 18px; display: flex; gap: 10px; align-items: center; }
+
+      /* 카메라 화면 흉내 */
+      .stage { position: relative; aspect-ratio: 4 / 3.3; border-radius: var(--fm-r-panel); overflow: hidden; }
+      [data-theme='dark'] .stage { background: linear-gradient(180deg, #3b332c 0 52%, #2a241f 52% 100%); }
+      [data-theme='light'] .stage { background: linear-gradient(180deg, #e9e1d6 0 52%, #cdb99b 52% 100%); }
+      .stage::before { content: ''; position: absolute; left: 7%; top: 7%; width: 26%; height: 36%; border-radius: 6px; background: color-mix(in srgb, var(--fm-text) 7%, transparent); filter: blur(1px); }
+      .plate { position: absolute; left: 24%; top: 34%; width: 34%; height: 18%; border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, #f4efe7, #d8d0c4); filter: blur(0.6px); }
+      .banana { position: absolute; left: 30%; top: 33%; font-size: 64px; transform: rotate(-12deg); filter: saturate(1.1) blur(0.3px); }
+      .person { position: absolute; right: 9%; top: 24%; width: 17%; height: 66%; }
+      .person::before { content: ''; position: absolute; left: 30%; top: 0; width: 40%; aspect-ratio: 1; border-radius: 50%; background: color-mix(in srgb, var(--fm-sub) 55%, transparent); filter: blur(1.5px); }
+      .person::after { content: ''; position: absolute; left: 4%; top: 24%; width: 92%; height: 76%; border-radius: 48% 48% 10px 10px; background: color-mix(in srgb, var(--fm-sub) 45%, transparent); filter: blur(1.5px); }
+      .tl { position: absolute; left: 18px; top: 18px; }
+      .tc { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); }
+      .tr { position: absolute; right: 18px; top: 18px; }
+      .person-hint { position: absolute; right: 27%; top: 25%; }
+      .bottom { position: absolute; left: 0; right: 0; bottom: 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+      .bottom-row { display: flex; gap: 10px; }
+      .brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fm-clay); }
+      .scene-score { font-family: var(--fm-font-serif); font-size: 13px; color: var(--fm-sub); font-weight: 400; }
+
+      /* 증명 로그(휴대폰 하단 시트·데스크톱 오른쪽 탭) */
+      .sheet { margin-top: 16px; border-radius: 24px; padding: 14px; display: grid; gap: 8px; }
+      .sheet-title { display: flex; justify-content: space-between; align-items: baseline; padding: 2px 6px 6px; }
+      .card { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: var(--fm-r-card); }
+      .thumb { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 24px; background: color-mix(in srgb, var(--fm-text) 10%, transparent); overflow: hidden; position: relative; }
+      .thumb--masked::after { content: ''; position: absolute; right: 6px; top: 6px; width: 14px; height: 14px; border-radius: 3px; background: repeating-conic-gradient(var(--fm-sub) 0 25%, transparent 0 50%) 0 0 / 7px 7px; }
+      .thumb--head::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 40%; background: color-mix(in srgb, var(--fm-sub) 70%, transparent); }
+      .thumb--hold { background: none; border: 1.5px dashed var(--fm-sub); }
+      .card-title { display: flex; gap: 8px; align-items: center; }
+      .code { font-size: 11px; font-weight: 600; color: var(--fm-sub); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--fm-hairline); }
+      .meta { font-size: 12px; color: var(--fm-sub); text-align: right; }
+
+      /* 컴포넌트 묶음 */
+      .kit { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      .kit > div { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; align-content: flex-start; }
+      .kit h3 { width: 100%; margin: 0 0 2px; font-size: 12px; letter-spacing: 0.08em; color: var(--fm-sub); font-weight: 600; }
+      .orbs { gap: 18px !important; }
+      .orb-wrap { display: grid; justify-items: center; gap: 8px; }
+      .toast-slot { width: 100%; overflow: hidden; padding: 4px 2px 6px; }
+      .toast { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-radius: 20px; }
+      .seg { display: inline-flex; padding: 4px; border-radius: 999px; gap: 2px; }
+      .seg button { border: 0; background: none; color: var(--fm-sub); font: 600 13px var(--fm-font-sans); padding: 8px 14px; border-radius: 999px; }
+      .seg button[aria-pressed='true'] { background: var(--fm-text); color: var(--fm-on-text); }
+      .blocked-badge { position: absolute; right: -6px; top: -6px; }
+
+      /* 글래스 HUD */
+      .hud-wrap { margin-top: 24px; display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+      .hud { position: relative; width: 600px; height: 600px; background: #000; border-radius: 12px; color: var(--fm-text); }
+      .hud .tc { top: 28px; }
+      .hud .tr { top: 28px; right: 28px; }
+      .hud-frame { left: 170px; top: 210px; width: 260px; height: 130px; }
+      .hud .bottom { bottom: 36px; }
+    </style>
+  </head>
+  <body>
+    <div class="page-head">
+      <h1>famelet 디자인 시스템</h1>
+      <span class="fm-caption">팀 시안(LensGate OS)을 따르고 다듬은 미리보기 · src/ui/theme.css</span>
+    </div>
+
+    <div class="cols">
+      <!-- 다크와 라이트는 같은 마크업에 data-theme만 다르다 -->
+      <section class="col" data-theme="dark">
+        <div class="col-head">
+          <h2><span class="brand-dot"></span>Dark <span class="fm-caption">어두운 실내 · 야간 · 기본값</span></h2>
+          <button class="fm-btn fm-glass" data-replay>전달 신호 보기</button>
+        </div>
+        <div class="stage fm-flash">
+          <span class="plate"></span><span class="banana">🍌</span><span class="person"></span>
+          <span class="tl fm-capsule fm-glass"><span class="brand-dot"></span>famelet</span>
+          <span class="tc fm-capsule fm-glass fm-glass--panel"><span class="fm-dot"></span><span class="fm-scene">음식 앞</span><span class="scene-score fm-num">0.98</span></span>
+          <span class="tr fm-capsule fm-glass fm-label">후면 카메라</span>
+          <span class="fm-frame" style="left: 27%; top: 35%; width: 30%; height: 16%"><span class="fm-frame__tag">바나나</span></span>
+          <span class="person-hint fm-capsule fm-glass" data-tone="hold" style="min-block-size: 30px; font-size: 13px"><span class="fm-dot"></span>화면 속 1명</span>
+          <div class="bottom">
+            <div class="fm-orb fm-glass fm-glass--panel" data-tone="safe" style="--orb: 112px">0</div>
+            <div class="bottom-row">
+              <span class="fm-capsule fm-glass fm-glass--panel" data-tone="safe"><span class="fm-dot"></span>앱에 반영된 사람 0명 · 보호됨</span>
+              <span class="fm-capsule fm-glass fm-glass--panel fm-result">바나나 약 105kcal</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheet fm-glass fm-glass--panel">
+          <div class="sheet-title"><span class="fm-label">칼로리가 받은 것</span><span class="fm-caption">전달 3 · 보류 1 · 최근 100건</span></div>
+          <div class="card fm-glass" data-tone="safe"><span class="thumb">🍌</span><div><div class="card-title fm-label"><span class="fm-dot"></span>전달 · 그대로 <span class="code">2a</span></div><div class="fm-caption">14.2KB · 원본의 3.1% · 이 기기에서 가림</div></div><span class="meta fm-num">방금</span></div>
+          <div class="card fm-glass" data-tone="safe"><span class="thumb thumb--masked">🍌</span><div><div class="card-title fm-label"><span class="fm-dot"></span>전달 · 얼굴 1개 가림 <span class="code">2b</span></div><div class="fm-caption">13.8KB · 원본의 3.4% · 이 기기에서 가림</div></div><span class="meta fm-num">12초 전</span></div>
+          <div class="card fm-glass" data-tone="safe"><span class="thumb thumb--head">🍌</span><div><div class="card-title fm-label"><span class="fm-dot"></span>전달 · 머리 가림 <span class="code">2c</span></div><div class="fm-caption">12.9KB · 원본의 3.6% · 수신 미확인</div></div><span class="meta fm-num">31초 전</span></div>
+          <div class="card fm-glass" data-tone="hold"><span class="thumb thumb--hold"></span><div><div class="card-title fm-label"><span class="fm-dot"></span>보류 <span class="code">2d</span></div><div class="fm-caption">얼굴 위치 불확실 · 전달 0</div></div><span class="meta fm-num">48초 전</span></div>
+        </div>
+
+        <div class="kit">
+          <div><h3>버튼</h3><button class="fm-btn fm-btn--primary">확인</button><button class="fm-btn fm-glass">닫기</button></div>
+          <div>
+            <h3>상태 캡슐 · 색과 글자 함께</h3>
+            <span class="fm-capsule fm-glass" data-tone="safe"><span class="fm-dot"></span>보호됨</span>
+            <span class="fm-capsule fm-glass" data-tone="exposed"><span class="fm-dot"></span>노출</span>
+            <span class="fm-capsule fm-glass" data-tone="blocked"><span class="fm-dot"></span>차단</span>
+            <span class="fm-capsule fm-glass" data-tone="hold"><span class="fm-dot"></span>보류</span>
+          </div>
+          <div class="orbs">
+            <h3>카운터 오브 · 숫자는 항상 사람 수</h3>
+            <div class="orb-wrap"><div class="fm-orb fm-orb--sm fm-glass" data-tone="safe">0</div><span class="fm-label">보호됨</span></div>
+            <div class="orb-wrap"><div class="fm-orb fm-orb--sm fm-glass" data-tone="exposed">2</div><span class="fm-label">노출</span></div>
+            <div class="orb-wrap" style="position: relative"><div class="fm-orb fm-orb--sm fm-glass" data-tone="safe">0</div><span class="blocked-badge fm-capsule fm-glass fm-glass--panel" data-tone="blocked" style="min-block-size: 26px; padding: 0 9px; font-size: 12px"><span class="fm-dot"></span>차단 4</span><span class="fm-label">차단 시도</span></div>
+          </div>
+          <div>
+            <h3>전달 알림 · 3초 뒤 사라짐</h3>
+            <div class="toast-slot"><div class="toast fm-glass fm-glass--panel fm-toast"><span class="thumb thumb--masked">🍌</span><div><div class="fm-label">칼로리에 사진 1장 전달</div><div class="fm-caption">13.8KB · 얼굴 1개 가림 · 방금</div></div></div></div>
+          </div>
+          <div style="grid-column: 1 / -1"><h3>비교 모드 띠 · 화면 맨 위</h3><div class="fm-band" style="width: 100%; border-radius: 12px">비교 모드 · 원본 전체가 칼로리에 갑니다 · 통신은 막혀 있음</div></div>
+          <div><h3>모드 전환</h3><div class="seg fm-glass"><button aria-pressed="true">다크</button><button aria-pressed="false">라이트</button></div></div>
+        </div>
+      </section>
+
+      <section class="col" data-theme="light">
+        <div class="col-head">
+          <h2><span class="brand-dot"></span>Light <span class="fm-caption">밝은 실내 · 낮 · 수동 전환</span></h2>
+          <button class="fm-btn fm-glass" data-replay>전달 신호 보기</button>
+        </div>
+        <div class="stage">
+          <span class="plate"></span><span class="banana">🍌</span><span class="person"></span>
+          <div class="fm-band" style="position: absolute; inset: 0 0 auto 0; z-index: 2">비교 모드 · 원본 전체가 칼로리에 갑니다 · 통신은 막혀 있음</div>
+          <span class="tl fm-capsule fm-glass" style="top: 48px"><span class="brand-dot"></span>famelet</span>
+          <span class="tc fm-capsule fm-glass fm-glass--panel" style="top: 48px"><span class="fm-dot"></span><span class="fm-scene">음식 앞</span><span class="scene-score fm-num">0.98</span></span>
+          <span class="tr fm-capsule fm-glass fm-label" style="top: 48px">녹화 영상</span>
+          <span class="fm-frame" style="left: 27%; top: 35%; width: 30%; height: 16%"><span class="fm-frame__tag">바나나</span></span>
+          <div class="bottom">
+            <div class="fm-orb fm-glass fm-glass--panel" data-tone="exposed" style="--orb: 112px">2</div>
+            <div class="bottom-row">
+              <span class="fm-capsule fm-glass fm-glass--panel" data-tone="exposed"><span class="fm-dot"></span>앱에 반영된 사람 2명 · 노출</span>
+              <span class="fm-capsule fm-glass fm-glass--panel fm-result">바나나 약 105kcal</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheet fm-glass fm-glass--panel">
+          <div class="sheet-title"><span class="fm-label">칼로리가 받은 것</span><span class="fm-caption">전달 2 · 차단 1</span></div>
+          <div class="card fm-glass" data-tone="exposed"><span class="thumb">🍌</span><div><div class="card-title fm-label"><span class="fm-dot"></span>전달 · 원본 전체 <span class="code">raw</span></div><div class="fm-caption">212KB · 원본의 100% · 비교 모드</div></div><span class="meta fm-num">방금</span></div>
+          <div class="card fm-glass" data-tone="safe"><span class="thumb thumb--masked">🍌</span><div><div class="card-title fm-label"><span class="fm-dot"></span>전달 · 얼굴 1개 가림 <span class="code">2b</span></div><div class="fm-caption">13.8KB · 원본의 3.4% · 이 기기에서 가림</div></div><span class="meta fm-num">40초 전</span></div>
+          <div class="card fm-glass" data-tone="blocked"><span class="thumb thumb--hold" style="border-color: var(--fm-blocked)"></span><div><div class="card-title fm-label"><span class="fm-dot"></span>차단 · 외부 서버 접속 <span class="code">변조</span></div><div class="fm-caption">플러그인 내부 보고 · 허용 목록 밖</div></div><span class="meta fm-num">1분 전</span></div>
+        </div>
+
+        <div class="kit">
+          <div><h3>버튼</h3><button class="fm-btn fm-btn--primary">확인</button><button class="fm-btn fm-glass">닫기</button></div>
+          <div>
+            <h3>상태 캡슐 · 색과 글자 함께</h3>
+            <span class="fm-capsule fm-glass" data-tone="safe"><span class="fm-dot"></span>보호됨</span>
+            <span class="fm-capsule fm-glass" data-tone="exposed"><span class="fm-dot"></span>노출</span>
+            <span class="fm-capsule fm-glass" data-tone="blocked"><span class="fm-dot"></span>차단</span>
+            <span class="fm-capsule fm-glass" data-tone="hold"><span class="fm-dot"></span>보류</span>
+          </div>
+          <div class="orbs">
+            <h3>카운터 오브 · 숫자는 항상 사람 수</h3>
+            <div class="orb-wrap"><div class="fm-orb fm-orb--sm fm-glass" data-tone="safe">0</div><span class="fm-label">보호됨</span></div>
+            <div class="orb-wrap"><div class="fm-orb fm-orb--sm fm-glass" data-tone="exposed">2</div><span class="fm-label">노출</span></div>
+            <div class="orb-wrap" style="position: relative"><div class="fm-orb fm-orb--sm fm-glass" data-tone="safe">0</div><span class="blocked-badge fm-capsule fm-glass fm-glass--panel" data-tone="blocked" style="min-block-size: 26px; padding: 0 9px; font-size: 12px"><span class="fm-dot"></span>차단 4</span><span class="fm-label">차단 시도</span></div>
+          </div>
+          <div>
+            <h3>전달 알림 · 3초 뒤 사라짐</h3>
+            <div class="toast-slot"><div class="toast fm-glass fm-glass--panel fm-toast"><span class="thumb thumb--masked">🍌</span><div><div class="fm-label">칼로리에 사진 1장 전달</div><div class="fm-caption">13.8KB · 얼굴 1개 가림 · 방금</div></div></div></div>
+          </div>
+          <div><h3>모드 전환</h3><div class="seg fm-glass"><button aria-pressed="false">다크</button><button aria-pressed="true">라이트</button></div></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="hud-wrap">
+      <div class="hud" data-view="hud">
+        <span class="tc fm-capsule fm-glass"><span class="fm-dot"></span><span class="fm-scene">음식 앞</span></span>
+        <span class="tr fm-label" style="color: var(--fm-sub)">녹화 영상</span>
+        <span class="fm-frame hud-frame"></span>
+        <div class="bottom">
+          <div class="fm-orb" data-tone="safe" style="--orb: 140px">0</div>
+          <span class="fm-result">바나나 약 105kcal</span>
+        </div>
+      </div>
+      <div style="max-width: 420px; color: var(--fm-sub); font-size: 14px; line-height: 1.6">
+        <div class="fm-label" style="color: var(--fm-text); margin-bottom: 6px">글래스 HUD (/hud · 600×600)</div>
+        가산형 디스플레이에서는 검은색이 투명이라 유리·흐림·라이트 모드를 쓰지 않습니다. 요소는 장면·입력·대상 위치·카운터·결과 다섯 개, 본문 24px·카운터 72px입니다.
+      </div>
+    </div>
+  </body>
+</html>
