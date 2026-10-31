@@ -43,7 +43,8 @@
 - [ ] A: `src/input/preview.ts`의 `mountPreview(container)`와 `setEngine` 호출(C가 기다리는 연결점, 없으면 HUD는 `liveObservation`으로 판정 중을 안다)
 - [ ] 배포: `/hud`·`/outward`를 `index.html`로 되돌리는 rewrite(V6, NFR-024)
 - [x] HUD 다섯 요소·카운터 M·10초 호·차단 배지·전달 신호(점멸·소리·진동·알림)·보류 줄 — `track-c/hud`
-- [ ] 증명 로그·확인 화면·매니페스트 편집기
+- [x] 증명 로그(휴대폰 시트·데스크톱 탭)·상세(해시)·확인 화면(외 k장)·`/hud` D-pad — `track-c/proof`
+- [ ] 매니페스트 편집기·처리량 패널
 - [ ] 전달 신호(테두리 점멸·효과음), `/outward`, 비교 모드·발표자 컨트롤
 
 ## 외부 봇 작업 (그록봇, 허브가 관리)
@@ -95,7 +96,7 @@
 | V5 | 칼로리 응답 시간·비용(피자 256px 10회, p50·p95, 토큰) | 트랙 B `/api/calorie` PR. 키가 있는 로컬에서 | B | 대기(키 없음). 함수·502 경로·요청 모양은 가짜 상류로 확인 |
 | V11 | 통합 상태 격리 6줄·전환·옛 iframe 메시지(iPhone·Android) | 1차 통합 뒤, 배포 주소에서 | B | 대기 |
 | V12 | 노트북 Chrome에서 데모 5단계 네트워크 탭 | 2차 통합 뒤 리허설 | C·발표자 | 대기 |
-| V13 | Ray-Ban Display 시뮬레이터에서 `/hud` D-pad | 트랙 C `/hud` PR | C | 대기 |
+| V13 | Ray-Ban Display 시뮬레이터에서 `/hud` D-pad | 트랙 C `/hud` PR | C | 대기. 키 처리(화살표·Enter keydown, 뒤로 = history)는 앱 안 브라우저 600×600에서 확인, 시뮬레이터 확장은 못 씀(`track-c/proof`) |
 | V14 | 메인 창과 `/outward` 동기화(외부 화면) | 트랙 C `/outward` PR 뒤 리허설 | C | 대기 |
 | V15 | 호스트 외부 요청 차단: MediaPipe 로그 요청(`odml.pa.googleapis.com`)이 네트워크 탭에 0건인지. 호스트 `connect-src 'self'`가 srcdoc iframe Worker의 `$ORIGIN` 요청을 막는지(Chrome·iPhone) | 트랙 B 첫 PR(호스트 가드) + 배포 주소에서 | B(iPhone은 x20-codex 도움 가능) | Chrome: 로그 요청 차단·`$ORIGIN` Worker 요청 통과·M0 그대로(05 V15). iframe 시작 멈춤이 CSP 쪽에서 더 잦았다(6/18 대 1/18, 원인 미확정). iPhone 대기 |
 | V7 | iPhone 효과음·무음 모드 | — | — | 통과 |

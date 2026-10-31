@@ -26,7 +26,7 @@ const controls = startFakeRuntime(lensStore, {
   auto: q.get('auto') !== '0',
 });
 // 콘솔·자동 확인용(개발 페이지에서만).
-(window as unknown as { __lensStore: typeof lensStore }).__lensStore = lensStore;
+Object.assign(window, { __lensStore: lensStore, __fake: controls });
 if (autostart) lensStore.getState().selectInput(route === 'hud' ? 'video' : innerWidth >= 768 ? 'webcam' : 'rear');
 
 createRoot(document.getElementById('root')!).render(
