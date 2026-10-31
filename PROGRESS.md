@@ -25,6 +25,7 @@
 - [x] 앱 연결: C의 `Preview`가 찾는 `src/input/preview.ts`의 `mountPreview`가 `startRuntime()`도 부른다
 - [x] 1단계 포착·2단계 가림·분기(2a~2d)·출구 재검사 — `track-a/capture`
 - [x] 중개기 `sendDelivery` 경로와 Counter 기록 — `track-a/capture`. B는 `connectPluginHost(sendDelivery)`로 붙는다(02-SSRD IF-02)
+- [ ] F23 Selfie 모양 가림(P1, 1차 통합 뒤 PR): `track-a/selfie-mask`에 구현. 모델 파일 커밋은 사용자 확인 대기. 실제 얼굴 영상으로 V2·V3 확인 필요
 - [ ] B 연결 확인: 실제 `plugins/host`의 `sendDelivery`로 M0·1차 통합(지금은 `/dev/` 목 호스트로만 확인)
 - [ ] V2·V3: 팀 얼굴 영상(`pizza-face-*.mp4`)으로 분기·손에 든 피자 실측. 사람 앞 피자는 겹침 50% 이상이라 옆얼굴이면 2d가 될 수 있음(설계 §4)
 

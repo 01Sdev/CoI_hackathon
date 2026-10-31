@@ -10,6 +10,8 @@ export const MODEL_PATHS = {
   object: '/models/efficientdet_lite0.tflite',
   /** MediaPipe FaceDetector용 .tflite. 명세 기준 BlazeFace short-range. */
   face: '/models/blaze_face_short_range.tflite',
+  /** MediaPipe ImageSegmenter용 Selfie Multiclass(256×256, 16.4MB). 2b·2c 가림 모양(F23, FR-016a). 없으면 박스·사각형 전체를 가린다. */
+  selfie: '/models/selfie_multiclass_256x256.tflite',
 } as const;
 
 /** public/wasm/ (postinstall이 node_modules/@mediapipe/tasks-vision/wasm/을 복사한다). CDN은 쓰지 않는다. */
@@ -76,6 +78,17 @@ export const VISION_CONFIG = {
   headSide: 0.1,
   /** 픽셀화 격자(가로·세로 칸 수). */
   pixelGrid: 6,
+
+  // ── Selfie 모양 가림(F23, FR-016a) ──
+  /** 가릴 Selfie 클래스: 1 머리카락, 3 얼굴 피부. */
+  selfieClasses: [1, 3] as readonly number[],
+  /** 마스크 팽창 반지름 = 조각 긴 변 × 이 비율(최소 selfieDilateMinPx). */
+  selfieDilateRatio: 0.02,
+  selfieDilateMinPx: 3,
+  /** 2b(얼굴 박스) 안에서 모양으로 가린다. false면 박스 전체. */
+  selfieShapeFace: true,
+  /** 2c(머리 영역) 안에서 모양으로 가린다. V2·V3에서 사각형보다 덜 가린 사례가 나오면 false(사각형 전체 = 사각형 ∪ Selfie). */
+  selfieShapeHead: true,
 
   // ── 비교 모드(F17) ──
   /** raw JPEG 품질. 해상도는 원본 그대로(05 결정 30). */

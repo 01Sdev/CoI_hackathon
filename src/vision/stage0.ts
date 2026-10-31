@@ -8,6 +8,7 @@ import { getInputEpoch, getVideo } from '../input/adapter';
 import { VISION_CONFIG } from './config';
 import { classifyScene, fitLongSide, scaleBox, type Found } from './geometry';
 import { detectObjects, getModels, reportEngine } from './models';
+import { loadSegmenter } from './segmenter';
 import { SCENE_NONE, stepScene, type SceneState } from './scene';
 
 /** 0단계 틱 하나의 결과. 포착 게이트가 틱마다 받는다. */
@@ -135,6 +136,8 @@ function runTick(v: HTMLVideoElement) {
         engineReady = true;
         firstInferenceAt = performance.now();
         reportEngine({ status: 'ready', detail: null });
+        // Selfie(16.4MB)는 첫 판정을 늦추지 않도록 그 뒤에 받는다(FR-016a ⑥). 이 틱이 끝난 뒤 시작한다.
+        setTimeout(() => void loadSegmenter(), 0);
       }
       pushRecent(recentInferMs, performance.now() - t0);
       pushRecent(recentTicks, now);

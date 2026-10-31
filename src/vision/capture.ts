@@ -10,7 +10,9 @@ import { getInputEpoch, getVideo } from '../input/adapter';
 import { cooldownUntil, decideBranch, type ProtectedBranch } from './branch';
 import { VISION_CONFIG } from './config';
 import { clampToFrame, expand, fitLongSide, matchTarget, scaleBox, translate, type Found } from './geometry';
-import { canvasOf, pixelate, release, toJpeg } from './mask';
+import { canvasOf, pixelate, pixelateShaped, release, toJpeg } from './mask';
+import { segmentCategories } from './segmenter';
+import { dilateRadius, shapeMask } from './shape';
 import { detectFaces, detectObjects, getModels, type Models } from './models';
 import { planCapture, type CaptureTarget } from './plan';
 import { onStage0Tick, type Stage0Tick } from './stage0';
@@ -110,7 +112,38 @@ type Protected =
       branch: Exclude<ProtectedBranch, '2d'>;
       detections: NewDetection[];
       facesMasked: number;
+      /** Selfie 모양으로 가린 사각형 수(나머지는 사각형 전체). */
+      shaped: number;
     };
+
+/**
+ * 2b·2c 가림. Selfie가 준비돼 있으면 조각에서 한 번 돌려 사각형마다 머리카락·얼굴 피부 픽셀(팽창)만 가린다(FR-016a).
+ * Selfie가 없거나, 실패하거나, 그 사각형에서 픽셀을 못 찾거나, 그 종류의 모양 가림이 꺼져 있으면 사각형 전체(FR-015·016).
+ * Selfie는 가리기 전 조각을 보므로 가림보다 먼저 한 번만 돌린다. 2a(가림 없음)에는 돌리지 않는다.
+ */
+function applyMasks(ctx: CanvasRenderingContext2D, crop: HTMLCanvasElement, cropRect: Box, masks: ReturnType<typeof decideBranch>['masks']): number {
+  if (masks.length === 0) return 0;
+  const wantShape = masks.some((m) => (m.kind === 'face' ? cfg.selfieShapeFace : cfg.selfieShapeHead));
+  const seg = wantShape ? segmentCategories(crop) : null;
+  const radius = dilateRadius(cropRect.w, cropRect.h, cfg.selfieDilateRatio, cfg.selfieDilateMinPx);
+  let shaped = 0;
+  // 모든 모양을 가리기 전 조각에서 먼저 정한다(앞 사각형의 픽셀화가 뒤 사각형 판정에 섞이지 않게).
+  const plans = masks.map((mask) => {
+    const rect = clampToFrame(translate(mask.rect, -cropRect.x, -cropRect.y), cropRect.w, cropRect.h);
+    const on = mask.kind === 'face' ? cfg.selfieShapeFace : cfg.selfieShapeHead;
+    const shape = seg && on ? shapeMask(seg.categories, seg.width, seg.height, cropRect.w, cropRect.h, rect, radius, cfg.selfieClasses) : null;
+    return { rect, shape };
+  });
+  for (const { rect, shape } of plans) {
+    if (shape) {
+      pixelateShaped(ctx, rect, cfg.pixelGrid, shape);
+      shaped += 1;
+    } else {
+      pixelate(ctx, rect, cfg.pixelGrid);
+    }
+  }
+  return shaped;
+}
 
 /**
  * 원본 프레임에서 이번 틱의 대상을 다시 찾고(FR-013) +10% 원본 해상도로 잘라(FR-011) 얼굴 검출·분기·가림까지(FR-014~017).
@@ -142,12 +175,10 @@ function protect(m: Models, frame: HTMLCanvasElement, objectLabel: string, targe
     }
     const r = decideBranch(cropRect, persons, faces);
     if (r.branch === '2d') return { kind: 'hold', branch: '2d', reason: r.reason, detections: r.detections };
-    for (const mask of r.masks) {
-      pixelate(ctx, clampToFrame(translate(mask.rect, -cropRect.x, -cropRect.y), cropRect.w, cropRect.h), cfg.pixelGrid);
-    }
+    const shaped = applyMasks(ctx, crop, cropRect, r.masks);
     keep = true;
     const facesMasked = r.detections.filter((d) => d.masked !== 'none').length;
-    return { kind: 'ok', crop, cropRect, objectLabel: target.label, branch: r.branch, detections: r.detections, facesMasked };
+    return { kind: 'ok', crop, cropRect, objectLabel: target.label, branch: r.branch, detections: r.detections, facesMasked, shaped };
   } finally {
     if (!keep) release(crop);
   }
@@ -242,7 +273,7 @@ async function runCapture(t: Stage0Tick, decision: SceneDecision, objectLabel: s
             faceCheck: check,
             blob: out.blob,
           },
-          { sceneDecisionId: decision.id },
+          { sceneDecisionId: decision.id, reason: p.shaped > 0 ? `Selfie 모양 가림 ${p.shaped}/${p.facesMasked}` : '' },
           p.detections,
         );
         if (d) cooled.add(c.pluginId);
