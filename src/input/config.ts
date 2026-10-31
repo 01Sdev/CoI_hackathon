@@ -14,3 +14,28 @@ export const CAMERA_IDEAL = { width: 1280, height: 720 } as const;
 
 /** 카메라·영상이 메타데이터를 내지 않을 때 기다리는 시간(ms). 넘으면 실패로 보고 대체 입력으로 간다. */
 export const OPEN_TIMEOUT_MS = 8000;
+
+/**
+ * 광각(양옆 휘어짐) 효과. 입력 단계에서 휘므로 미리보기·0단계·포착·가림·흰 틀 자르기가 모두 같은 휜 화면을 쓴다.
+ * 설계: docs/designs/input-wide-warp.md. 수식·경계는 src/input/warp.ts.
+ */
+export const WIDE_WARP = {
+  /** 끄면 휘지 않고 <video>를 그대로 쓴다(periphery 0과 같은 원본). /dev는 ?warp=0으로 끈다. */
+  enabled: true,
+  /**
+   * 양옆 휘어짐 조절값(화각 아님). 0.82는 사용자가 iPhone 실기기에서 마지막으로 맞춘 값(2026-11-01 "지금 광각효과 딱 좋아").
+   * 인계 파일 pov-warp-lab.html의 슬라이더 기본값은 0.80이다.
+   */
+  periphery: 0.82,
+  strength: 0,
+  framing: 1,
+  lookX: 0,
+  lookY: 0,
+  fit: 'cover',
+  /** 휜 프레임의 긴 변 상한(인계 파일 기본 1280px). 원본보다 키우지 않는다. 비율은 원본 그대로. */
+  maxLongSide: 1280,
+  /** WebGL2가 없을 때 CPU 경로의 긴 변 상한. */
+  cpuMaxLongSide: 640,
+  /** 미리보기 다시 그리기 상한(fps). 판정·포착은 읽을 때마다 그 자리에서 다시 그린다. */
+  previewFps: 30,
+} as const;

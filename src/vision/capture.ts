@@ -8,8 +8,9 @@ import { selectActiveConsents } from '../core/selectors';
 import { lensStore, type NewDetection } from '../core/store';
 import type { Box, Consent, FaceCheck, SceneDecision } from '../core/types';
 import { deliver, hold, skip } from '../broker/broker';
-import { getInputEpoch, getVideo } from '../input/adapter';
-import { cooldownUntil, decideBranch, headRegion, type ProtectedBranch } from './branch';
+import { getInputEpoch, grabFrame } from '../input/adapter';
+import { sourceBoxToWarped, warpedBoxToSource, type WarpParams } from '../input/warp';
+import { cooldownUntil, decideBranch, headRegion, uncoveredFaces, type ProtectedBranch } from './branch';
 import { VISION_CONFIG } from './config';
 import { area, clampToFrame, expand, fitLongSide, intersect, matchTarget, scaleBox, translate, type Found } from './geometry';
 import { canvasOf, pixelate, pixelateShaped, release, toJpeg } from './mask';
@@ -119,7 +120,26 @@ type Protected =
       shaped: number;
       /** 코디 스캔: 몸 전체를 가린(동의하지 않은) 사람 수. */
       bodies?: number;
+      /** 가린 사각형(휜 프레임 px). 원본 쪽 출구 재검사가 얼굴이 덮였는지 본다. */
+      maskRects: Box[];
+      /** 광각일 때 이 조각의 원본 쪽 영역(가리기 전 원본). 출구 재검사 뒤 호출자가 비운다. 광각이 꺼져 있으면 null. */
+      rawCrop: RawCrop | null;
     };
+
+/** 광각일 때 휘기 전 원본 프레임(같은 순간). 얼굴 검출 보강과 원본 쪽 출구 재검사에 쓴다(docs/designs/input-wide-warp.md). */
+interface RawSide {
+  canvas: HTMLCanvasElement;
+  warp: WarpParams;
+  /** 휜 프레임 크기(px). */
+  W: number;
+  H: number;
+}
+
+/** 휜 조각에 대응하는 원본 영역(원본 px)과 그 픽셀. */
+interface RawCrop {
+  canvas: HTMLCanvasElement;
+  region: Box;
+}
 
 /**
  * 2b·2c 가림. Selfie가 준비돼 있으면 조각에서 한 번 돌려 사각형마다 머리카락·얼굴 피부 픽셀(팽창)만 가린다(FR-016a).
@@ -156,7 +176,7 @@ function applyMasks(ctx: CanvasRenderingContext2D, crop: HTMLCanvasElement, crop
  * 원본 해상도로 잘라(FR-011·060) 얼굴 검출·분기·가림까지(FR-014~017). 프레임 밖 픽셀은 조각 캔버스에 그리지 않는다.
  * 'ok'의 crop은 이미 가린 조각이고 호출자가 비운다. 그 밖의 경로에서는 여기서 비운다.
  */
-function protect(m: Models, frame: HTMLCanvasElement, found: readonly Found[], objectLabel: string, targetBox: Box, frameRect: Box): Protected {
+function protect(m: Models, frame: HTMLCanvasElement, found: readonly Found[], objectLabel: string, targetBox: Box, frameRect: Box, raw: RawSide | null): Protected {
   const W = frame.width;
   const H = frame.height;
   const target = matchTarget(found, objectLabel, scaleBox(targetBox, W, H), cfg.recheckTargetScoreMin);
@@ -168,27 +188,84 @@ function protect(m: Models, frame: HTMLCanvasElement, found: readonly Found[], o
   const persons = found.filter((f) => f.label === 'person' && f.score >= cfg.safetyPersonScoreMin);
 
   const { canvas: crop, ctx } = canvasOf(cropRect.w, cropRect.h);
+  let rawCrop: RawCrop | null = null;
   let keep = false;
   try {
     ctx.drawImage(frame, cropRect.x, cropRect.y, cropRect.w, cropRect.h, 0, 0, cropRect.w, cropRect.h);
     let faces: Found[];
     try {
-      faces = facesOn(m, crop).map((f) => ({ ...f, box: translate(f.box, cropRect.x, cropRect.y) }));
+      faces = facesTiled(m, crop).map((f) => ({ ...f, box: translate(f.box, cropRect.x, cropRect.y) }));
+      if (raw) {
+        rawCrop = rawCropFor(raw, cropRect);
+        if (!rawCrop) return { kind: 'hold', branch: '2d', reason: '검사 실패' };
+        faces = mergeFaces(faces, rawFacesWarped(m, raw, rawCrop));
+      }
     } catch (e) {
       console.warn('[vision] 가림용 얼굴 검출 실패', e);
       return { kind: 'hold', branch: '2d', reason: '검사 실패' };
     } finally {
-      lensStore.getState().recordRuns({ faceDetectRuns: 1 });
+      lensStore.getState().recordRuns({ faceDetectRuns: raw ? 2 : 1 });
     }
     const r = decideBranch(cropRect, persons, faces);
     if (r.branch === '2d') return { kind: 'hold', branch: '2d', reason: r.reason, detections: r.detections };
     const shaped = applyMasks(ctx, crop, cropRect, r.masks);
     keep = true;
     const facesMasked = r.detections.filter((d) => d.masked !== 'none').length;
-    return { kind: 'ok', crop, cropRect, objectLabel: target.label, branch: r.branch, detections: r.detections, facesMasked, shaped };
+    return {
+      kind: 'ok',
+      crop,
+      cropRect,
+      objectLabel: target.label,
+      branch: r.branch,
+      detections: r.detections,
+      facesMasked,
+      shaped,
+      maskRects: r.masks.map((x) => x.rect),
+      rawCrop,
+    };
   } finally {
-    if (!keep) release(crop);
+    if (!keep) {
+      release(crop);
+      release(rawCrop?.canvas ?? null);
+    }
   }
+}
+
+/**
+ * 가림용 얼굴 검출(FR-014). 조각 전체에서 한 번, 조각이 크면 겹치는 타일에서도 한 번씩 돌려 합친다.
+ * BlazeFace short-range는 입력을 128px로 줄이므로 큰 조각(긴 변 수백 px)에서는 조각의 15~20%보다 작은 얼굴을 놓친다.
+ * 광각은 가운데를 키워 대상 조각이 커지므로 이 손실이 더 드러난다(docs/designs/input-wide-warp.md). 박스는 source px.
+ */
+function facesTiled(m: Models, source: HTMLCanvasElement): Found[] {
+  let faces = facesOn(m, source);
+  const { width: w, height: h } = source;
+  const t = Math.max(cfg.faceMinSide, Math.round(Math.min(w, h) * cfg.faceTileRatio));
+  if (Math.max(w, h) <= t * 1.2) return faces;
+  const starts = (len: number) => {
+    if (len <= t) return [0];
+    const n = Math.ceil((len - t) / (t * cfg.faceTileStride)) + 1;
+    return Array.from({ length: n }, (_, i) => Math.round(((len - t) * i) / (n - 1)));
+  };
+  const tw = Math.min(t, w);
+  const th = Math.min(t, h);
+  for (const y of starts(h)) {
+    for (const x of starts(w)) {
+      let tile: HTMLCanvasElement | null = null;
+      try {
+        const c = canvasOf(tw, th);
+        tile = c.canvas;
+        c.ctx.drawImage(source, x, y, tw, th, 0, 0, tw, th);
+        faces = mergeFaces(
+          faces,
+          facesOn(m, tile).map((f) => ({ ...f, box: translate(f.box, x, y) })),
+        );
+      } finally {
+        lensStore.getState().recordRuns({ faceDetectRuns: 1 });
+        release(tile);
+      }
+    }
+  }
+  return faces;
 }
 
 /** 두 얼굴 목록을 합친다. 이미 있는 얼굴과 IoU 0.3 이상 겹치면 점수가 높은 쪽만 남긴다. */
@@ -200,6 +277,67 @@ function mergeFaces(a: readonly Found[], b: readonly Found[]): Found[] {
     else if ((out[i]?.score ?? 0) < f.score) out[i] = f;
   }
   return out;
+}
+
+/** 휜 조각(px) → 원본에서 감싸는 영역을 조금 넓혀 원본 해상도로 자른다. 원본 밖이면 null(cover에서는 생기지 않음). */
+function rawCropFor(raw: RawSide, cropRect: Box): RawCrop | null {
+  const b = warpedBoxToSource(scaleBox(cropRect, 1 / raw.W, 1 / raw.H), raw.warp);
+  if (!b) return null;
+  const vw = raw.canvas.width;
+  const vh = raw.canvas.height;
+  const region = clampToFrame(expand(scaleBox(b, vw, vh), cfg.warpRawPad), vw, vh);
+  if (region.w < 2 || region.h < 2) return null;
+  const { canvas, ctx } = canvasOf(region.w, region.h);
+  ctx.drawImage(raw.canvas, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h);
+  return { canvas, region };
+}
+
+/**
+ * 원본 쪽 얼굴 검출. 휜 프레임의 양 끝은 가로로 줄어 BlazeFace가 얼굴을 놓치므로, 휘기 전 원본에서 한 번 더 찾고
+ * 박스를 정방향 사상(원본 → 휜)으로 옮긴다(둘레 36점을 옮긴 감싸는 사각형 + warpFaceMargin). scale은 source가 rawCrop을 줄인 배율.
+ */
+function rawFacesWarped(m: Models, raw: RawSide, rc: RawCrop, source: HTMLCanvasElement = rc.canvas, scale = 1): Found[] {
+  const vw = raw.canvas.width;
+  const vh = raw.canvas.height;
+  const out: Found[] = [];
+  for (const f of facesTiled(m, source)) {
+    const b = translate(scaleBox(f.box, 1 / scale), rc.region.x, rc.region.y);
+    const w = sourceBoxToWarped(scaleBox(b, 1 / vw, 1 / vh), raw.warp, cfg.warpFaceMargin);
+    if (w) out.push({ ...f, box: scaleBox(w, raw.W, raw.H) });
+  }
+  return out;
+}
+
+/**
+ * 원본 쪽 출구 재검사. 원본 영역을 보낼 조각과 같은 배율로 줄여 BlazeFace를 다시 돌리고, 찾은 얼굴(휜 좌표)이 가린 사각형으로
+ * 덮였는지 본다. 덮이지 않은 얼굴 수를 돌려준다. 오류면 null(보내지 않는다).
+ */
+function rawExitCheck(m: Models, raw: RawSide, r: Extract<Protected, { kind: 'ok' }>, outLong: number): number | null {
+  const rc = r.rawCrop;
+  if (!rc) return null;
+  let small: HTMLCanvasElement | null = null;
+  try {
+    const scale = Math.min(1, outLong / Math.max(r.cropRect.w, r.cropRect.h));
+    let source = rc.canvas;
+    if (scale < 1) {
+      const c = canvasOf(Math.max(1, Math.round(rc.canvas.width * scale)), Math.max(1, Math.round(rc.canvas.height * scale)));
+      small = c.canvas;
+      c.ctx.drawImage(rc.canvas, 0, 0, small.width, small.height);
+      source = small;
+    }
+    const faces = rawFacesWarped(m, raw, rc, source, source.width / rc.canvas.width);
+    return uncoveredFaces(
+      faces.map((f) => f.box),
+      r.maskRects,
+      r.cropRect,
+    ).length;
+  } catch (e) {
+    console.warn('[vision] 원본 쪽 출구 재검사 실패', e);
+    return null;
+  } finally {
+    lensStore.getState().recordRuns({ faceDetectRuns: 1 });
+    release(small);
+  }
 }
 
 /**
@@ -233,7 +371,14 @@ function facesInHeads(m: Models, crop: HTMLCanvasElement, cropRect: Box, persons
  * ∩ 전송 범위 프레임. 동의 상자와 IoU로 같은 사람을 찾고, 못 찾으면 보낸다고 가정하지 않고 보류한다.
  * 가림: 얼굴은 기존 2b·2c 그대로(동의한 사람도 얼굴이 없으면 R4 보류), 동의하지 않은 다른 사람은 몸 전체(body).
  */
-function protectOutfit(m: Models, frame: HTMLCanvasElement, found: readonly Found[], live: readonly Consent[], frameRect: Box): Protected {
+function protectOutfit(
+  m: Models,
+  frame: HTMLCanvasElement,
+  found: readonly Found[],
+  live: readonly Consent[],
+  frameRect: Box,
+  raw: RawSide | null,
+): Protected {
   const W = frame.width;
   const H = frame.height;
   const chosen = pickConsent(live, W, H);
@@ -257,14 +402,21 @@ function protectOutfit(m: Models, frame: HTMLCanvasElement, found: readonly Foun
   const body = new Set(persons.filter((p) => !consentOf.has(p)));
 
   const { canvas: crop, ctx } = canvasOf(cropRect.w, cropRect.h);
+  let rawCrop: RawCrop | null = null;
   let keep = false;
   try {
     ctx.drawImage(frame, cropRect.x, cropRect.y, cropRect.w, cropRect.h, 0, 0, cropRect.w, cropRect.h);
     let faces: Found[];
     try {
-      faces = facesOn(m, crop).map((f) => ({ ...f, box: translate(f.box, cropRect.x, cropRect.y) }));
+      faces = facesTiled(m, crop).map((f) => ({ ...f, box: translate(f.box, cropRect.x, cropRect.y) }));
       const heads = persons.filter((p) => !body.has(p) && area(intersect(p.box, cropRect)) > 0);
       faces = mergeFaces(faces, facesInHeads(m, crop, cropRect, heads));
+      if (raw) {
+        rawCrop = rawCropFor(raw, cropRect);
+        if (!rawCrop) return { kind: 'hold', branch: '2d', reason: '검사 실패' };
+        faces = mergeFaces(faces, rawFacesWarped(m, raw, rawCrop));
+        lensStore.getState().recordRuns({ faceDetectRuns: 1 });
+      }
     } catch (e) {
       console.warn('[vision] 가림용 얼굴 검출 실패', e);
       return { kind: 'hold', branch: '2d', reason: '검사 실패' };
@@ -286,9 +438,14 @@ function protectOutfit(m: Models, frame: HTMLCanvasElement, found: readonly Foun
       facesMasked,
       shaped,
       bodies: r.masks.filter((x) => x.kind === 'body').length,
+      maskRects: r.masks.map((x) => x.rect),
+      rawCrop,
     };
   } finally {
-    if (!keep) release(crop);
+    if (!keep) {
+      release(crop);
+      release(rawCrop?.canvas ?? null);
+    }
   }
 }
 
@@ -346,17 +503,28 @@ async function runCapture(t: Stage0Tick, decision: SceneDecision, objectLabel: s
   const live = selectActiveConsents(store, startedAt);
 
   let frame: HTMLCanvasElement | null = null;
+  /** 광각일 때 휘기 전 원본 프레임. 조각마다 원본 쪽 영역을 자른 뒤 frame과 함께 놓는다. */
+  let rawFrame: HTMLCanvasElement | null = null;
   const crops: HTMLCanvasElement[] = [];
   try {
-    const v = getVideo();
     const m = getModels();
-    if (!v || !m || v.videoWidth === 0 || getInputEpoch() !== token.inputEpoch) return;
-    const W = v.videoWidth;
-    const H = v.videoHeight;
+    // 광각이 켜져 있으면 휜 프레임. 0단계 박스·흰 틀(0~1)·조각 px가 모두 이 프레임 기준이다.
+    const src = m && getInputEpoch() === token.inputEpoch ? grabFrame() : null;
+    if (!m || !src) return;
+    const W = src.width;
+    const H = src.height;
     const f = canvasOf(W, H);
     frame = f.canvas;
-    f.ctx.drawImage(v, 0, 0, W, H);
+    f.ctx.drawImage(src.source, 0, 0, W, H);
     const frameRect = frameToPx(captureFrame, W, H);
+    // 같은 task에서 휘기 전 프레임도 그린다(같은 순간). 얼굴 검출 보강·원본 쪽 출구 재검사에만 쓰고 보내지 않는다.
+    let raw: RawSide | null = null;
+    if (src.warp && cfg.warpRawFaces) {
+      const r = canvasOf(src.video.videoWidth, src.video.videoHeight);
+      rawFrame = r.canvas;
+      r.ctx.drawImage(src.video, 0, 0, rawFrame.width, rawFrame.height);
+      raw = { canvas: rawFrame, warp: src.warp, W, H };
+    }
 
     const raws = targets.filter((c) => c.raw);
     const outfits = targets.filter((c) => !c.raw && c.kind === 'outfit');
@@ -368,15 +536,21 @@ async function runCapture(t: Stage0Tick, decision: SceneDecision, objectLabel: s
       found = detectObjects(m, frame);
       store.recordRuns({ stage0Runs: 1 });
     }
-    const p = prots.length > 0 ? protect(m, frame, found, objectLabel, targetBox, frameRect) : null;
-    if (p?.kind === 'ok') crops.push(p.crop);
+    const p = prots.length > 0 ? protect(m, frame, found, objectLabel, targetBox, frameRect, raw) : null;
+    if (p?.kind === 'ok') crops.push(p.crop, ...(p.rawCrop ? [p.rawCrop.canvas] : []));
     const o: Protected | null =
-      outfits.length === 0 ? null : wantOutfit ? protectOutfit(m, frame, found, live, frameRect) : { kind: 'hold', branch: null, reason: '동의한 사람 없음' };
-    if (o?.kind === 'ok') crops.push(o.crop);
+      outfits.length === 0
+        ? null
+        : wantOutfit
+          ? protectOutfit(m, frame, found, live, frameRect, raw)
+          : { kind: 'hold', branch: null, reason: '동의한 사람 없음' };
+    if (o?.kind === 'ok') crops.push(o.crop, ...(o.rawCrop ? [o.rawCrop.canvas] : []));
     // 비교 모드(F17, 05 결정 30, F24): 프레임 안 전체를 원본 해상도로, 가리지 않고 한 번 인코딩한 뒤 원본 프레임을 놓는다.
     const rawBlob = raws.length > 0 ? await encodeRegion(frame, frameRect, cfg.rawQuality) : null;
     release(frame);
     frame = null;
+    release(rawFrame);
+    rawFrame = null;
 
     /** 가린 조각을 플러그인마다 maxSide로 인코딩하고 출구 재검사를 거쳐 보낸다. */
     const sendProtected = async (r: Protected | null, list: CaptureTarget[]) => {
@@ -396,6 +570,18 @@ async function runCapture(t: Stage0Tick, decision: SceneDecision, objectLabel: s
         if (check.detectedFaces > 0) {
           holdIfCurrent(c, '2d', '출구 재검사', r.detections);
           continue;
+        }
+        // 광각: 휘기 전 원본 쪽도 다시 본다. 가리지 않은 얼굴이 하나라도 있으면 보내지 않는다(fail-closed).
+        if (raw) {
+          const uncovered = rawExitCheck(m, raw, r, Math.max(out.width, out.height));
+          if (uncovered === null) {
+            holdIfCurrent(c, '2d', '검사 실패', r.detections);
+            continue;
+          }
+          if (uncovered > 0) {
+            holdIfCurrent(c, '2d', '출구 재검사(원본)', r.detections);
+            continue;
+          }
         }
         if (!stillCurrent(token, c)) continue;
         const d = await deliver(
@@ -458,6 +644,7 @@ async function runCapture(t: Stage0Tick, decision: SceneDecision, objectLabel: s
     }
   } finally {
     release(frame);
+    release(rawFrame);
     for (const c of crops) release(c);
     const s = lensStore.getState();
     const endedAt = performance.now();

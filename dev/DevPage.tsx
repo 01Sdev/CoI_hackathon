@@ -6,7 +6,8 @@ import { GAZE_CENTER_RADIUS } from '../src/core/constants';
 import { selectConsentCount, selectFaceM, selectOutwardApps, selectThroughput } from '../src/core/selectors';
 import { lensStore, useLensStore } from '../src/core/store';
 import type { InputKind } from '../src/core/types';
-import { getVideoUrl, setVideoUrl } from '../src/input/adapter';
+import { getVideoUrl, getWarpMode, setVideoUrl } from '../src/input/adapter';
+import { WIDE_WARP } from '../src/input/config';
 import { MODEL_PATHS } from '../src/vision/config';
 import { loadModels, loadSegmenter, mountPreview, subscribeModelState, subscribeSegmenterState, type ModelState, type SegmenterState } from '../src/vision';
 import { getStage0Stats } from '../src/vision/stage0';
@@ -67,6 +68,7 @@ function Controls() {
       </div>
       <div style={mono}>
         입력: {input ? `${input.kind} ${input.width}×${input.height} fps=${input.fps || '?'}${input.fallbackFrom ? ` (${input.fallbackFrom} 실패 → 대체)` : ''}` : '없음'}
+        {` · 광각 ${getWarpMode() ? `${getWarpMode()} periphery ${WIDE_WARP.periphery}` : '꺼짐(?warp=0)'}`}
       </div>
     </div>
   );

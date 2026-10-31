@@ -4,7 +4,7 @@
 
 import { lensStore } from '../core/store';
 import type { Box, SceneDecision } from '../core/types';
-import { getInputEpoch, getVideo } from '../input/adapter';
+import { getInputEpoch, getVideo, grabFrame } from '../input/adapter';
 import { VISION_CONFIG } from './config';
 import { classifyScene, fitLongSide, scaleBox, type Found } from './geometry';
 import { observePeople, resetPeople } from './gaze';
@@ -120,7 +120,10 @@ function runTick(v: HTMLVideoElement) {
   try {
     const now = performance.now();
     lastRunAt = now;
-    const { width, height } = fitLongSide(v.videoWidth, v.videoHeight, VISION_CONFIG.stage0LongSide);
+    // 광각이 켜져 있으면 휜 프레임(미리보기와 같은 픽셀). 박스는 이 프레임 기준 0~1이다.
+    const frame = grabFrame();
+    if (!frame) return;
+    const { width, height } = fitLongSide(frame.width, frame.height, VISION_CONFIG.stage0LongSide);
     if (!canvas) canvas = document.createElement('canvas');
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
@@ -128,7 +131,7 @@ function runTick(v: HTMLVideoElement) {
     }
     const ctx = canvas.getContext('2d', { willReadFrequently: false });
     if (!ctx) return;
-    ctx.drawImage(v, 0, 0, width, height);
+    ctx.drawImage(frame.source, 0, 0, width, height);
 
     let found: Found[];
     try {
