@@ -5,6 +5,7 @@
 import { useShallow } from 'zustand/react/shallow';
 import { useLensStore } from '../core/store';
 import { PLUGIN_NAME, PLUGIN_STATUS } from './labels';
+import { sanitizeAppText } from './sanitize';
 
 /** 시트 머리의 빠른 일시 정지 버튼. */
 export function PauseButton() {
@@ -50,7 +51,7 @@ function AppRow({ id }: { id: string }) {
   const p = useLensStore(
     useShallow((s) => {
       const x = s.plugins[id];
-      return { kind: x?.kind, status: x?.status ?? 'terminated', enabled: x?.enabled ?? false, purpose: x?.manifest.purpose ?? '' };
+      return { kind: x?.kind, status: x?.status ?? 'terminated', enabled: x?.enabled ?? false, purpose: sanitizeAppText(x?.manifest.purpose ?? '') };
     }),
   );
   const setEnabled = useLensStore((s) => s.setPluginEnabled);
