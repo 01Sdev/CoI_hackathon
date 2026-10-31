@@ -24,9 +24,12 @@ export const SERVER_UPSTREAM: Partial<Record<PluginKind, string>> = { outfit: 'G
 
 export const OUTFIT_SERVER_NOTE = `${APP_NAME} 서버는 받은 조각과 질문을 코디 답변용 AI 모델(Google Gemini)에 넘기고, 답만 앱에 돌려줘요.`;
 
-/** 코디 스캔의 말로 묻기는 브라우저 음성 인식을 쓴다(SRS C-8 예외). Chrome은 소리를 Google 서버에서 글자로 바꾼다. */
+/**
+ * 코디 스캔의 말로 묻기(SRS C-8 예외). 녹음한 말소리를 framelet 서버가 받아쓰기 서비스(ElevenLabs)로 넘겨 글자로 바꾼다.
+ * 그게 안 되면 브라우저 음성 인식을 쓰고, Chrome은 소리를 Google 서버에서 글자로 바꾼다. 앱에는 글자만 간다.
+ */
 export const SPEECH_NOTE =
-  '질문은 브라우저 음성 인식으로 받아 적어요. Chrome은 말소리를 Google 서버로 보내 글자로 바꾸고, 앱에는 받아 적은 글자만 가요. 동의한 사람이 있을 때만 마이크를 켜요.';
+  '질문은 말소리를 받아쓰기 서비스(ElevenLabs)로 보내 글자로 바꿔요. 그게 안 되면 브라우저 음성 인식을 쓰고, Chrome은 말소리를 Google 서버로 보내요. 앱에는 받아 적은 글자만 가요. 동의한 사람이 있을 때만 마이크를 켜요.';
 
 export function serverNote(kind: PluginKind): string {
   return kind === 'outfit' ? OUTFIT_SERVER_NOTE : SERVER_NOTE;
