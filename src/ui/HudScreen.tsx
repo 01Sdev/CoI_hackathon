@@ -1,10 +1,11 @@
 // 글래스 HUD(/hud): 600×600 단독, 검은 배경(가산형 디스플레이에서 투명), 항상 다크, 입력은 녹화 영상(FR-037).
 // 화면이 600보다 작으면 비례 축소한다(K-14). 시작은 선택 버튼(Enter)이나 탭 한 번 — 오디오 잠금 해제에 제스처가 필요하다.
 
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { APP_NAME } from '../core/constants';
 import { useLensStore } from '../core/store';
 import { Hud } from './Hud';
+import { HudBrowser } from './HudBrowser';
 import { Preview } from './Preview';
 import { unlockAudio } from './signal';
 import { applyTheme } from './theme';
@@ -28,6 +29,7 @@ export function HudScreen({ autostart = false }: { autostart?: boolean }) {
   const setViewMode = useLensStore((s) => s.setViewMode);
   const selectInput = useLensStore((s) => s.selectInput);
   const [started, setStarted] = useState(autostart);
+  const startedRef = useRef(autostart);
   const scale = useFitScale();
   useStoreTick();
 
@@ -44,13 +46,18 @@ export function HudScreen({ autostart = false }: { autostart?: boolean }) {
   useEffect(() => {
     if (started) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') start();
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault(); // 포커스된 시작 버튼의 기본 활성화와 겹치지 않게
+      start();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  /** 키와 버튼 클릭이 함께 와도 한 번만. */
   function start() {
+    if (startedRef.current) return;
+    startedRef.current = true;
     unlockAudio();
     selectInput('video');
     setStarted(true);
@@ -68,7 +75,8 @@ export function HudScreen({ autostart = false }: { autostart?: boolean }) {
 
 function HudStart({ onStart }: { onStart(): void }) {
   return (
-    <button type="button" className="fm-hudstart" onClick={onStart}>
+    // 글래스는 공간 탐색으로 포커스된 버튼을 Enter로 누른다. 처음부터 포커스를 둔다.
+    <button type="button" className="fm-hudstart" onClick={onStart} autoFocus>
       <span className="fm-scene">{APP_NAME}</span>
       <span className="fm-result">선택 버튼으로 시작</span>
       <span className="fm-caption">입력: 녹화 영상</span>
@@ -80,7 +88,13 @@ function HudStart({ onStart }: { onStart(): void }) {
 function HudGate() {
   const engine = useEngineView();
   const sec = useElapsedSeconds();
-  if (engine === 'ready') return <Hud variant="hud" />;
+  if (engine === 'ready')
+    return (
+      <>
+        <Hud variant="hud" />
+        <HudBrowser />
+      </>
+    );
   const failed = engine === 'failed';
   return (
     <div className="fm-hudstart" role={failed ? 'alert' : 'status'}>
