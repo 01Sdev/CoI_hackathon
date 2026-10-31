@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title></title>
+    <!-- 가짜 런타임으로 실제 App을 띄우는 개발 페이지(프로덕션 빌드 제외). 미리보기 자리에 카메라 흉내 배경을 깐다 -->
+    <style>
+      [data-preview-slot]:empty { background: linear-gradient(180deg, #3b332c 0 50%, #2a241f 50%); }
+      [data-theme='light'] [data-preview-slot]:empty { background: linear-gradient(180deg, #e9e1d6 0 50%, #cdb99b 50%); }
+      [data-view='hud'] [data-preview-slot]:empty { background: none; }
+      [data-preview-slot]:empty::before { content: ''; position: absolute; left: 22%; top: 36%; width: 56%; height: 14%; border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, #f4efe7, #d6cdc0); }
+      [data-preview-slot]:empty::after { content: '🍕'; position: absolute; left: 50%; top: 33%; transform: translateX(-50%); font-size: min(22vw, 120px); }
+      [data-view='hud'] [data-preview-slot]:empty::before, [data-view='hud'] [data-preview-slot]:empty::after { display: none; }
+      .fake-chip, .fake-panel { position: fixed; left: 8px; bottom: 8px; z-index: 1000; font: 12px/1.4 ui-monospace, Menlo, monospace; color: #111; }
+      .fake-chip { padding: 6px 10px; border-radius: 8px; border: 1px dashed #888; background: #ffe9a8; cursor: pointer; }
+      .fake-panel { width: min(420px, calc(100vw - 16px)); padding: 8px; border-radius: 10px; background: #ffe9a8f0; border: 1px dashed #888; display: grid; gap: 6px; }
+      .fake-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: space-between; }
+      .fake-row button { font: inherit; padding: 3px 7px; border-radius: 6px; border: 1px solid #997; background: #fff8; color: #111; cursor: pointer; }
+      .fake-row a { color: #134; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="fake"></div>
+    <script type="module" src="./fake-main.tsx"></script>
+  </body>
+</html>

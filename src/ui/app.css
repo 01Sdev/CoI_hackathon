@@ -1,0 +1,475 @@
+/*
+ * 화면 배치. 토큰과 부품(유리·오브·캡슐·점멸·띠)은 theme.css, 여기는 배치만 둔다.
+ * 기준: /dev/screens.html(휴대폰 390×844, 데스크톱 1440×900, /hud 600×600, /outward 1280×720).
+ * 글자 규칙: Text는 55% 이상 유리, Sub(fm-readout·fm-caption)는 74% 유리(fm-glass--panel) 위에만.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  margin: 0;
+  block-size: 100%;
+}
+body {
+  overflow: hidden;
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+:root {
+  --fm-orb-size: 120px;
+  --fm-gutter: 16px;
+}
+
+/* ── 무대(카메라) ── */
+.fm-stage {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--fm-bg) 70%, #000);
+  isolation: isolate;
+}
+.fm-preview {
+  position: absolute;
+  inset: 0;
+}
+/* A가 붙이는 <video>. 대상 위치(targetBox)를 겹치려면 cover로 꽉 채운다. */
+.fm-preview > video,
+.fm-preview > canvas {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  display: block;
+}
+.fm-stage__lines,
+.fm-stage__dim,
+.fm-stage__scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.fm-stage__dim {
+  background: color-mix(in srgb, var(--fm-bg) 55%, transparent);
+}
+.fm-stage__bottom {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: var(--fm-bottom-gap, 48px);
+  display: flex;
+  justify-content: center;
+}
+
+/* ── 위쪽 줄: 브랜드(왼쪽)·입력(오른쪽) ── */
+.fm-topbar {
+  position: absolute;
+  inset-inline: var(--fm-gutter);
+  inset-block-start: calc(env(safe-area-inset-top, 0px) + 14px);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  z-index: 6;
+}
+.fm-brand {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.fm-brand__dot {
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: var(--fm-lens);
+  box-shadow: 0 0 10px var(--fm-lens);
+  flex: none;
+}
+button.fm-capsule {
+  cursor: pointer;
+}
+button.fm-capsule:focus-visible,
+.fm-menu__item:focus-visible,
+.fm-orb-btn:focus-visible {
+  outline: 2px solid var(--fm-lens);
+  outline-offset: 3px;
+}
+.fm-capsule__in {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── 메뉴 ── */
+.fm-anchor {
+  position: relative;
+}
+.fm-menu {
+  position: absolute;
+  inset-block-start: calc(100% + 8px);
+  min-inline-size: 220px;
+  padding: 8px;
+  border-radius: 20px;
+  display: grid;
+  gap: 2px;
+  z-index: 30;
+}
+.fm-menu[data-align='start'] {
+  inset-inline-start: 0;
+}
+.fm-menu[data-align='end'] {
+  inset-inline-end: 0;
+}
+.fm-menu__head {
+  padding: 8px 10px 4px;
+}
+.fm-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-block-size: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  text-align: start;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fm-menu__item:hover {
+  background: var(--fm-hairline);
+}
+.fm-menu__mark {
+  inline-size: 14px;
+  block-size: 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--fm-sub);
+  flex: none;
+}
+.fm-menu__item[aria-checked='true'] .fm-menu__mark {
+  background: var(--fm-text);
+  box-shadow: inset 0 0 0 3px var(--fm-glass-panel), 0 0 0 1.5px var(--fm-text);
+}
+
+/* ── 버튼 크기 ── */
+.fm-btn--lg {
+  min-block-size: 56px;
+  font-size: 17px;
+}
+.fm-btn--sm {
+  min-block-size: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+/* ── 오브 묶음 ── */
+.fm-orbstack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.fm-orbstack__orb {
+  position: relative;
+}
+.fm-orbstack__row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-inline-size: calc(100vw - 2 * var(--fm-gutter));
+}
+.fm-orb-btn {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* ── 상태 카드(로딩·실패) ── */
+.fm-status {
+  position: absolute;
+  inset-inline: 22px;
+  inset-block-start: 26%;
+  max-inline-size: 460px;
+  margin-inline: auto;
+  padding: 22px;
+  border-radius: 26px;
+  display: grid;
+  gap: 16px;
+  z-index: 4;
+}
+.fm-status__title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.fm-status__body {
+  font-size: 15px;
+  line-height: 1.6;
+}
+.fm-check {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 15px;
+}
+.fm-check__ok {
+  color: var(--fm-safe);
+  font-weight: 700;
+}
+.fm-bar {
+  block-size: 6px;
+  border-radius: 3px;
+  background: var(--fm-hairline);
+  overflow: hidden;
+}
+.fm-bar > i {
+  display: block;
+  block-size: 100%;
+  inline-size: 0;
+  background: var(--fm-lens);
+  border-radius: 3px;
+  transition: inline-size var(--fm-dur-state) var(--fm-ease);
+}
+.fm-bar--indeterminate > i {
+  inline-size: 32%;
+  animation: fm-indeterminate 1.4s var(--fm-ease) infinite;
+}
+@keyframes fm-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+/* ── 카메라 자동 전환 알림 ── */
+.fm-notice {
+  position: absolute;
+  inset-inline: 14px;
+  inset-block-start: calc(env(safe-area-inset-top, 0px) + 66px);
+  max-inline-size: 520px;
+  margin-inline: auto;
+  padding: 14px 16px;
+  border-radius: 20px;
+  display: grid;
+  gap: 8px;
+  z-index: 7;
+}
+.fm-notice__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── 시작 화면 ── */
+.fm-start {
+  position: relative;
+  block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: calc(env(safe-area-inset-top, 0px) + 24vh) 28px calc(env(safe-area-inset-bottom, 0px) + 48px);
+  overflow: hidden;
+}
+.fm-start__bg {
+  position: absolute;
+  inset: 0;
+  opacity: 0.6;
+  pointer-events: none;
+}
+.fm-start__hero,
+.fm-start__actions {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.fm-start__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.fm-start__brand .fm-brand__dot {
+  inline-size: 12px;
+  block-size: 12px;
+}
+.fm-start__lines {
+  font-size: 19px;
+  line-height: 1.55;
+  font-weight: 500;
+}
+.fm-start__actions {
+  gap: 12px;
+}
+.fm-start__note {
+  text-align: center;
+}
+.fm-start[data-layout='desktop'] {
+  align-items: center;
+  justify-content: center;
+  gap: 56px;
+  padding-block: 48px;
+}
+.fm-start[data-layout='desktop'] .fm-start__hero,
+.fm-start[data-layout='desktop'] .fm-start__actions {
+  inline-size: min(440px, 100%);
+}
+
+/* ── 휴대폰 ── */
+.fm-phone {
+  position: relative;
+  block-size: 100dvh;
+  overflow: hidden;
+}
+.fm-phone__stage {
+  position: absolute;
+  inset: 0;
+}
+
+/* ── 데스크톱 ── */
+.fm-desk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 34vw, 520px);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 24px;
+  padding: 24px;
+  block-size: 100dvh;
+}
+.fm-desk__stage {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  min-block-size: 0;
+}
+.fm-desk__stage > .fm-stage {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--fm-r-panel);
+}
+.fm-desk__presenter {
+  grid-column: 1;
+  grid-row: 2;
+}
+.fm-desk__presenter:empty {
+  display: none;
+}
+.fm-desk__side {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-block-size: 0;
+  border-radius: var(--fm-r-panel);
+  padding: 18px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+}
+.fm-desk .fm-topbar {
+  inset-block-start: 20px;
+  inset-inline: 20px;
+}
+/* 600×600 글래스 HUD 영역 안내(점선). 무대가 작으면 함께 줄어든다 */
+.fm-hud-guide {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  inline-size: min(600px, 90%);
+  aspect-ratio: 1;
+  max-block-size: 90%;
+  transform: translate(-50%, -50%);
+  border-radius: 24px;
+  outline: 1px dashed var(--fm-hairline);
+  pointer-events: none;
+}
+
+/* ── 글래스 HUD(/hud) ── */
+[data-view='hud'] body {
+  background: #000;
+}
+.fm-hudroute {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  overflow: hidden;
+}
+.fm-hudroute__frame {
+  position: relative;
+  inline-size: 600px;
+  block-size: 600px;
+  flex: none;
+  overflow: hidden;
+  transform-origin: center;
+}
+.fm-hudstart {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  border: 0;
+  background: none;
+  color: var(--fm-text);
+  text-align: center;
+  cursor: pointer;
+}
+
+/* ── 바깥 표시(/outward) ── */
+.fm-outward {
+  block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.4vh;
+  padding: 4vh 4vw;
+  text-align: center;
+}
+.fm-outward__kicker {
+  font-size: clamp(14px, 2.6vh, 24px);
+}
+.fm-outward__title {
+  font-size: clamp(28px, 8vh, 72px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.fm-outward__num {
+  font-size: 42vh;
+  line-height: 0.9;
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  color: var(--fm-tone, var(--fm-sub));
+}
+.fm-outward__unit {
+  font-size: 0.3em;
+  letter-spacing: 0;
+}
+.fm-outward__sub {
+  font-size: clamp(14px, 3.6vh, 30px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-bar--indeterminate > i {
+    animation: none;
+    inline-size: 100%;
+    opacity: 0.4;
+  }
+}
