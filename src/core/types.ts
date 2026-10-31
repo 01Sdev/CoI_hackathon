@@ -215,11 +215,14 @@ export interface LiveObservation {
   at: number;
 }
 
+/** 결과의 출처. on-device: 플러그인 Worker 안 모델, api: /api/calorie, fallback: 고정표. */
+export type ResultSource = 'on-device' | 'api' | 'fallback';
+
 /** 플러그인 결과 줄(UI 상태, 최신 1줄). text는 textContent로만 표시. */
 export interface ResultLine {
   deliveryId: string;
   text: string;
-  source: 'api' | 'fallback';
+  source: ResultSource;
   at: number;
 }
 

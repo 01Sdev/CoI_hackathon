@@ -3,7 +3,7 @@
 
 import type { Manifest } from './manifest';
 import type { ViolationAttempt } from './messages';
-import type { SceneLabel } from './types';
+import type { ResultSource, SceneLabel } from './types';
 
 export interface FrameletInit {
   pluginId: string;
@@ -30,7 +30,7 @@ export interface FrameletSdk {
   /** 전달마다. SDK는 이 핸들러를 부르기 전에 ack(SHA-256)를 먼저 보낸다. */
   onDelivery(handler: (d: FrameletDelivery) => void | Promise<void>): void;
   /** 결과 한 줄(IF-05). deliveryId당 1번, 200자까지. */
-  result(deliveryId: string, text: string, source: 'api' | 'fallback'): void;
+  result(deliveryId: string, text: string, source: ResultSource): void;
   /** 자기 보고(IF-06). 같은 attempt·target은 1번만. */
   reportViolation(attempt: ViolationAttempt, target: string): void;
 }
