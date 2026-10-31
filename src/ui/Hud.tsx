@@ -36,7 +36,7 @@ export function Hud({ variant, onOpenConfirm }: { variant: HudVariant; onOpenCon
       <TargetFrame size={size} tagged={glass} />
       <SceneCapsule readout={glass} />
       {!glass && <HudInputLabel />}
-      {glass && showToast && delivery.last && <DeliveryToast key={delivery.count} d={delivery.last} />}
+      {glass && showToast && delivery.last && <DeliveryToast key={`toast-${delivery.count}`} d={delivery.last} />}
       {!glass && showDelivered && (
         <span className="fm-hud__delivered fm-label" role="status">
           전달됨
@@ -51,7 +51,7 @@ export function Hud({ variant, onOpenConfirm }: { variant: HudVariant; onOpenCon
           </span>
         )}
       </div>
-      {delivery.count > 0 && <div key={delivery.count} className="fm-hud__flash fm-flash" aria-hidden="true" />}
+      {delivery.count > 0 && <div key={`flash-${delivery.count}`} className="fm-hud__flash fm-flash" aria-hidden="true" />}
     </div>
   );
 }
