@@ -80,12 +80,12 @@ flowchart LR
 | `Session.input` | A (`selectInput` 처리) | 액션 호출 |
 | `Session.compareMode` · `Session.paused` | C(발표자 화면에서만) | 쓰기. A는 포착마다 읽는다. F19는 비활성 안내라 상태가 없다 |
 | `Plugin.manifest` | A (`applyManifest(pluginId, json)` → `validateManifest` 통과 시만, 실패 시 기존 값 유지·오류 반환) | 액션 호출 |
-| `Plugin.status` (`loading/ready/stopped/terminated`) · `Plugin.runtimeId` · 전달 게이트(`Plugin.gateOpen`) | B. `runtimeId`는 iframe을 새로 만들 때마다 바뀐다. `stopped`는 전환 실패로 멈춘 상태이며 사용자가 다시 켜야 풀린다 | 읽기. 다시 켜기는 액션 `setPluginEnabled` |
+| `Plugin.status` (`loading/ready/stopped/terminated`) · `Plugin.runtimeId` · `Plugin.runtimePolicy` · 전달 게이트(`Plugin.gateOpen`) | B(`setPluginRuntime`). `runtimeId`는 iframe을 새로 만들 때마다 바뀐다. `stopped`는 전환 실패, `terminated`는 꺼짐이며 둘 다 `enabled = false`가 되어 사용자가 다시 켜야 풀린다. 전환 중에는 `loading`. 전환을 일으키는 C 액션은 같은 set에서 게이트를 닫는다(`docs/designs/core-store.md` §2.1) | 읽기. 다시 켜기는 액션 `setPluginEnabled` |
 | SceneDecision · Delivery · Detection | A (`ackSha256`·`ackStatus`·`sendStatus`의 `dispatched`/`failed` 전환만 B) | 읽기 |
-| Counter(최근 10초·60초 숫자 창, 세션 누적) | A. Delivery 행에서 다시 세지 않고, 전달·보류가 일어날 때 숫자로 따로 쌓는다. 이미지는 없다 | 읽기 |
-| LogEntry | A(`deliver/hold/skip`), B(`violation`). 화면 표시용 최근 100건, 같은 사유 `skip`은 10초에 1번. 밀려나도 Counter는 줄지 않는다 | 읽기. 밀려난 썸네일 해제는 C |
+| Counter(최근 10초·60초 숫자 창, 세션 누적) | 스토어 액션이 쌓는다: `markDelivery(dispatched)`(B가 부름), `addLog(hold)`·`recordRuns`(A가 부름), `setResult(source api)`(B). Delivery 행에서 다시 세지 않는다. 이미지는 없다 | 읽기 |
+| LogEntry | A(`deliver/hold/skip`), B(`violation`). 화면 표시용 최근 100건, 같은 플러그인·같은 사유 `skip`은 10초에 1번. 밀려나도 Counter는 줄지 않는다 | 읽기. 밀려난 썸네일 해제는 스토어가 한다 |
 | 결과 줄(UI 상태) | B | 읽기 |
-| 플러그인 목록·코드 (`PLUGINS`: calorie, tamper, hello) | B가 `plugins/index.ts`에서 export, A가 시작 시 Plugin 행 생성 | 읽기(편집기·변조 토글). 켜기/끄기는 액션 `setPluginEnabled` |
+| 플러그인 목록(calorie, tamper, hello)과 시작 매니페스트 | `core/plugins.ts`의 `PLUGIN_SEEDS`. 스토어가 만들어질 때 Plugin 행을 채운다. Worker 코드는 B가 `plugins/`에 두고 다른 트랙은 import하지 않는다 | 읽기(편집기·변조 토글). 켜기/끄기는 액션 `setPluginEnabled` |
 
 ## 3. 인터페이스 계약
 
@@ -274,10 +274,10 @@ sequenceDiagram
 | --- | --- |
 | 보류 (2d) | `vision` 분기 2d → 픽셀 즉시 해제 → `broker`가 LogEntry(kind `hold`, branch `2d`)만 기록. `sendDelivery` 호출 없음, Delivery 없음 → C는 무음으로 하단 "보류" |
 | 선언하지 않은 장면 | 확정된 장면이 `scenes`에 없으면 포착하지 않고 LogEntry `skip`(reason "선언하지 않은 장면")만 남긴다. 같은 사유는 10초에 1번(결정판 N5) |
-| 전달 일시 정지 (F20) | 발표자 화면의 버튼이 `Session.paused = true`로 바꾸면 B가 모든 플러그인의 전달 게이트를 닫는다. iframe은 다시 만들지 않는다. 다시 누르면 게이트를 연다. 일시 정지 중 포착은 하지 않는다 |
+| 전달 일시 정지 (F20) | 발표자 화면의 버튼이 `Session.paused = true`로 바꾼다. 게이트와 iframe은 그대로 두고, 보낼 수 있는지는 `selectCanSend`(`ready` ∧ 게이트 열림 ∧ 일시 정지 아님)가 판단한다. 일시 정지 중 포착은 하지 않는다 |
 | 새 세션 시작 (F20) | 전환 공통 절차를 모든 플러그인에 적용하고, 카운터를 0으로 되돌리고, `compareMode = false`로 시작한다 |
 | 대상 재검출 실패 | 포착한 프레임에서 대상(바나나)을 다시 찾지 못하면 `hold`(branch 없음, reason "대상 재검출 실패")로 끝내고 쿨다운을 시작한다. 2d와 같은 취급이다 |
-| **전환 공통 절차** | 매니페스트 적용, 비교 모드 켜기·끄기, 입력 전환, 새 세션 시작은 모두 같은 순서를 따른다. ① 전달 게이트를 닫는다. ② 진행 중인 포착·인코딩·해시를 버린다(시작 때의 `runtimeId`와 다르면 `sendDelivery`가 거부). ③ 옛 iframe·Worker를 종료한다. ④ 새 정책으로 iframe을 만든다(`runtimeId` 새로). ⑤ 새 `ready`가 오면 게이트를 연다. 새 `ready`가 3초 [제안] 안에 오지 않으면 그 플러그인은 `stopped`로 멈추고, **옛 권한으로 되돌아가지 않는다.** 사용자가 다시 켜야 풀린다. 이미 보낸 데이터를 회수하지는 못한다 |
+| **전환 공통 절차** | 매니페스트 적용, 비교 모드 켜기·끄기, 플러그인 켜기, 새 세션 시작은 모두 같은 순서를 따른다(입력 전환은 iframe을 다시 만들지 않고 A가 진행 중 포착만 버린다). B는 플러그인마다 `selectDesiredRuntime` 하나를 구독하고 최신 값만 처리한다. 스토어의 `prepareDelivery`는 `runtimeId`·`manifestVersion`이 지금 iframe과 다르거나, `raw`가 통신이 막힌 비교 모드 칼로리 iframe이 아니면 거부한다(`docs/designs/core-store.md` §2.2·§2.3). ① 전달 게이트를 닫는다. ② 진행 중인 포착·인코딩·해시를 버린다(시작 때의 `runtimeId`와 다르면 `sendDelivery`가 거부). ③ 옛 iframe·Worker를 종료한다. ④ 새 정책으로 iframe을 만든다(`runtimeId` 새로). ⑤ 새 `ready`가 오면 게이트를 연다. 새 `ready`가 3초 [제안] 안에 오지 않으면 그 플러그인은 `stopped`로 멈추고, **옛 권한으로 되돌아가지 않는다.** 사용자가 다시 켜야 풀린다. 이미 보낸 데이터를 회수하지는 못한다 |
 | 매니페스트 변경 (F11·F14) | C `applyManifest(pluginId, json)` → A `validateManifest(json, pluginId)` → 잘못된 JSON·범위 위반이면 기존 값을 유지하고 iframe은 그대로 둔다. 통과하면 `version+1` 후 전환 공통 절차. 같은 플러그인 적용은 하나씩 처리한다 |
 | 비교 모드 켜기·끄기 (F17) | [팀원 D1] 스위치는 데스크톱 모드 발표자 화면에만 두고, 플러그인 메시지로 켜는 경로는 없다. `Session.compareMode`는 새로고침하면 항상 `false`로 시작한다. 켜면 전환 공통 절차로 칼로리 iframe을 `connect-src 'none'`, `apiBase: null`로 다시 만들고, 새 `ready` 뒤에만 A가 `raw`(칼로리에만, 축소 여부 미정)를 보낸다. 플러그인은 원본을 받지만 서버로 보내지 않으므로 결과 줄은 고정표(`source: 'fallback'`)다. 입력은 팀원만 찍힌 녹화 영상을 쓴다. 끌 때도 전환 공통 절차로 원래 `network`의 iframe으로 돌아간다. "보호 중" 표시는 끄는 즉시 바뀌지만, 이미 보낸 `raw` 전달은 지우지 않으므로 M·`outwardApps`는 최근 10초 창이 지나면서 0이 된다. `raw` 썸네일은 끌 때 해제하고 숫자 기록은 남긴다 |
 
