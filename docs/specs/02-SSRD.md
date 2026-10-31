@@ -178,7 +178,7 @@ type OutwardMessage = { type: 'outward'; apps: number; compareMode: boolean; at:
 | 항목 | 계약 |
 | --- | --- |
 | 요청 | `POST {apiBase}/api/calorie`, `Content-Type: image/jpeg`, 본문 = `delivery.blob` **그대로**(base64·multipart·재인코딩 금지 → `Delivery.bytes` = 네트워크 탭 요청 본문 크기, F6), 선택 헤더 `x-label: <objectLabel>`(COCO 영문 물체 라벨. 장면 분류 `food`를 넣지 않는다) |
-| 응답 200 | 본문 한 줄 `<음식> 약 <숫자>kcal`(예: `피자 약 285kcal`) 또는 `음식 아님`. `Content-Type: text/plain; charset=utf-8` [제안] |
+| 응답 200 | 본문 한 줄 `<음식> 약 <숫자>kcal`(예: `피자 약 285kcal`) 또는 `음식 아님`. `Content-Type: text/plain; charset=utf-8`(트랙 B 결정, `api/calorie.ts`). 모든 응답에 `Cache-Control: no-store` |
 | 받은 본문 확인 (P1) | 서버가 실제로 읽은 요청 본문의 바이트 수와 SHA-256(소문자 hex, ERD `Delivery.sha256`과 같은 표기)을 응답 헤더 `X-Famelet-Body-Bytes`, `X-Famelet-Body-SHA256`으로 돌려준다. 본문을 끝까지 읽은 응답(200·415·502)에만 붙인다. 이미지는 저장하지 않는다. 데모 5단계에서 "서버가 받은 바이트 = 로그 바이트"를 보여 주는 근거로 쓴다. 네트워크 탭의 `Content-Length`는 HTTP/2에서 생략될 수 있어 보조 값으로만 쓴다. 이 대조는 브라우저→`/api/calorie` 구간까지이며, 서버가 AI 공급자로 보내는 요청까지 같다는 뜻은 아니다 |
 | 형식 | Vercel 함수 `api/calorie.ts`, Web 형식 `export async function POST(req: Request)`와 `export function OPTIONS()`. 본문은 `await req.arrayBuffer()`로 그대로 읽는다(받은 바이트를 정확히 세기 위해) |
 | 판정 순서 | ① OPTIONS → 204. POST·OPTIONS가 아닌 메서드 → 405. ② 인스턴스 전역 고정 창으로 60초에 60건을 넘으면 429(서버 자체 제한에서만 429를 낸다). ③ `Content-Length`가 614,400B(600KiB)를 넘으면 읽기 전에 413. 읽은 바이트가 넘어도 413. ④ `Content-Type`이 `image/jpeg`가 아니거나, 0바이트이거나, 첫 3바이트가 `FF D8 FF`가 아니면 415. ⑤ 키가 없거나, 모델 호출이 실패(Anthropic의 400·401·429·5xx 포함)하거나, 시간 제한을 넘거나, 응답 처리가 실패하면 502. ⑥ 그 밖에는 200 |
