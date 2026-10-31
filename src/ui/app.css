@@ -777,7 +777,7 @@ button.fm-logcard:focus-visible,
 .fm-seg__item {
   border: 0;
   background: none;
-  padding: 9px 16px;
+  padding: 9px 12px;
   border-radius: var(--fm-r-capsule);
   font-size: 14px;
   font-weight: 600;
@@ -907,6 +907,207 @@ button.fm-logcard:focus-visible,
 }
 .fm-hudpick__count {
   color: var(--fm-sub);
+}
+
+/* ── 매니페스트 편집기(F11) ── */
+.fm-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.fm-manifest,
+.fm-editor,
+.fm-throughput {
+  display: grid;
+  gap: 12px;
+}
+.fm-plugins {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.fm-plugin {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 8px;
+  border-radius: var(--fm-r-card);
+}
+.fm-plugin[data-picked='true'] {
+  border-color: color-mix(in srgb, var(--fm-text) 55%, transparent);
+}
+.fm-plugin[data-tone='blocked'] {
+  border-color: color-mix(in srgb, var(--fm-blocked) 60%, var(--fm-glass-line));
+}
+.fm-plugin__pick {
+  flex: 1;
+  min-inline-size: 0;
+  display: grid;
+  gap: 3px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  text-align: start;
+  cursor: pointer;
+}
+.fm-plugin__pick > .fm-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fm-plugin__pick > .fm-readout {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fm-plugin__pick:focus-visible {
+  outline: 2px solid var(--fm-lens);
+  outline-offset: 2px;
+}
+.fm-tag--blocked {
+  color: var(--fm-text);
+  border-color: color-mix(in srgb, var(--fm-blocked) 70%, transparent);
+}
+.fm-switch {
+  position: relative;
+  display: inline-block;
+  inline-size: 46px;
+  block-size: 28px;
+  flex: none;
+  cursor: pointer;
+}
+.fm-switch > input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.fm-switch > span[aria-hidden] {
+  position: absolute;
+  inset: 0;
+  border-radius: 99px;
+  background: var(--fm-hairline);
+  box-shadow: inset 0 0 0 1px var(--fm-glass-line);
+  transition: background var(--fm-dur-state) var(--fm-ease);
+  pointer-events: none;
+}
+.fm-switch > span[aria-hidden]::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 3px;
+  inset-inline-start: 3px;
+  inline-size: 22px;
+  block-size: 22px;
+  border-radius: 50%;
+  background: var(--fm-text);
+  transition: inset-inline-start var(--fm-dur-state) var(--fm-ease);
+}
+.fm-switch > input:checked + span[aria-hidden] {
+  background: var(--fm-text);
+}
+.fm-switch > input:checked + span[aria-hidden]::after {
+  inset-inline-start: 21px;
+  background: var(--fm-on-text);
+}
+.fm-switch > input:focus-visible + span[aria-hidden] {
+  outline: 2px solid var(--fm-lens);
+  outline-offset: 2px;
+}
+.fm-capsule.fm-capsule--sm {
+  min-block-size: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.fm-editor__text {
+  inline-size: 100%;
+  min-block-size: 220px;
+  resize: vertical;
+  padding: 14px;
+  border-radius: 14px;
+  font: 13px/1.7 var(--fm-font-mono);
+  color: var(--fm-text);
+}
+.fm-editor__text[aria-invalid='true'] {
+  border-color: color-mix(in srgb, var(--fm-blocked) 70%, transparent);
+}
+.fm-editor__text:focus-visible {
+  outline: 2px solid var(--fm-lens);
+  outline-offset: 2px;
+}
+.fm-editor__msg {
+  display: grid;
+  gap: 4px;
+}
+.fm-editor__bad {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fm-editor__errors {
+  margin: 0;
+  padding-inline-start: 18px;
+}
+.fm-editor__actions {
+  display: flex;
+  gap: 8px;
+}
+.fm-editor__actions .fm-btn[data-invalid='true'] {
+  opacity: 0.55;
+}
+.fm-editor__actions .fm-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.fm-stopped {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: var(--fm-r-card);
+}
+
+/* ── 처리량(F16) ── */
+.fm-grid3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+}
+.fm-metric {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 14px 16px;
+  border-radius: var(--fm-r-card);
+}
+.fm-metric__v {
+  font-size: 30px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.fm-metric__v--sm {
+  font-size: 20px;
+  font-weight: 500;
+}
+.fm-metric__v--tone {
+  color: var(--fm-tone);
+}
+.fm-metric[data-off='true'] {
+  opacity: 0.6;
+}
+.fm-spark {
+  display: block;
+  inline-size: 100%;
+  block-size: 48px;
 }
 
 /* ── 글래스 HUD(/hud) ── */

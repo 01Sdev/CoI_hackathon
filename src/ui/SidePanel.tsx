@@ -4,18 +4,24 @@ import { useState, type ReactNode } from 'react';
 import { ConfirmScreen } from '../proof/ConfirmScreen';
 import { DeliveryDetail } from '../proof/DeliveryDetail';
 import { LogHeader, LogList } from '../proof/ProofLog';
+import { ManifestPanel } from './ManifestEditor';
+import { ThroughputPanel } from './Throughput';
 
-export type SideTab = 'log' | 'confirm';
+export type SideTab = 'log' | 'confirm' | 'manifest' | 'throughput';
 
 const TABS: Array<[SideTab, string]> = [
   ['log', '로그'],
   ['confirm', '확인 화면'],
+  ['manifest', '매니페스트'],
+  ['throughput', '처리량'],
 ];
 
 export function SidePanel({ tab, onTab }: { tab: SideTab; onTab(t: SideTab): void }) {
   const [detail, setDetail] = useState<string | null>(null);
   let body: ReactNode;
   if (tab === 'confirm') body = <ConfirmScreen />;
+  else if (tab === 'manifest') body = <ManifestPanel />;
+  else if (tab === 'throughput') body = <ThroughputPanel />;
   else if (detail) body = <DeliveryDetail entryId={detail} onBack={() => setDetail(null)} />;
   else
     body = (
