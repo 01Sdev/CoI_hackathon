@@ -17,7 +17,7 @@ import {
   THROUGHPUT_WINDOW_MS,
   USAGE_SAMPLES_PER_PLUGIN,
 } from './constants';
-import { clampFrame } from './frame';
+import { clampFrame, containsBox } from './frame';
 import { resolveAllowedOrigins, validateManifest, type ManifestResult } from './manifest';
 import { PLUGIN_SEEDS, type PluginSeed } from './plugins';
 import { selectCanSend, selectDesiredRuntime, type DesiredRuntime } from './selectors';
@@ -81,7 +81,7 @@ export interface LensState {
   setCompareMode(on: boolean): void;
   setPaused(on: boolean): void;
   setViewMode(mode: ViewMode): void;
-  /** F24 프레임(0~1). clampFrame으로 범위·최소 크기를 맞춘다. 숫자가 아니면 무시한다. */
+  /** F24 프레임(0~1). clampFrame으로 0~1 밖을 잘라 낸다. 잘라 낸 뒤 한 변이 최소값보다 작거나 숫자가 아니면 무시한다. 끌기는 frame.ts dragCorner. */
   setCaptureFrame(frame: Box): void;
   /** 새 session.id. 로그·전달·판정·결과·Counter를 비우고 compareMode·paused를 false로, 모든 게이트를 닫는다. 플러그인 행·매니페스트·enabled는 유지. */
   startNewSession(): void;
@@ -100,7 +100,8 @@ export interface LensState {
    * Delivery(prepared, pending)와 LogEntry(deliver)를 함께 쓰고 둘 다 돌려준다.
    * 포착 중에 전환이 끼어들었으면 null(쓰지 않음, 호출자는 그 포착을 버린다):
    * 보낼 수 없는 상태(selectCanSend), runtimeId·manifestVersion이 지금 iframe과 다름,
-   * raw인데 비교 모드가 아니거나 칼로리가 아니거나 지금 iframe이 connect 'none'이 아님(G1 마지막 방어).
+   * raw인데 비교 모드가 아니거나 칼로리가 아니거나 지금 iframe이 connect 'none'이 아님(G1 마지막 방어),
+   * frameRect가 있는데 cropRect가 그 안에 없음, raw인데 frameRect가 없거나 cropRect와 다름(F24, 비교 모드도 프레임 안만).
    */
   prepareDelivery(
     delivery: NewDelivery,
@@ -418,9 +419,15 @@ export function createLensStore(opts: LensStoreOptions = {}) {
           if (!p || !selectCanSend(s, d.pluginId)) return null;
           if (p.runtimeId === null || d.runtimeId !== p.runtimeId) return null;
           if (!p.runtimePolicy || d.manifestVersion !== p.runtimePolicy.manifestVersion) return null;
+          // F24: 프레임 밖 픽셀은 어떤 플러그인에도 보내지 않는다. 자른 조각이 프레임을 벗어나면 받지 않는다.
+          if (d.frameRect && !containsBox(d.frameRect, d.cropRect)) return null;
           if (d.branch === 'raw') {
-            // 원본 전체 프레임은 비교 모드의 칼로리, 통신이 막힌 iframe에만 간다(G1의 유일한 예외).
+            // 가리지 않은 원본은 비교 모드의 칼로리, 통신이 막힌 iframe에만 간다(G1의 유일한 예외).
             if (!s.session.compareMode || p.kind !== 'calorie' || p.runtimePolicy.connect !== 'none') return null;
+            // 비교 모드도 프레임 안만 보낸다(사용자 결정 2026-10-31). raw 조각은 프레임 전체와 같아야 한다.
+            const f = d.frameRect;
+            const c = d.cropRect;
+            if (!f || f.x !== c.x || f.y !== c.y || f.w !== c.w || f.h !== c.h) return null;
           }
           const at = clock();
           const delivery: Delivery = {
