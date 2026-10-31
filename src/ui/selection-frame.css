@@ -1,12 +1,13 @@
-/* 승인된 시안: 흰 배경 없는 사람 아이콘·숫자, 숫자 흰 외곽선 1.5px. */
+/* 승인된 시안: 흰 배경 없는 사람 아이콘·숫자. 크기는 사용자 결정(2026-11-01, 캔버스 P1 36판, 틀 330×182 기준):
+   아이콘 16px(외곽선 3.5, viewBox 32라 작아져도 흰 테두리가 보임), 숫자 18px/24px(외곽선 1px), 사이 5px, 틀 안쪽 오른쪽·위 8px. */
 .fm-selection { position: absolute; inset: 0; pointer-events: none; }
 .fm-selection, .fm-selection * { box-sizing: border-box; }
 .fm-selection[data-mode='move'], .fm-selection[data-mode='resize'] { user-select: none; }
 .fm-selection__frame { position: absolute; border: 1px solid rgb(255 255 255 / .9); border-radius: 0; background: rgb(116 150 182 / .08); box-shadow: 0 0 1px #0006; pointer-events: none; }
 .fm-selection__frame:focus-visible { outline: none; }
-.fm-selection__count { position: absolute; right: 8px; top: 8px; display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0; background: transparent; color: #111; pointer-events: none; }
-.fm-selection__person { display: block; width: 24px; height: 24px; flex: none; overflow: visible; stroke: rgb(255 255 255 / .96); stroke-width: 3; stroke-linejoin: round; paint-order: stroke fill; filter: drop-shadow(0 1px 1px #0006); }
-.fm-selection__count output { display: block; color: #111; font-family: var(--fm-font-sans, 'Pretendard Variable', Pretendard, sans-serif); font-weight: 600; font-size: 30px; line-height: 40px; font-variant-numeric: tabular-nums; transform: translateY(-2px); -webkit-text-stroke: 1.5px rgb(255 255 255 / .96); paint-order: stroke fill; text-shadow: 0 1px 2px #0006; }
+.fm-selection__count { position: absolute; right: 8px; top: 8px; display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: #111; pointer-events: none; }
+.fm-selection__person { display: block; width: 16px; height: 16px; flex: none; overflow: visible; stroke: rgb(255 255 255 / .96); stroke-width: 3.5; stroke-linejoin: round; paint-order: stroke fill; filter: drop-shadow(0 1px 1px #0006); }
+.fm-selection__count output { display: block; color: #111; font-family: var(--fm-font-sans, 'Pretendard Variable', Pretendard, sans-serif); font-weight: 600; font-size: 18px; line-height: 24px; font-variant-numeric: tabular-nums; transform: translateY(-1px); -webkit-text-stroke: 1px rgb(255 255 255 / .96); paint-order: stroke fill; text-shadow: 0 1px 1px #0006; }
 .fm-selection__edge { position: absolute; z-index: 1; padding: 0; border: 0; border-radius: 0; background: transparent; pointer-events: auto; cursor: grab; touch-action: none; }
 .fm-selection__edge[data-edge='n'], .fm-selection__edge[data-edge='s'] { left: 0; right: 0; height: 12px; }
 .fm-selection__edge[data-edge='n'] { top: -6px; }

@@ -50,7 +50,7 @@ framelet은 1인칭 카메라와 그 위에서 도는 앱 사이에 들어가는
 | 유리 패널·캡슐 | `fm-glass`, `fm-glass--panel`, `fm-glass--hint`, `fm-capsule` | `fm-glass-*`, `fm-line`, `fm-r-capsule` |
 | 상태 점 | `fm-dot` (`data-tone` safe·exposed·blocked·hold) | 의미색, 22% 후광 |
 | 흰 틀 | `src/ui/CaptureFrame.tsx` | `fm-r-frame`, 흰 2px 테두리와 꼭짓점 손잡이. 조절은 위쪽 줄 "전송 범위" 버튼에서 |
-| 사람 아이콘·숫자 | `src/ui/Hud.tsx` `PersonCount` | 선 SVG 아이콘 14px + 숫자 16px(`/hud` 48px), `fm-text` / `fm-exposed` |
+| 사람 아이콘·숫자 | `src/ui/SelectionFrame.tsx` `.fm-selection__count`(`selection-frame.css`) | 채운 SVG 아이콘 16px(흰 외곽선 3.5) + 숫자 18px/줄 24px(흰 외곽선 1px, 그림자 0 1px 1px), 사이 5px, 흰 틀 안쪽 오른쪽·위 8px, 검정 `#111` 채움 |
 | 플러그인 화면 | `src/ui/PluginViews.tsx` | 앱 종류마다 화면 하나: 칼로리 = `FoodStatusPanel`(금빛, `src/ui/food-status-panel.css`), 장면 기록 = 작은 글자 카드, 변조 = 없음 |
 | 규약 보기 | `src/proof/ProtocolView.tsx` | 보장 카드 `fm-r-card`, 요청/허용 표 |
 
