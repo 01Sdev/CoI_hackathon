@@ -1,53 +1,25 @@
-import { createReadStream, readFileSync } from 'node:fs';
 import type { ServerResponse } from 'node:http';
-import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv, type Connect, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
-/** 칼로리 플러그인의 기기 안 모델이 쓰는 onnxruntime-web 파일. 고정한 패키지 판에서 그대로 /ort/로 내보낸다(CDN 아님). */
-const ORT_FILES = [
-  'ort.wasm.min.js',
-  'ort-wasm-simd-threaded.mjs',
-  'ort-wasm-simd-threaded.wasm',
-  'ort.webgpu.min.js',
-  'ort-wasm-simd-threaded.asyncify.mjs',
-  'ort-wasm-simd-threaded.asyncify.wasm',
-];
-const ORT_DIST = fileURLToPath(new URL('./node_modules/onnxruntime-web/dist/', import.meta.url));
-
 /**
- * 플러그인 Worker(origin null)가 받는 정적 파일에 CORS를 붙이고, /ort/를 연다.
+ * 플러그인 Worker(origin null)가 받는 정적 파일(public/models/, public/ort/)에 CORS를 붙인다.
  * 배포에서는 같은 헤더를 vercel.json이 붙인다. /dev/fixtures/는 개발 서버에만 있다(자리표시 모델).
+ * Vite의 CORS·정적 미들웨어보다 먼저 둔다(devCalorieApi와 같은 이유).
  */
-function pluginStaticAssets(): Plugin {
-  const CORS_PREFIXES = ['/ort/', '/models/', '/dev/fixtures/'];
-  const cors: Connect.NextHandleFunction = (req, res, next) => {
-    if (CORS_PREFIXES.some((p) => (req.url ?? '').startsWith(p))) res.setHeader('Access-Control-Allow-Origin', '*');
+function pluginStaticCors(): Plugin {
+  const PREFIXES = ['/ort/', '/models/', '/dev/fixtures/'];
+  const handle: Connect.NextHandleFunction = (req, res, next) => {
+    if (PREFIXES.some((p) => (req.url ?? '').startsWith(p))) res.setHeader('Access-Control-Allow-Origin', '*');
     next();
   };
   return {
-    name: 'framelet-plugin-static-assets',
+    name: 'framelet-plugin-static-cors',
     configureServer(server) {
-      const handle: Connect.NextHandleFunction = (req, res, next) => {
-        const name = (req.url ?? '').split('?')[0]!.slice('/ort/'.length);
-        if (!(req.url ?? '').startsWith('/ort/') || !ORT_FILES.includes(name)) return cors(req, res, next);
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', name.endsWith('.wasm') ? 'application/wasm' : 'text/javascript');
-        createReadStream(ORT_DIST + name)
-          .on('error', () => {
-            res.statusCode = 404;
-            res.end();
-          })
-          .pipe(res);
-      };
-      // Vite의 CORS·정적 미들웨어보다 먼저(devCalorieApi와 같은 이유).
       server.middlewares.stack.unshift({ route: '', handle });
     },
     configurePreviewServer(server) {
-      server.middlewares.use(cors);
-    },
-    generateBundle() {
-      for (const name of ORT_FILES) this.emitFile({ type: 'asset', fileName: `ort/${name}`, source: readFileSync(ORT_DIST + name) });
+      server.middlewares.stack.unshift({ route: '', handle });
     },
   };
 }
@@ -98,7 +70,7 @@ export default defineConfig(({ mode }) => {
   // 서버 쪽에서만 쓰는 값. 이미 셸에 있으면 그대로 둔다.
   for (const [k, v] of Object.entries(loadEnv(mode, process.cwd(), ['ANTHROPIC_', 'CALORIE_']))) process.env[k] ??= v;
   return {
-    plugins: [react(), devCalorieApi(), pluginStaticAssets()],
+    plugins: [react(), devCalorieApi(), pluginStaticCors()],
     server: { host: true },
   };
 });

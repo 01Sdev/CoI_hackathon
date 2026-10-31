@@ -126,7 +126,7 @@ calorie-lens(MIT, DINOv2-B 기반) ONNX를 칼로리 플러그인 격리 안에�
 | 전달 | 준비 전·실행 중이면 바로 API. 아니면 Blob을 하위 Worker로 보내 `createImageBitmap` → `OffscreenCanvas` 자르기·줄이기(`imageSmoothingQuality: high`) → NCHW float32 → 실행. 핸들러에 들어온 때부터 2.5초(`ON_DEVICE_TIMEOUT_MS`)를 넘으면 API로 가고, 늦은 답은 실행 중 표시만 푼다. 연달아 2번 넘거나 한 실행이 5초를 넘게 안 끝나면 그 iframe에서 끈다. 값이 5~5000 밖이거나 유한하지 않으면 API(단위·정규화가 어긋난 모델이 그럴듯한 틀린 숫자를 내지 않게), 아니면 반올림해 10~3000. 최악의 결과 시간은 2.5초 + API 3초 |
 | 결과 | `${ko} 약 ${kcal}kcal`(이름은 0단계 라벨의 고정표 이름, 표 밖은 `음식`), `source: 'on-device'`. `apiSends`는 `source: 'api'` 결과 수 그대로라 기기 안 결과는 세지 않는다(요청이 없다) |
 | CSP | 호스트가 칼로리 iframe에만 `buildCsp(nonce, connectList, hostOrigin)`을 부른다. `connectList`에 그 origin이 있을 때만 `script-src`에 `'wasm-unsafe-eval' <origin>/ort/`가 붙는다. 경로까지만 열어 호스트의 다른 JS는 실행할 수 없다. `/ort/`에는 고정한 패키지 파일만 둔다 |
-| 파일 | onnxruntime-web 1.30.0(정확히 고정)의 `dist`에서 6개를 `vite.config.ts`가 `/ort/`로 내보낸다(개발 서버는 `node_modules`에서 바로, 빌드는 `dist/ort/`). 레포에 바이너리를 다시 넣지 않아 판이 패키지와 어긋나지 않는다. CORS는 `vercel.json`과 개발 서버가 `/models/*`·`/ort/*`(개발 서버는 `/dev/fixtures/*`도)에 붙인다 |
+| 파일 | onnxruntime-web 1.30.0(정확히 고정)의 `dist`에서 6개를 postinstall `scripts/copy-ort.mjs`가 `public/ort/`로 복사한다(MediaPipe `copy-wasm.mjs`와 같은 방식, `.gitignore`). 레포에 바이너리를 넣지 않아 판이 패키지와 어긋나지 않는다. CORS는 `vercel.json`과 개발 서버(`vite.config.ts`)가 `/models/*`·`/ort/*`(개발 서버는 `/dev/fixtures/*`도)에 붙인다 |
 | 자리표시 | `dev/fixtures/calorie-lens-placeholder/`(`scripts/make-placeholder-model.ts`가 protobuf를 직접 쓴다. kcal = 300 + 100·평균, 조각 2개). 제품 경로 `/models/calorie-lens/`에는 넣지 않아, 실제 모델이 오기 전 배포는 지금처럼 API로 간다 |
 
 ## 3. 고르지 않은 방법
@@ -142,7 +142,7 @@ calorie-lens(MIT, DINOv2-B 기반) ONNX를 칼로리 플러그인 격리 안에�
 | `/dev`를 `App.tsx` 라우트로 | C 소유 파일이고 프로덕션 번들에 시험 코드가 섞인다 |
 | 기기 안 모델을 칼로리 Worker 스레드에서 바로 | 2.10 "어디서". ort 프록시 모드(`env.wasm.proxy`)도 하위 Worker를 쓰지만 WebGPU와 함께 쓸 수 없고 시간 초과를 우리가 다루기 어렵다 |
 | ort ESM 번들(`*.bundle.min.mjs`)을 Worker 소스에 넣기 | glue까지 들어 있어 `script-src`에 origin을 더하지 않아도 되지만, 모듈 Worker로 바꾸고 `export`를 고쳐 써야 한다. 고전 Worker + `importScripts`가 지금 부트스트랩을 그대로 쓴다 |
-| `public/ort/`에 wasm 복사본 커밋 | 41MB가 레포에 늘고 패키지 판과 어긋날 수 있다. 빌드가 고정한 패키지에서 내보낸다 |
+| `public/ort/`에 wasm 복사본 커밋 | 41MB가 레포에 늘고 패키지 판과 어긋날 수 있다. 설치할 때 고정한 패키지에서 복사한다 |
 | 자리표시 모델을 `public/models/calorie-lens/`에 | 실제 모델 전까지 배포가 의미 없는 숫자를 `on-device`로 낸다 |
 
 ## 4. 남은 위험

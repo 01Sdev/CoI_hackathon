@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "postinstall": "node scripts/copy-wasm.mjs",
+    "postinstall": "node scripts/copy-wasm.mjs && node scripts/copy-ort.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
     "check:core": "tsx scripts/check-core.ts",
     "check:plugins": "tsx scripts/check-plugins.ts",
