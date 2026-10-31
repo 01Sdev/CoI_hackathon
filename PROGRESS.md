@@ -5,16 +5,16 @@
 ## 공통
 
 - [x] 명세와 에이전트 규칙(`docs/specs/`, `AGENTS.md`) — PR #1
-- [ ] 스캐폴드: Vite·TS strict·`src/core/` 타입·`validateManifest`·스토어 — PR #2
-- [ ] 배포 확인(V6). 배포 방식은 사용자 결정 대기
+- [x] 스캐폴드: Vite·TS strict·`src/core/` 타입·`validateManifest`·스토어 — PR #2(#21로 main)
+- [x] 배포 확인(V6, 2026-11-01): Vercel CLI 배포, https://framelet-demo.vercel.app . 절차는 허브 `outbox/deploy-checklist.md`
 - [ ] Supabase 쓰임 결정(조직만 있음, DB 없음). 결정 전에는 코드에 넣지 않음
 - [x] 플랫폼 이름 framelet 확정(2026-10-31, 2026-11-01 정정. 2026-10-31에 famelet으로 잘못 적었다). 코드 `APP_NAME`(PR #2), 명세 문서(PR #1)
 - [ ] 결정판 페이지·유저플로우 아티팩트의 이름(레포 밖, 아직 가칭)
 
 ## 관문
 
-- [ ] M0: hello 플러그인에 고정 JPEG `delivery` → `ackStatus: match`, 변조 시 `mismatch`, 응답 억제 시 `timeout`
-- [ ] 1차 통합(4~5h): 바나나 → Delivery 1건 → 칼로리 결과 → 로그 1줄 + 테두리 점멸
+- [x] M0(트랙 B, Chrome 156 `/dev/m0.html` 15/15 ×3, 2026-11-01): hello 플러그인에 고정 JPEG `delivery` → `ackStatus: match`, 변조 시 `mismatch`, 응답 억제 시 `timeout`
+- [x] 1차 통합(PR #24, 2026-11-01. 바나나 대신 피자 합성 영상으로 Delivery → 칼로리 결과 → 로그 줄 확인, 점멸은 따로 보지 않음): 바나나 → Delivery 1건 → 칼로리 결과 → 로그 1줄 + 테두리 점멸
 - [ ] 격리 재현: 배포 URL에서 iPhone Safari·Android Chrome으로 §3 표 6줄
 - [ ] 비교 모드·전환: 켜진 동안 외부 요청 0건, 끄면 10초 안에 M 0
 
@@ -27,7 +27,7 @@
 - [x] 중개기 `sendDelivery` 경로와 Counter 기록 — `track-a/capture`. B는 `connectPluginHost(sendDelivery)`로 붙는다(02-SSRD IF-02)
 - [x] F24 전송 범위 프레임의 자르기(P0): `track-a/frame-crop`. 포착은 프레임 안만, 프레임 밖이면 hold "프레임 밖"+쿨다운, raw도 프레임 안만
 - [ ] F23 Selfie 모양 가림(P1, 1차 통합 뒤 PR): `track-a/selfie-mask`에 구현. 모델 파일 커밋은 사용자 확인 대기. 실제 얼굴 영상으로 V2·V3 확인 필요
-- [ ] B 연결 확인: 실제 `plugins/host`의 `sendDelivery`로 M0·1차 통합(지금은 `/dev/` 목 호스트로만 확인)
+- [x] B 연결 확인(PR #24, 실제 호스트로 전달 확인): 실제 `plugins/host`의 `sendDelivery`로 M0·1차 통합(지금은 `/dev/` 목 호스트로만 확인)
 - [ ] V2·V3: 팀 얼굴 영상(`pizza-face-*.mp4`)으로 분기·손에 든 피자 실측. 사람 앞 피자는 겹침 50% 이상이라 옆얼굴이면 2d가 될 수 있음(설계 §4)
 
 ## 트랙 B 격리·플러그인 (`src/plugins/`, `api/`)
@@ -35,18 +35,18 @@
 - [x] `plugins/host`: srcdoc iframe·CSP nonce·blob Worker·메시지 검증 — 트랙 B PR(plugin-host)
 - [x] 전환 공통 절차(게이트·runtimeId·3초 ready) — 같은 PR
 - [x] SDK 런타임·hello 플러그인·`/dev/m0.html` M0 페이지 — 같은 PR
-- [ ] `main.tsx` 배선: `startPluginHost()`와 `connectPluginHost((_id, msg) => { sendDelivery(msg.deliveryId); })` — 허브가 1차 통합 PR에서(02-SSRD "트랙 연결 기준")
+- [x] `main.tsx` 배선(PR #24): `startPluginHost()`와 `connectPluginHost((_id, msg) => { sendDelivery(msg.deliveryId); })` — 허브가 1차 통합 PR에서(02-SSRD "트랙 연결 기준")
 - [ ] 발표 노트북 Chrome 첫 로드에서 칼로리 iframe이 3초 안에 ready인지(부하가 높을 때 headless Chrome에서 iframe 7개가 모두 stopped인 실행이 있었다)
 - [x] hello·칼로리·변조 플러그인 — 트랙 B PR(plugin-host, calorie-tamper)
 - [x] `/api/calorie`(Vercel 함수, 413/415/429/502, 받은 본문 헤더) — 트랙 B PR(api-calorie). 개발 서버에서도 같은 함수가 `/api/calorie`로 열린다
 - [ ] V5 실측(키가 있는 곳에서 `scripts/measure-calorie.ts`)
-- [ ] 배포(V6) 뒤 실제 Vercel에서 `/api/calorie` 웹 표준 함수(`export function POST`) 동작 확인
+- [x] (2026-11-01 POST·OPTIONS·오류 응답 확인) 배포(V6) 뒤 실제 Vercel에서 `/api/calorie` 웹 표준 함수(`export function POST`) 동작 확인
 
 ## 트랙 C UI (`src/ui/`, `src/proof/`, `src/App.tsx`)
 
 - [x] 화면 배치(phone/desktop/hud/outward)와 라우팅, 시작·로딩·실패 화면 — `track-c/screens`
 - [ ] A: `src/input/preview.ts`의 `mountPreview(container)`와 `setEngine` 호출(C가 기다리는 연결점, 없으면 HUD는 `liveObservation`으로 판정 중을 안다)
-- [ ] 배포: `/hud`·`/outward`를 `index.html`로 되돌리는 rewrite(V6, NFR-024)
+- [x] 배포: `/hud`·`/outward`를 `index.html`로 되돌리는 rewrite(PR #24 `vercel.json`, 배포에서 200 확인)(V6, NFR-024)
 - [x] HUD 다섯 요소·카운터 M·10초 호·차단 배지·전달 신호(점멸·소리·진동·알림)·보류 줄 — `track-c/hud`
 - [x] 증명 로그(휴대폰 시트·데스크톱 탭)·상세(해시)·확인 화면(외 k장)·`/hud` D-pad — `track-c/proof`
 - [x] 매니페스트 편집기(검증·적용·되돌리기·멈춤 다시 켜기·플러그인 켜기)·처리량 패널(F16·F19) — `track-c/manifest`
@@ -96,7 +96,7 @@
 
 | V | 볼 것 | 언제 | 누가 | 상태 |
 | --- | --- | --- | --- | --- |
-| V6 | Vercel 최소 배포(정적 + `/api/calorie` + `/hud`·`/outward` 경로 + 모델·WASM) | 배포 방식이 정해지는 즉시. V1·V9·V10·V11의 Android·배포 시험이 이것을 기다린다 | 사용자 결정 → B | 대기(배포 미정) |
+| V6 | Vercel 최소 배포(정적 + `/api/calorie` + `/hud`·`/outward` 경로 + 모델·WASM) | 배포 방식이 정해지는 즉시. V1·V9·V10·V11의 Android·배포 시험이 이것을 기다린다 | 사용자 결정 → B | 통과(2026-11-01, https://framelet-demo.vercel.app , 05 V6) |
 | V10 | M0: `dev/fixtures/m0-test.jpg`로 match·mismatch·timeout | 트랙 B 첫 PR(`plugins/host` + hello) | B | 통과(Chrome, 제품 SDK 통합 `/dev/m0.html` 15줄). iPhone·Android 제품 SDK 시험 남음 |
 | V9 | Android Chrome 격리 S1~S6 | 트랙 B 첫 PR 뒤, 배포 주소에서 | B | 대기 |
 | V1 | MediaPipe 속도·GPU→CPU 대체(Android) | 트랙 A 첫 PR(0단계) 뒤, 모델 파일이 정해지고 배포 주소가 생기면 | A | iPhone 통과(첫 추론 11~14초). 노트북 Chrome(M3 Pro, 제품 코드 `/dev/`): GPU, 0단계 5.0fps, 추론 평균 28ms·p95 36ms, 페이지 시작→첫 판정 803ms(로컬 서버, 캐시 있음). Android 대기(배포 주소 없음) |
