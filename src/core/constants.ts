@@ -21,6 +21,13 @@ export const RECENT_WINDOW_MS = 10_000;
 /** Counter.window60s 기간(처리량 비율). */
 export const THROUGHPUT_WINDOW_MS = 60_000;
 
+/** F24 전송 범위 프레임 기본값(소스 프레임 기준 0~1, 가운데 60%) [제안]. */
+export const CAPTURE_FRAME_DEFAULT = { x: 0.2, y: 0.2, w: 0.6, h: 0.6 } as const;
+/** F24 프레임 한 변의 최소값(0~1) [제안]. */
+export const CAPTURE_FRAME_MIN_SIDE = 0.1;
+/** F25 사용 기록에 남기는 플러그인별 대표 조각 수 [제안]. */
+export const USAGE_SAMPLES_PER_PLUGIN = 3;
+
 /** IF-04: 전달 뒤 2초 안에 ack가 없으면 timeout. */
 export const ACK_TIMEOUT_MS = 2_000;
 /** 전환 공통 절차 ⑤: 새 iframe의 ready를 기다리는 시간. 넘으면 stopped. */

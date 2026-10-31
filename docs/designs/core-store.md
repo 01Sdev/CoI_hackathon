@@ -27,7 +27,7 @@
 | `setPluginEnabled(id, on)` | `enabled`. 끄면 게이트도 닫는다 | B |
 | `setCompareMode(on)` | `compareMode`, **칼로리 게이트 닫기**. 끌 때 raw Delivery의 썸네일·Blob 해제 | B. A는 포착 때 읽는다 |
 | `setPaused(on)` | `paused`만. 게이트는 건드리지 않는다 | A·B 모두 `selectCanSend`로 판단 |
-| `startNewSession()` | 새 `session.id`, `compareMode`·`paused` false, **모든 게이트 닫기**, 로그·전달·판정·결과·Counter 비우기, 썸네일 revoke. 플러그인 행·매니페스트·`enabled`·`input`은 유지 | B |
+| `startNewSession()` | 새 `session.id`, `compareMode`·`paused` false, **모든 게이트 닫기**, 로그·전달·판정·결과·Counter(사용 기록 포함)·대표 조각 비우기, 썸네일 revoke(같은 URL은 한 번만). 플러그인 행·매니페스트·`enabled`·`input`·`captureFrame`은 유지 | B |
 | `tick()` | 10초·60초 창에서 지난 기록 제거(메모리 정리·화면 갱신) | C가 1초마다 |
 
 ### 2.2 B는 플러그인마다 선택자 하나만 구독한다
@@ -47,6 +47,8 @@
 - `delivery.runtimeId`(포착을 시작할 때 읽은 값) ≠ 지금 `plugin.runtimeId`
 - `delivery.manifestVersion` ≠ 지금 iframe의 `runtimePolicy.manifestVersion`
 - `branch === 'raw'`인데 비교 모드가 아니거나, 칼로리가 아니거나, 지금 iframe이 `connect: 'none'`이 아님
+- `frameRect`가 있는데 `cropRect`가 그 안에 없음(F24)
+- `branch === 'raw'`인데 `frameRect`가 없거나 `cropRect`와 다름(F24, 비교 모드도 프레임 안만)
 
 마지막 줄은 B의 구현 순서와 상관없이 원본 프레임이 통신 가능한 iframe으로 가지 않게 하는 G1의 마지막 방어다.
 
@@ -58,12 +60,12 @@
 | `setEngine(patch)` | A | 판정 엔진 상태(`idle`·`loading`·`ready`·`failed`, 받은 바이트, 실패 사유). C의 로딩·실패 화면이 읽는다. 새 세션에도 유지(2026-10-31 C 추가) |
 | `addLog(hold·skip·violation)` | A, B(violation) | 100건 상한. `skip`은 같은 플러그인·같은 사유 10초에 1번(버리면 null). `hold`는 `window60s.holds` +1 |
 | `prepareDelivery` | A(broker) | 2.3 검사 후 Delivery(`prepared`, `pending`)와 LogEntry(`deliver`)를 함께 쓴다 |
-| `markDelivery(id, dispatched·failed)` | B | `prepared`에서만 바뀐다. `dispatched`일 때만 Counter(`recent10s`, `perPlugin`, `window60s.deliveries`)에 쌓는다. 바뀐 뒤 스토어는 Blob 참조를 놓는다 |
+| `markDelivery(id, dispatched·failed)` | B | `prepared`에서만 바뀐다. `dispatched`일 때만 Counter(`usage`, `recent10s`, `perPlugin`, `window60s.deliveries`)에 쌓고, raw가 아니면 `usageSamples`에 넣는다(넘친 조각은 2.6 규칙으로 해제). 바뀐 뒤 스토어는 Blob 참조를 놓는다 |
 | `setAck(id, sha256 \| null)` | B | `dispatched`·`pending`일 때만. null = timeout(2초 타이머는 B). 소문자로 비교. 불일치면 violation("해시 불일치", host) |
 | `setPluginRuntime` | B | 2.2 |
 | `setResult` | B | 결과 줄. `source: 'api'`면 `apiSends` +1(플러그인 자기 보고 기준) |
 
-- 픽셀을 놓는 곳은 넷이다: 로그 밀어내기(Delivery 삭제와 썸네일 revoke), 비교 모드 끄기(raw), 새 세션(전체), `markDelivery`(Blob 참조).
+- 픽셀을 놓는 곳은 다섯이다: 로그 밀어내기(Delivery 삭제와 썸네일 revoke, 대표 조각이 쓰는 URL은 남김), 비교 모드 끄기(raw), 새 세션(전체), `markDelivery`(Blob 참조), 대표 조각 넘침(이미 밀려난 Delivery의 URL).
 - 파생값(M, 바깥 표시 N개, 처리량, "외 k장")은 `selectors.ts`가 계산한다. 시간 창 판정은 `now`로 직접 해서 `tick`이 늦어도 값이 틀리지 않는다. `now`는 `performance.now()` 기준이다.
 - `faceCheck`가 `error`인 Delivery가 `dispatched`되면 얼굴 1개로 센다. 보호 모드에서는 만들어지지 않는 행이지만, 들어왔을 때 덜 세는 쪽보다 안전하다. 리뷰는 throw를 제안했지만 시연 중 예외보다 이쪽을 골랐다.
 
@@ -80,6 +82,22 @@
 | 새 필드 | — | Session `inputRequest`, Plugin `enabled`·`runtimePolicy`, Delivery `runtimeId`·`scene`·`width`·`height`·`blob`, Counter `window60s` 이벤트 배열 |
 | skip 중복 키 | 같은 사유 | 같은 플러그인·같은 사유 |
 
+### 2.6 전송 범위 프레임(F24)과 사용 기록(F25) (2026-10-31 추가, 사용자 승인 명세 PR #18)
+
+| 무엇 | 어디 | 정한 것 |
+| --- | --- | --- |
+| 프레임 상태 | `session.captureFrame`(0\~1) | 기본 가운데 60% [제안]. 새 세션에도 유지하고 새로고침하면 기본값 |
+| 프레임 쓰기 | `setCaptureFrame(box)` (C) | `clampFrame`이 0\~1 밖을 **잘라 낸다**(밀어 넣지 않음). 잘라 낸 뒤 한 변이 0.1 [제안] 미만이거나 유한한 숫자가 아니면 무시. C의 끌기는 `dragCorner`(맞은편 꼭짓점 고정, 최소값에서 멈춤) |
+| 좌표 함수 | `src/core/frame.ts` | `clampFrame`, `dragCorner`, `frameToPx`(네 변을 각각 반올림해 정수 px), `cropToFramePx`(교집합을 안쪽 정수 px로, 1px 미만이면 null = "프레임 밖"), `intersectBox`(숫자가 아니면 null), `containsBox` |
+| 프레임 기록 | `Delivery.frameRect?`, `LogEntry.frameRect?` | **선택 필드.** A·B·C가 이미 `prepareDelivery`·`addLog`를 부르고 있어서 필수로 두면 구현 전 브랜치가 타입 검사에서 깨진다. `prepareDelivery`는 Delivery에 있으면 deliver 로그에 복사하고, `cropRect ⊆ frameRect`와 raw의 `cropRect = frameRect`를 검사한다(2.3). raw는 `frameRect`가 없으면 받지 않는다 |
+| 사용 기록 줄 | `counter.usage` | `markDelivery(dispatched)`마다 `{at, pluginId, deliveryId, objectLabel, bytes, frameW, frameH}`. 증가 전용, 새 세션에 비움 |
+| 대표 조각 | `usageSamples[pluginId]` | 최근 3장 [제안], raw 제외. **Delivery의 `thumbnailRef`를 같이 쓴다.** 스토어가 새 object URL을 만들면 액션에 부수 효과가 늘기 때문이다 |
+
+썸네일 URL 해제 규칙(대표 조각과 로그가 URL 하나를 같이 쓰기 때문)
+- 로그 밀어내기: 대표 조각에 남아 있는 URL은 해제하지 않는다.
+- 대표 조각에서 빠질 때: 그 Delivery가 이미 로그에서 밀려났으면 그때 해제한다. 아직 로그에 있으면 나중에 밀려날 때 해제된다.
+- 새 세션: 로그 URL과 대표 조각 URL을 합쳐 한 번씩만 해제한다.
+
 ## 3. 고르지 않은 방법
 
 | 방법 | 고르지 않은 이유 |
@@ -88,6 +106,8 @@
 | 이벤트 버스 따로 두기 | 상태와 이벤트가 두 군데로 나뉘고, 늦게 붙은 구독자는 지난 이벤트를 못 받는다 |
 | 트리거마다 핸들러 + 전환 FIFO 큐 | 낡은 정책으로 게이트가 열리거나 같은 iframe을 두 번 만든다(EGM 설계 리뷰 3번). 선택자 하나 + 최신 값 조정기가 코드도 적다 |
 | 입력 전환에도 iframe 재생성 | 정책이 안 바뀌는데 다시 만드는 것은 마감 앞에서 낭비다 |
+| 대표 조각마다 새 object URL(F25) | 스토어 액션에 URL 만들기라는 부수 효과가 생기고, 기존 해제 시험의 기대값이 모두 바뀐다. URL을 같이 쓰고 해제 규칙 셋으로 푼다 |
+| `frameRect` 필수 필드(F24) | 구현 전 트랙 브랜치 세 곳이 타입 검사에서 깨진다. 선택 필드로 두고 A의 구현과 시험으로 늘 채우게 한다 |
 
 ## 4. 남은 위험
 
@@ -102,6 +122,9 @@
 - `validateManifest` 15개: 기본값, 잘못된 JSON, 모르는 필드, 범위, CSP 주입 문자열, purpose 40자
 - `resolveAllowedOrigins` 3개
 - 스토어 17개: 시드, `applyManifest`, 두 번 `markDelivery`, 100건 밀어내기와 revoke·`perPlugin` 유지, skip 9,999/10,000ms, hold, `setAck` 세 결과와 늦은 ack, M·바깥 표시 10초 경계와 tick, 처리량 null, runtimeId·version 변경 시 거부, raw 조건(G1), 비교 모드 끌 때 해제, 일시 정지와 canSend, stopped → enabled false, inputRequest seq, 새 세션 초기화, apiSends
+- F24·F25 6개(2.6): `clampFrame` 경계, `frameToPx`·`intersectBox`(프레임 안·넓이 0), `setCaptureFrame`과 새 세션 유지, 사용 기록 줄과 deliver 로그 `frameRect`, 대표 조각 3장·raw 제외·URL 해제 순서, 새 세션의 중복 없는 해제
+- F24 리뷰 반영 4개: `clampFrame` 잘라 내기, `dragCorner`, `cropToFramePx`, `prepareDelivery` 프레임 검사
+- 이후 추가된 칼로리·`setResult`·게이트 시험을 합쳐 지금은 51개다
 
 ## 6. 리뷰 기록
 
@@ -109,3 +132,12 @@
 
 - **구현 준비도(egm-implementation-readiness):** 상태 모양·인자·시계·새 세션 범위·전이 규칙·확인 방법이 비어 있다는 지적 10개. 타입 파일, 시계 주입, 전이 규칙, 확인 항목으로 반영했다. 받지 않은 것: 7개 필드 모두 필수(03-SRS EI-4의 기본값을 따라 3개는 선택), `faceCheck` error throw(2.4).
 - **설계 비평(egm-design):** 포착 중 전환으로 원본이 통신 가능한 iframe에 가는 경로(2.3), 비교 모드를 꺼도 원본이 남는 문제, 트리거별 핸들러의 경쟁(2.2), 같은 값 재요청, 이중 집계, 시간 기준, 플러그인 행 생성 위치, 02-SSRD와 다른 점 미기재. 모두 반영했다.
+- **F24·F25 코드 리뷰(egm-codebase-details, 2026-10-31):**
+  - 큰 결함 2개
+    - `clampFrame`이 프레임을 안쪽으로 밀어 사용자가 뺀 픽셀을 담는 문제 → 잘라 내기와 `dragCorner`로 고쳤다.
+    - `prepareDelivery`가 `cropRect ⊆ frameRect`와 raw의 프레임을 검사하지 않는 문제 → 2.3에 두 줄을 더했다.
+  - 작은 지적 3개
+    - 1px 미만 교집합과 NaN → `cropToFramePx`와 숫자 검사로 고쳤다.
+    - 호출자가 반올림하면서 프레임을 넘는 문제 → `cropToFramePx`가 안쪽 정수로 맞춰 고쳤다.
+    - 문서가 어긋난 곳 → 고쳤다.
+  - URL 해제 순서와 기존 호출 호환은 결함이 없다고 확인받았다.

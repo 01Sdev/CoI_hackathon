@@ -133,7 +133,7 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | branch | `2a\|2b\|2c\|raw` | F4, F6 | |
 | bytes | int | F6 | 보낸 Blob의 `size` |
 | areaRatio (+ cropRect) | float, {x,y,w,h} 원본 px | F6 | **실제로 자른** cropRect 면적 / 원본 프레임 면적(판정기 `targetBox` 아님) |
-| frameRect | {x,y,w,h} 원본 px | F24 | 포착 시작 때 읽은 `Session.captureFrame`을 원본 px로 바꾼 값. 불변식 `cropRect ⊆ frameRect`(비교 모드 `raw`는 `cropRect = frameRect`) |
+| frameRect | {x,y,w,h} 원본 px (코드에서는 선택 필드: F24 구현 전 호출과 호환. raw는 필수) | F24 | 포착 시작 때 읽은 `Session.captureFrame`을 원본 px로 바꾼 값. 불변식 `cropRect ⊆ frameRect`(비교 모드 `raw`는 `cropRect = frameRect`). `prepareDelivery`가 검사한다 |
 | facesMasked | int | F6 | 같은 LogEntry의 Detection 중 `masked≠none` 수(가림 적용 기록) |
 | faceCheck | `{status:'checked', detectedFaces:int} \| {status:'error', detectedFaces:null}` | F4, F8 | 출구 재검사(P0, JPEG 후 BlazeFace), 두 모드 공통. 보호 모드에서 ≥1이면 hold("출구 재검사"), error면 hold("검사 실패")라 Delivery 없음. `raw`는 전체 프레임 얼굴 수 |
 | processedAt, location | number, `browser` (처리 위치, GPS 아님) | F6 | `phone\|glasses\|enterprise`는 발표 그림용, 데모에서는 안 씀 |

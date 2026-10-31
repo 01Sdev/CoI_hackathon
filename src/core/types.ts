@@ -1,4 +1,4 @@
-// ERD 엔티티 7개(Session, Plugin, SceneDecision, LogEntry, Delivery, Detection, Counter).
+// ERD 엔티티 8개(Session, Plugin, SceneDecision, LogEntry, Delivery, Detection, Counter, UsageSample).
 // 근거: docs/specs/04-ERD.md §3. ERD에 없던 필드는 docs/designs/core-store.md §2.3에 적었다.
 // 시간은 performance.now() 기준 ms(IF-07 OutwardMessage.at만 Date.now()).
 
@@ -44,6 +44,8 @@ export interface Session {
   compareMode: boolean;
   /** 전달 일시 정지(F20, 발표자 화면 전용). */
   paused: boolean;
+  /** 전송 범위 프레임(F24). 소스 프레임 기준 0~1. C만 setCaptureFrame으로 쓰고, A는 포착을 시작할 때 한 번 읽는다. 새 세션에도 유지. */
+  captureFrame: Box;
 }
 
 export interface VersionedManifest extends Manifest {
@@ -103,6 +105,8 @@ export interface LogEntry {
   reason: string;
   enforcedBy: Enforced | null;
   at: number;
+  /** 그 포착에 쓴 전송 범위 프레임(F24, 원본 px). deliver와 hold "프레임 밖"에 남긴다. 다른 줄에는 없다. */
+  frameRect?: Box | null;
 }
 
 export type FaceCheck = { status: 'checked'; detectedFaces: number } | { status: 'error'; detectedFaces: null };
@@ -126,6 +130,12 @@ export interface Delivery {
   areaRatio: number;
   /** 원본 px. */
   cropRect: Box;
+  /**
+   * 포착을 시작할 때 읽은 Session.captureFrame을 원본 px로 바꾼 값(F24). cropRect ⊆ frameRect(raw는 같음).
+   * F24를 구현하기 전의 호출과 맞도록 선택 필드로 둔다. A가 구현하면 늘 채운다.
+   * prepareDelivery는 cropRect가 이 안에 없으면, raw는 이 값이 없거나 cropRect와 다르면 받지 않는다.
+   */
+  frameRect?: Box;
   facesMasked: number;
   faceCheck: FaceCheck;
   processedAt: number;
@@ -133,7 +143,10 @@ export interface Delivery {
   sha256: string;
   ackSha256: string | null;
   ackStatus: AckStatus;
-  /** 보낸 Blob을 줄인 썸네일의 object URL. LogEntry가 밀려날 때 스토어가 해제한다. raw는 비교 모드를 끌 때 null. */
+  /**
+   * 보낸 Blob을 줄인 썸네일의 object URL. LogEntry가 밀려날 때 스토어가 해제한다. 단, 사용 기록 대표 조각(F25)이
+   * 같이 쓰고 있으면 그 조각이 빠질 때 해제한다. raw는 비교 모드를 끌 때 null.
+   */
   thumbnailRef: string | null;
   /** 플러그인에 보낸 것과 같은 Blob 객체(IF-02). raw는 비교 모드를 끌 때 null. */
   blob: Blob | null;
@@ -169,6 +182,8 @@ export interface ThroughputRecord {
 
 export interface Counter {
   sessionId: string;
+  /** F25 사용 기록. dispatched 전달마다 1줄, 증가 전용, 이미지 없음. 화면 로그 100건과 따로 세션 동안 남는다. */
+  usage: UsageRecord[];
   /** dispatched 전달의 faceCheck 기록. 10초 지나면 빠진다. 비교 모드를 꺼도 빼지 않는다. */
   recent10s: RecentFaceRecord[];
   window60s: ThroughputRecord[];
@@ -206,4 +221,25 @@ export interface ResultLine {
   text: string;
   source: 'api' | 'fallback';
   at: number;
+}
+
+/** F25 사용 기록 한 줄("OO 플러그인에서 사용됨"). */
+export interface UsageRecord {
+  at: number;
+  pluginId: string;
+  deliveryId: string;
+  objectLabel: string;
+  bytes: number;
+  /** Delivery.frameRect의 크기. F24 구현 전 전달이면 null. */
+  frameW: number | null;
+  frameH: number | null;
+}
+
+/** F25 대표 조각. 플러그인별 최근 USAGE_SAMPLES_PER_PLUGIN장, raw는 남기지 않는다. */
+export interface UsageSample {
+  pluginId: string;
+  deliveryId: string;
+  at: number;
+  /** 그 Delivery의 thumbnailRef를 같이 쓴다. 로그에서 밀려나도 여기 남아 있으면 해제하지 않는다. */
+  thumbnailRef: string;
 }
