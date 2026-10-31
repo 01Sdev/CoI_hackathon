@@ -1,6 +1,7 @@
 // 화면 문구. 플러그인이 보낸 문자열은 여기 없다(그건 React 텍스트 노드 = textContent로만 넣는다).
 
-import type { InputKind, PluginKind, PluginStatus, SceneLabel } from '../core/types';
+import type { InputKind, PluginKind, PluginStatus, ResultLine, SceneLabel } from '../core/types';
+import { sanitizeAppText } from './sanitize';
 
 export const INPUT_LABEL: Record<InputKind, string> = {
   webcam: '웹캠',
@@ -36,6 +37,23 @@ export function parseCalorieLine(text: string): { name: string; kcal: number | n
   const m = /^\s*(.+?)\s*약\s*(\d[\d,]*)\s*kcal\s*$/i.exec(text.normalize('NFKC'));
   if (!m) return { name: text, kcal: null };
   return { name: m[1] ?? '', kcal: Number((m[2] ?? '').replace(/,/g, '')) };
+}
+
+/**
+ * 칼로리 화면(금빛 상태창)에 넘길 값. 결과가 아직 없는 최신 전달이 있으면 그 전달의 대상 이름과 kcal null("— kcal")을 보인다.
+ * 기기 안 계산은 한 장에 수 초 걸려, 그동안 직전 숫자를 두면 새 대상에 옛 값이 붙어 보이기 때문이다. id가 그 전달의
+ * deliveryId라 결과가 오면 같은 창에서 숫자로 바뀐다. 고정표 결과는 FR-032대로 이름 뒤에 "(고정표)"를 붙인다.
+ */
+export function calorieView(
+  line: Pick<ResultLine, 'deliveryId' | 'text' | 'source'> | null,
+  latest: { id: string; objectLabel: string } | null,
+): { id: string; name: string; kcal: number | null } | null {
+  if (latest && latest.id !== line?.deliveryId) return { id: latest.id, name: objectName(latest.objectLabel), kcal: null };
+  if (!line) return null;
+  const parsed = parseCalorieLine(line.text);
+  const name = sanitizeAppText(parsed.name);
+  if (!name) return null;
+  return { id: line.deliveryId, name: line.source === 'fallback' ? `${name} (고정표)` : name, kcal: parsed.kcal };
 }
 
 /** 플러그인 상태 글자와 톤. 전환 중 = 적용 중, stopped = 멈춤(사용자가 다시 켜야 함). */

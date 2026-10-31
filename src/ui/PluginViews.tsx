@@ -10,11 +10,13 @@ import { useLensStore } from '../core/store';
 import type { PluginKind, ResultLine } from '../core/types';
 import { FoodStatusPanel } from './FoodStatusPanel';
 import { boxCenter, type Size } from './geometry';
-import { parseCalorieLine } from './labels';
+import { calorieView } from './labels';
 import { sanitizeAppText } from './sanitize';
 
 interface PluginViewProps {
-  line: ResultLine;
+  pluginId: string;
+  /** 그 앱의 마지막 결과. 아직 없으면 null이고, 그릴 것이 없으면 화면이 null을 돌려준다. */
+  line: ResultLine | null;
   size: Size;
 }
 
@@ -24,7 +26,7 @@ const PLUGIN_VIEW: Record<PluginKind, ComponentType<PluginViewProps> | null> = {
   tamper: null,
 };
 
-/** 켜져 있는 앱마다 마지막 결과를 그 앱의 화면으로 그린다(pluginOrder 순). */
+/** 켜져 있는 앱마다 그 앱의 화면을 그린다(pluginOrder 순). */
 export function PluginViews({ size }: { size: Size }) {
   const results = useLensStore((s) => s.results);
   const plugins = useLensStore((s) => s.plugins);
@@ -33,32 +35,39 @@ export function PluginViews({ size }: { size: Size }) {
     <>
       {order.map((id) => {
         const p = plugins[id];
-        const line = results[id];
-        const View = p?.enabled && line ? PLUGIN_VIEW[p.kind] : null;
-        return View && line ? <View key={id} line={line} size={size} /> : null;
+        const View = p?.enabled ? PLUGIN_VIEW[p.kind] : null;
+        return View ? <View key={id} pluginId={id} line={results[id] ?? null} size={size} /> : null;
       })}
     </>
   );
 }
 
-/** 결과 id는 deliveryId라 새 전달마다 닫았던 창이 다시 열린다. 고정표 결과는 FR-032대로 이름 뒤에 "(고정표)"를 붙인다. */
-function CalorieView({ line, size }: PluginViewProps) {
+/** 결과가 아직 없는 최신 전달이 있으면 "— kcal"로 먼저 띄우고, 결과가 오면 같은 창(id = deliveryId)에서 숫자로 바뀐다. */
+function CalorieView({ pluginId, line, size }: PluginViewProps) {
   const v = useLensStore(
-    useShallow((s) => ({
-      box: s.liveObservation?.label === 'food' ? s.liveObservation.targetBox : null,
-      srcW: s.session.input?.width ?? 0,
-      srcH: s.session.input?.height ?? 0,
-    })),
+    useShallow((s) => {
+      // 이 앱에 마지막으로 보낸 전달. 결과(line)가 이것보다 옛 전달이면 아직 계산 중이다.
+      let latest: { id: string; objectLabel: string; at: number } | null = null;
+      for (const d of Object.values(s.deliveries)) {
+        if (d.pluginId === pluginId && d.sendStatus === 'dispatched' && (!latest || d.processedAt > latest.at))
+          latest = { id: d.id, objectLabel: d.objectLabel, at: d.processedAt };
+      }
+      return {
+        latestId: latest?.id ?? null,
+        latestLabel: latest?.objectLabel ?? '',
+        box: s.liveObservation?.label === 'food' ? s.liveObservation.targetBox : null,
+        srcW: s.session.input?.width ?? 0,
+        srcH: s.session.input?.height ?? 0,
+      };
+    }),
   );
-  const parsed = parseCalorieLine(line.text);
-  const name = sanitizeAppText(parsed.name);
+  const result = calorieView(line, v.latestId ? { id: v.latestId, objectLabel: v.latestLabel } : null);
   const anchor = boxCenter(v.box, v.srcW > 0 ? { w: v.srcW, h: v.srcH } : null, size);
-  const result = name ? { id: line.deliveryId, name: line.source === 'fallback' ? `${name} (고정표)` : name, kcal: parsed.kcal } : null;
   return <FoodStatusPanel result={result} anchor={anchor} />;
 }
 
 function SceneNoteView({ line }: PluginViewProps) {
-  const text = sanitizeAppText(line.text);
+  const text = line ? sanitizeAppText(line.text) : '';
   if (!text) return null;
   return (
     <div className="fm-scenenote">

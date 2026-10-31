@@ -7,7 +7,7 @@ import type { Box } from '../src/core/types';
 import { entryMeta, frameText, logReason, usageMeta, wallClock } from '../src/proof/format';
 import { GUARANTEES, protocolRows, receiverText } from '../src/proof/protocol';
 import { boxCenter, coverBox, coverPointToSource, cornerPoint, dragCornerFromScreen, faceWindowRemaining, nudgeCorner } from '../src/ui/geometry';
-import { formatBytes, josa, parseCalorieLine } from '../src/ui/labels';
+import { calorieView, formatBytes, josa, parseCalorieLine } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 import { APP_TEXT_MAX, sanitizeAppText } from '../src/ui/sanitize';
 
@@ -181,6 +181,20 @@ check('parseCalorieLine: "피자 약 285kcal"을 이름과 숫자로, 형식이 
   assert.deepEqual(parseCalorieLine(`피자 약 ${cpw('285')}kcal`), { name: '피자', kcal: 285 });
   assert.deepEqual(parseCalorieLine('음식(칼로리 정보 없음)'), { name: '음식(칼로리 정보 없음)', kcal: null });
   assert.deepEqual(parseCalorieLine('약 300kcal'), { name: '약 300kcal', kcal: null });
+});
+
+check('calorieView: 결과가 없는 최신 전달은 "— kcal"(kcal null), 결과가 오면 같은 id에서 숫자, 고정표는 이름 뒤 표시', () => {
+  const latest = { id: 'd2', objectLabel: 'pizza' };
+  // 첫 결과 전 계산 중
+  assert.deepEqual(calorieView(null, latest), { id: 'd2', name: '피자', kcal: null });
+  // 직전 결과(d1)가 남아 있어도 새 전달(d2)이 계산 중이면 옛 숫자를 붙이지 않는다
+  assert.deepEqual(calorieView({ deliveryId: 'd1', text: '피자 약 300kcal', source: 'api' }, latest), { id: 'd2', name: '피자', kcal: null });
+  // 같은 전달의 결과가 오면 같은 id에서 숫자로('fallback'이 아닌 출처는 모두 보통 결과. B가 더하는 'on-device'도 같다)
+  assert.deepEqual(calorieView({ deliveryId: 'd2', text: '피자 약 300kcal', source: 'api' }, latest), { id: 'd2', name: '피자', kcal: 300 });
+  assert.deepEqual(calorieView({ deliveryId: 'd2', text: '피자 약 285kcal', source: 'fallback' }, latest), { id: 'd2', name: '피자 (고정표)', kcal: 285 });
+  // 전달도 결과도 없으면 창이 없다. 이름이 지워져 비면 창이 없다
+  assert.equal(calorieView(null, null), null);
+  assert.equal(calorieView({ deliveryId: 'd2', text: `${APP_NAME} 약 300kcal`, source: 'api' }, latest), null);
 });
 
 // 보이지 않는 문자는 소스에 그대로 쓰지 않고 코드 포인트로 만든다.
