@@ -37,3 +37,31 @@
 - [ ] 화면 배치(phone/desktop/hud/outward)와 라우팅
 - [ ] HUD 카운터·증명 로그·확인 화면·매니페스트 편집기
 - [ ] 전달 신호(테두리 점멸·효과음), `/outward`, 비교 모드·발표자 컨트롤
+
+## 모델 파일 (사용자가 직접 고른다)
+
+- [ ] 물체 판정 모델: MediaPipe Tasks `ObjectDetector`가 읽는 `.tflite`(메타데이터 포함). COCO `pizza` 클래스가 있어야 한다. 지금 명세 기준은 EfficientDet-Lite0
+- [ ] 얼굴 모델: MediaPipe `FaceDetector`용 `.tflite`. 명세 기준은 BlazeFace short-range(약 2m 안의 얼굴용, V2 참고)
+- [ ] 놓을 곳: `public/models/`. WASM은 `node_modules/@mediapipe/tasks-vision/wasm/`을 `public/wasm/`으로 복사한다(CDN 금지, AGENTS.md)
+- 모델을 바꾸면 V1(속도)과 V2(얼굴 분기)를 다시 잰다
+
+## 실측 일정 (그때그때 하는 것)
+
+원칙: 아래 "언제"에 해당하는 PR을 올리는 에이전트가 그 실측을 같이 하고, 결과를 PR 본문과 `docs/specs/05-코드-전-결정사항.md`의 V 표 상태 칸에 적는다. 못 했으면 못 한 이유를 적는다.
+
+| V | 볼 것 | 언제 | 누가 | 상태 |
+| --- | --- | --- | --- | --- |
+| V6 | Vercel 최소 배포(정적 + `/api/calorie` + `/hud`·`/outward` 경로 + 모델·WASM) | 배포 방식이 정해지는 즉시. V1·V9·V10·V11의 Android·배포 시험이 이것을 기다린다 | 사용자 결정 → B | 대기(배포 미정) |
+| V10 | M0: `dev/fixtures/m0-test.jpg`로 match·mismatch·timeout | 트랙 B 첫 PR(`plugins/host` + hello) | B | 대기. iPhone 계약 재현은 통과 |
+| V9 | Android Chrome 격리 S1~S6 | 트랙 B 첫 PR 뒤, 배포 주소에서 | B | 대기 |
+| V1 | MediaPipe 속도·GPU→CPU 대체(Android) | 트랙 A 첫 PR(0단계) 뒤, 모델 파일이 정해지고 배포 주소가 생기면 | A | iPhone 통과(첫 추론 11~14초), Android 대기 |
+| V4 | 큰 해상도 요청 시 실제 해상도·포착 시간(Android) | V1과 같이 | A | iPhone 통과, Android 대기 |
+| V8 | 녹화 mp4 재생 후 판정 | 트랙 A 입력 PR + `08-데모-소재.md`의 `pizza-alone.mp4` | A | iPhone 합성 영상 통과, 실제 영상 대기 |
+| V2 | 먼·옆·잘린 얼굴의 분기 | 트랙 A 둘째 PR(포착·가림) + 얼굴 영상 3개 | A | 대기 |
+| V3 | 2c가 손에 든 피자를 가리는지 | V2와 같이 | A | 대기 |
+| V5 | 칼로리 응답 시간·비용(피자 256px 10회, p50·p95, 토큰) | 트랙 B `/api/calorie` PR. 키가 있는 로컬에서 | B | 대기 |
+| V11 | 통합 상태 격리 6줄·전환·옛 iframe 메시지(iPhone·Android) | 1차 통합 뒤, 배포 주소에서 | B | 대기 |
+| V12 | 노트북 Chrome에서 데모 5단계 네트워크 탭 | 2차 통합 뒤 리허설 | C·발표자 | 대기 |
+| V13 | Ray-Ban Display 시뮬레이터에서 `/hud` D-pad | 트랙 C `/hud` PR | C | 대기 |
+| V14 | 메인 창과 `/outward` 동기화(외부 화면) | 트랙 C `/outward` PR 뒤 리허설 | C | 대기 |
+| V7 | iPhone 효과음·무음 모드 | — | — | 통과 |
