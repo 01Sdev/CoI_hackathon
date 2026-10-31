@@ -13,7 +13,8 @@ import { lensStore, useLensStore, type LensState } from '../core/store';
 import type { Delivery, PluginKind } from '../core/types';
 import { CaptureFrame } from './CaptureFrame';
 import { coverBox, faceWindowRemaining, type Size } from './geometry';
-import { appResultLine, formatBytes, INPUT_LABEL, objectName, PLUGIN_ICON, PLUGIN_NAME, SCENE_LABEL } from './labels';
+import { ago } from '../proof/format';
+import { appResultLine, deliverySignalLines, INPUT_LABEL, objectName, PLUGIN_ICON, PLUGIN_NAME, SCENE_LABEL } from './labels';
 import { OrbStack } from './OrbStack';
 import { useDeliverySignal, useHoldSignal, useRecent } from './useSignals';
 
@@ -271,19 +272,14 @@ function AppResults() {
 function DeliveryToast({ d }: { d: Delivery }) {
   const kind = useLensStore((s) => s.plugins[d.pluginId]?.kind);
   const raw = d.branch === 'raw';
-  const faces = d.faceCheck.status === 'checked' ? d.faceCheck.detectedFaces : null;
+  const [who, what] = deliverySignalLines(kind ? PLUGIN_NAME[kind] : d.pluginId, d, ago(performance.now() - d.processedAt));
   return (
     <div className="fm-hud__toast">
       <div className="fm-toast fm-toastcard fm-glass fm-glass--panel" data-tone={raw ? 'exposed' : 'safe'} role="status">
         <span className="fm-thumb">{d.thumbnailRef && <img src={d.thumbnailRef} alt="" />}</span>
         <div>
-          <div className="fm-label">
-            {kind ? PLUGIN_NAME[kind] : d.pluginId}에 {raw ? '원본 전체' : '사진 1장'} 전달
-          </div>
-          <div className="fm-readout">
-            {formatBytes(d.bytes)} · 얼굴 {faces ?? '?'}
-            {d.facesMasked > 0 ? ` · ${d.facesMasked}개 가림` : ''} · 방금
-          </div>
+          <div className="fm-label">{who}</div>
+          <div className="fm-readout">{what}</div>
         </div>
         <span className="fm-capsule fm-toastcard__pill">
           <span className="fm-dot" aria-hidden="true" />
