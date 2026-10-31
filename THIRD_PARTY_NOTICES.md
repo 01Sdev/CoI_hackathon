@@ -40,7 +40,7 @@ OFL 1.1은 폰트를 프로그램에 넣어 배포하는 것을 허용합니다.
 | --- | --- | --- | --- | --- | --- |
 | (아직 없음) | 0단계 물체 판정 (명세 기준 EfficientDet-Lite0) | | | | |
 | (아직 없음) | 얼굴 검출 (명세 기준 BlazeFace short-range) | | | | |
-| (아직 없음) | 사람 분리 후보 (Selfie Multiclass 256×256) | | | | |
+| `selfie_multiclass_256x256.tflite` (16,371,837바이트, SHA-256 `c6748b12…e0e0`) | 2단계 가림 모양(머리카락·얼굴 피부), PRD F23·SRS FR-016a | https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/1/selfie_multiclass_256x256.tflite | Apache-2.0 | 모델 카드 "Model Card Multiclass Segmentation"(2023-05-10)의 "LICENSED UNDER Apache License, Version 2.0" · https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Multiclass%20Segmentation.pdf | 2026-10-31, 허브 세션(사용자 승인). 사용자 독립 데모에서 받은 파일과 같은 해시 |
 
 참고: MediaPipe 공식 모델은 Google이 Apache-2.0으로 배포한다고 모델 카드에 적혀 있습니다. 파일마다 다시 확인해서 적습니다.
 
