@@ -2,7 +2,7 @@
 // 따로 만든 스토어에 hello 변형을 넣고, 이 페이지가 A(broker) 역할을 한다. 결과는 표와 window.__m0.
 
 import { PLUGIN_SEEDS, type PluginSeed } from '../src/core/plugins';
-import type { FameletSdk } from '../src/core/sdk';
+import type { FrameletSdk } from '../src/core/sdk';
 import { selectPluginTotals } from '../src/core/selectors';
 import { createLensStore } from '../src/core/store';
 import { createPluginHost, sha256Hex } from '../src/plugins/host';
@@ -38,14 +38,14 @@ const testOptions: Record<string, SdkTestOptions> = {
 };
 
 /** 자기 전달을 받으면, 다른 iframe에 보낸 deliveryId로 올바른 해시를 담은 ack를 SDK를 거치지 않고 보낸다. */
-function spoofPlugin(famelet: FameletSdk, deliveryId: string, sha256: string): void {
-  famelet.onDelivery(() => {
+function spoofPlugin(framelet: FrameletSdk, deliveryId: string, sha256: string): void {
+  framelet.onDelivery(() => {
     (self as unknown as { postMessage(m: unknown): void }).postMessage({ type: 'ack', deliveryId, sha256 });
   });
 }
 /** onInit이 끝나지 않는다 → SDK가 ready를 보내지 않는다. */
-function noReadyPlugin(famelet: FameletSdk): void {
-  famelet.onInit(() => new Promise<void>(() => undefined));
+function noReadyPlugin(framelet: FrameletSdk): void {
+  framelet.onInit(() => new Promise<void>(() => undefined));
 }
 let spoofTarget: { deliveryId: string; sha256: string } | null = null;
 

@@ -62,7 +62,7 @@ export function FakePanel({ controls }: { controls: FakeControls }) {
       </div>
       <div className="fake-row">
         {ROUTES.map(([name, href]) => (
-          <a key={href} href={href} target={href === '/outward' ? 'famelet-outward' : undefined}>
+          <a key={href} href={href} target={href === '/outward' ? 'framelet-outward' : undefined}>
             {name}
           </a>
         ))}

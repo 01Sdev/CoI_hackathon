@@ -1,7 +1,7 @@
 // 공용 상수. 숫자의 근거는 docs/specs/02-SSRD.md·04-ERD.md 해당 절.
 
-/** 플랫폼 이름(2026-10-31 확정). 화면·코드에서 이름이 필요하면 이 상수만 쓴다. */
-export const APP_NAME = 'famelet';
+/** 플랫폼 이름(2026-10-31 확정, 2026-11-01 철자 정정: famelet → framelet). 화면·코드에서 이름이 필요하면 이 상수만 쓴다. */
+export const APP_NAME = 'framelet';
 
 /** 매니페스트 network와 HOST_ALLOWED_ORIGINS에서 호스트 location.origin으로 바뀌는 자리표시. */
 export const ORIGIN_TOKEN = '$ORIGIN';
@@ -10,7 +10,7 @@ export const ORIGIN_TOKEN = '$ORIGIN';
 export const HOST_ALLOWED_ORIGINS: readonly string[] = [ORIGIN_TOKEN];
 
 /** IF-07 /outward 채널 이름. */
-export const OUTWARD_CHANNEL = 'famelet-outward';
+export const OUTWARD_CHANNEL = 'framelet-outward';
 
 /** 증명 로그는 최근 100건만 둔다(ERD §1). */
 export const LOG_LIMIT = 100;

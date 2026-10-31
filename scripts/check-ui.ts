@@ -2,12 +2,14 @@
 // 좌표 변환·시간 창·문구처럼 경계가 있는 함수만 확인한다(AGENTS.md "테스트").
 
 import assert from 'node:assert/strict';
-import { CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE } from '../src/core/constants';
+import { APP_NAME, CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE, ORIGIN_TOKEN } from '../src/core/constants';
 import type { Box } from '../src/core/types';
-import { entryMeta, frameText, usageMeta, wallClock } from '../src/proof/format';
+import { entryMeta, frameText, logReason, usageMeta, wallClock } from '../src/proof/format';
+import { GUARANTEES, protocolRows, receiverText } from '../src/proof/protocol';
 import { coverBox, coverPointToSource, cornerPoint, dragCornerFromScreen, faceWindowRemaining, nudgeCorner } from '../src/ui/geometry';
-import { formatBytes, josa } from '../src/ui/labels';
+import { appResultLine, deliverySignalLines, formatBytes, josa } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
+import { APP_TEXT_MAX, sanitizeAppText } from '../src/ui/sanitize';
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -159,6 +161,89 @@ check('wallClock: performance 시각을 같은 순간의 벽시계로 바꾼다'
   const dateNow = new Date(2026, 9, 31, 21, 43, 10).getTime();
   assert.equal(wallClock(5_000, 10_000, dateNow), '21:43:05');
   assert.equal(wallClock(10_000, 10_000, dateNow), '21:43:10');
+});
+
+check('appResultLine: /hud 앱 결과 줄은 앱 이름으로 시작하고, 고정표면 꼬리를 붙인다', () => {
+  assert.equal(appResultLine('칼로리', '피자 약 285kcal', false), '칼로리 · 피자 약 285kcal');
+  assert.equal(appResultLine('칼로리', '피자 약 285kcal', true), '칼로리 · 피자 약 285kcal · 고정표');
+});
+
+check('deliverySignalLines: 첫 줄은 "{APP_NAME} → 앱 이름", 둘째 줄은 사진·바이트·가림·시간', () => {
+  const d = { branch: '2b', bytes: 19_046, facesMasked: 2 } as const;
+  assert.deepEqual(deliverySignalLines('칼로리', d, '방금'), [`${APP_NAME} → 칼로리`, '사진 1장 · 18.6KB · 얼굴 2개 가림 · 방금']);
+  assert.equal(deliverySignalLines('칼로리', { ...d, branch: '2a', facesMasked: 0 }, '방금')[1], '사진 1장 · 18.6KB · 가릴 사람 없음 · 방금');
+  assert.equal(deliverySignalLines('칼로리', { ...d, branch: 'raw', facesMasked: 0 }, '3초 전')[1], '원본 전체 · 18.6KB · 비교 모드라 가리지 않음 · 3초 전');
+  assert.ok(!deliverySignalLines('장면 기록', d, '방금')[0].endsWith('앱'), '이름 뒤에 "앱"을 붙이지 않는다');
+});
+
+// 보이지 않는 문자는 소스에 그대로 쓰지 않고 코드 포인트로 만든다.
+const cp = (...n: number[]) => String.fromCodePoint(...n);
+
+check('sanitizeAppText: 그림 문자·방향·제어 문자를 지우고 줄바꿈은 공백으로', () => {
+  assert.equal(sanitizeAppText('피자 약 285kcal'), '피자 약 285kcal');
+  assert.equal(sanitizeAppText(`${cp(0x1f7e2)} 피자 ${cp(0x1f355)}`), '피자');
+  assert.equal(sanitizeAppText(`${cp(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467)} 가족 ${cp(0x1f1f0, 0x1f1f7)}`), '가족');
+  assert.equal(sanitizeAppText(`${cp(0x202e)}evil${cp(0x202c)} ${cp(0x2066)}x${cp(0x2069)}${cp(0x200f)}`), 'evil x');
+  assert.equal(sanitizeAppText(`a${cp(0)}b${cp(0x1b)}[31mc${cp(0x85)}d`), 'ab[31mc d');
+  assert.equal(sanitizeAppText('한 줄\n두 줄\r\n세 줄\t끝'), '한 줄 두 줄 세 줄 끝');
+});
+
+check('sanitizeAppText: APP_NAME과 보호 카운터 문구를 지운다(대소문자·전각·사이 공백·겹침 포함)', () => {
+  assert.equal(sanitizeAppText(`${cp(0x1f7e2)} 보호됨 · 앱에 반영된 사람 0명`), '0명');
+  assert.equal(sanitizeAppText(`${APP_NAME} 공식 결과`), '공식 결과');
+  assert.equal(sanitizeAppText(`${APP_NAME.toUpperCase()} 확인`), '확인');
+  assert.equal(sanitizeAppText(Array.from(APP_NAME).map((c) => String.fromCodePoint(c.codePointAt(0)! + 0xfee0)).join('')), '');
+  assert.equal(sanitizeAppText('보 호 됨 ok'), 'ok');
+  assert.equal(sanitizeAppText(`${APP_NAME.slice(0, 3)}${APP_NAME}${APP_NAME.slice(3)} x`), 'x');
+});
+
+check('sanitizeAppText: 60자에서 자른다(코드 포인트 기준, 마지막은 …)', () => {
+  assert.equal(APP_TEXT_MAX, 60);
+  const long = sanitizeAppText('가'.repeat(80));
+  assert.equal(Array.from(long).length, 60);
+  assert.ok(long.endsWith('…'));
+  assert.equal(sanitizeAppText('가'.repeat(60)), '가'.repeat(60));
+});
+
+check('logReason: 위반 자기 보고는 앱이 보낸 target만 거르고 앞뒤 문구는 둔다', () => {
+  const v = { kind: 'violation', enforcedBy: 'plugin-report' } as const;
+  assert.equal(
+    logReason({ ...v, reason: `외부 요청(fetch) https://evil.example/${cp(0x1f7e2)}보호됨 · 허용 목록 밖` }),
+    '외부 요청(fetch) https://evil.example/ · 허용 목록 밖',
+  );
+  assert.equal(logReason({ ...v, reason: `카메라 접근(camera) ${cp(0x202e)}${APP_NAME}` }), '카메라 접근(camera) (빈 값)');
+  assert.equal(logReason({ kind: 'hold', enforcedBy: null, reason: '프레임 밖' }), '프레임 밖');
+  assert.equal(logReason({ kind: 'violation', enforcedBy: 'host', reason: `형식 오류: ${cp(0x1f7e2)}x` }), '형식 오류: x');
+});
+
+check('receiverText: $ORIGIN은 "{APP_NAME} 서버", 다른 주소는 호스트 이름, 빈 목록은 "밖으로 안 보냄"', () => {
+  const self = 'https://framelet-demo.vercel.app';
+  assert.deepEqual(receiverText([ORIGIN_TOKEN], [self], self, false), {
+    requested: `${APP_NAME} 서버`,
+    allowed: `${APP_NAME} 서버만`,
+    viaServer: true,
+  });
+  assert.deepEqual(receiverText([], [], self, false), { requested: '밖으로 안 보냄', allowed: '밖으로 안 보냄', viaServer: false });
+  assert.deepEqual(receiverText(['https://evil.example:8443'], [], self, false), {
+    requested: 'evil.example',
+    allowed: 'evil.example 허용 안 함',
+    viaServer: false,
+  });
+  assert.equal(receiverText([ORIGIN_TOKEN, 'https://x.com'], [self], self, false).allowed, `${APP_NAME} 서버, x.com 허용 안 함`);
+  assert.equal(receiverText([ORIGIN_TOKEN], [], self, true).allowed, '지금은 막음 · 비교 모드');
+});
+
+check('protocolRows: 칼로리 시드 값이면 설계 §3.2 표 문구가 나온다', () => {
+  const rows = protocolRows({ scenes: ['food'], maxSide: 256, maxPerMinute: 6 }, receiverText([ORIGIN_TOKEN], ['o'], 'o', false));
+  assert.deepEqual(rows, [
+    ['장면', '음식', '음식 앞에 있을 때만'],
+    ['영역', '대상 하나', '흰 틀 안의 대상 하나'],
+    ['크기', '긴 변 256px', '긴 변 256px까지'],
+    ['빈도', '분당 6장', '분당 6장까지'],
+    ['받는 곳', `${APP_NAME} 서버`, `${APP_NAME} 서버만`],
+  ]);
+  assert.equal(GUARANTEES.length, 4);
+  assert.ok(!GUARANTEES.some((g) => g.includes('모든 얼굴')), '얼굴 검출은 놓칠 수 있어 "모든 얼굴"이라고 쓰지 않는다');
 });
 
 console.log(`\n${passed}개 통과`);

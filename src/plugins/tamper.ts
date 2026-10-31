@@ -2,15 +2,15 @@
 // 기대값은 02-SSRD §3 "검증 근거" 표: Worker에는 API가 없거나 ReferenceError, 요청은 CSP가 막는다(서버 도달 0건).
 // tamperPlugin은 Worker 소스에 toString()으로 들어가므로 바깥 이름을 참조하지 않는다.
 
-import type { FameletSdk } from '../core/sdk';
+import type { FrameletSdk } from '../core/sdk';
 
 /** 막혀야 하는 외부 주소. 차단이 실패하면 무해한 example.com으로만 간다(네트워크 탭에서 확인). */
 export const TAMPER_TARGETS = {
-  fetch: 'https://example.com/famelet-tamper',
-  script: 'https://example.com/famelet-tamper.js',
+  fetch: 'https://example.com/framelet-tamper',
+  script: 'https://example.com/framelet-tamper.js',
 } as const;
 
-export function tamperPlugin(famelet: FameletSdk, targets: { fetch: string; script: string }): void {
+export function tamperPlugin(framelet: FrameletSdk, targets: { fetch: string; script: string }): void {
   const g = self as unknown as Record<string, unknown>;
   const errName = (e: unknown) => (e instanceof Error ? e.name : typeof e);
 
@@ -65,18 +65,18 @@ export function tamperPlugin(famelet: FameletSdk, targets: { fetch: string; scri
   };
 
   const runAll = async () => {
-    famelet.reportViolation('camera', await tryCamera());
-    famelet.reportViolation('hostDom', tryHostDom());
-    famelet.reportViolation('fetch', await tryFetch());
-    famelet.reportViolation('script', tryScript());
+    framelet.reportViolation('camera', await tryCamera());
+    framelet.reportViolation('hostDom', tryHostDom());
+    framelet.reportViolation('fetch', await tryFetch());
+    framelet.reportViolation('script', tryScript());
   };
 
   // ready를 먼저 보내고 나서 시도한다(켜면 4줄, TC-006).
-  famelet.onInit(() => {
+  framelet.onInit(() => {
     setTimeout(() => void runAll(), 0);
   });
   // 받은 조각도 밖으로 보내 본다. 같은 target이라 SDK가 기록은 다시 보내지 않는다.
-  famelet.onDelivery(async (d) => {
-    famelet.reportViolation('fetch', await tryFetch(d.blob));
+  framelet.onDelivery(async (d) => {
+    framelet.reportViolation('fetch', await tryFetch(d.blob));
   });
 }

@@ -10,7 +10,7 @@ import react from '@vitejs/plugin-react';
  */
 function devCalorieApi(): Plugin {
   return {
-    name: 'famelet-dev-calorie-api',
+    name: 'framelet-dev-calorie-api',
     apply: 'serve',
     configureServer(server) {
       const handle = (req: Connect.IncomingMessage, res: ServerResponse) => {

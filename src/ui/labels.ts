@@ -1,6 +1,7 @@
 // 화면 문구. 플러그인이 보낸 문자열은 여기 없다(그건 React 텍스트 노드 = textContent로만 넣는다).
 
-import type { InputKind, PluginKind, PluginStatus, SceneLabel } from '../core/types';
+import { APP_NAME } from '../core/constants';
+import type { Delivery, InputKind, PluginKind, PluginStatus, SceneLabel } from '../core/types';
 
 export const INPUT_LABEL: Record<InputKind, string> = {
   webcam: '웹캠',
@@ -20,6 +21,18 @@ export const PLUGIN_NAME: Record<PluginKind, string> = {
   tamper: '변조',
   hello: '장면 기록',
 };
+
+/** 앱 카드 머리줄의 글자 하나짜리 단색 아이콘(app-structure §3.1). 앱별 강조색은 쓰지 않는다. */
+export const PLUGIN_ICON: Record<PluginKind, string> = {
+  calorie: '칼',
+  tamper: '변',
+  hello: '장',
+};
+
+/** /hud 앱 결과 줄. 앱 이름으로 시작해 framelet 줄과 구분한다. "칼로리 · 피자 약 285kcal · 고정표". */
+export function appResultLine(name: string, text: string, fallback: boolean): string {
+  return `${name} · ${text}${fallback ? ' · 고정표' : ''}`;
+}
 
 /** 플러그인 상태 글자와 톤. 전환 중 = 적용 중, stopped = 멈춤(사용자가 다시 켜야 함). */
 export const PLUGIN_STATUS: Record<PluginStatus, [string, 'safe' | 'hold']> = {
@@ -53,6 +66,20 @@ const OBJECT_NAME: Record<string, string> = {
 
 export function objectName(label: string): string {
   return OBJECT_NAME[label] ?? label;
+}
+
+/**
+ * 전달 신호 두 줄(app-structure §3.1). 첫 줄은 주체를 나눠 "framelet → 칼로리"(이름 뒤에 "앱"을 붙이지 않는다),
+ * 둘째 줄은 "사진 1장 · 18.6KB · 얼굴 1개 가림 · 방금". 가린 것이 없으면 "가릴 사람 없음", 비교 모드(raw)는 원본 전체다.
+ * 얼굴 수는 A가 가린 검출 수(facesMasked)라 2c의 머리 가림도 1개로 센다.
+ */
+export function deliverySignalLines(
+  appName: string,
+  d: Pick<Delivery, 'branch' | 'bytes' | 'facesMasked'>,
+  when: string,
+): [string, string] {
+  const masked = d.branch === 'raw' ? '비교 모드라 가리지 않음' : d.facesMasked > 0 ? `얼굴 ${d.facesMasked}개 가림` : '가릴 사람 없음';
+  return [`${APP_NAME} → ${appName}`, `${d.branch === 'raw' ? '원본 전체' : '사진 1장'} · ${formatBytes(d.bytes)} · ${masked} · ${when}`];
 }
 
 /** 18.6KB, 212KB, 1.2MB. */

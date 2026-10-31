@@ -94,8 +94,8 @@ await check('검증: ID 128자·target 512자·8KiB', () => {
 // ── CSP ──
 await check('CSP: 허용 목록 치환과 빈 목록', () => {
   assert.equal(
-    buildCsp('bm9uY2U=', ['https://famelet.vercel.app']),
-    "default-src 'none'; script-src 'nonce-bm9uY2U='; worker-src blob:; connect-src https://famelet.vercel.app",
+    buildCsp('bm9uY2U=', ['https://framelet.vercel.app']),
+    "default-src 'none'; script-src 'nonce-bm9uY2U='; worker-src blob:; connect-src https://framelet.vercel.app",
   );
   assert.equal(buildCsp('bm9uY2U=', []), "default-src 'none'; script-src 'nonce-bm9uY2U='; worker-src blob:; connect-src 'none'");
 });
@@ -125,9 +125,9 @@ await check('srcdoc: meta CSP가 script보다 먼저, </script 금지', () => {
 
 // ── violationReason ──
 await check('violation reason: connect-src 목록 대조', () => {
-  const list = ['https://famelet.vercel.app'];
+  const list = ['https://framelet.vercel.app'];
   assert.match(violationReason('fetch', 'https://evil.example/x', list), /허용 목록 밖$/);
-  assert.match(violationReason('fetch', 'https://famelet.vercel.app/api/calorie', list), /허용 목록 안인데 실패$/);
+  assert.match(violationReason('fetch', 'https://framelet.vercel.app/api/calorie', list), /허용 목록 안인데 실패$/);
   assert.match(violationReason('script', 'not a url', list), /허용 목록 밖$/);
   assert.equal(violationReason('camera', 'getUserMedia', list), '카메라 접근(camera) getUserMedia');
 });
@@ -170,13 +170,13 @@ const delivery = (id: string) => ({
 
 /** 시험용 플러그인 본문. SDK 규칙을 건드리는 호출을 일부러 한다. */
 const probePlugin = `
-famelet.onDelivery(function (d) {
-  famelet.result(d.deliveryId, 'x'.repeat(250), 'api');
-  famelet.result(d.deliveryId, 'second', 'api');
-  famelet.result('never-received', 'nope', 'api');
-  famelet.reportViolation('fetch', 'https://evil.example/');
-  famelet.reportViolation('fetch', 'https://evil.example/');
-  famelet.reportViolation('bogus', 't');
+framelet.onDelivery(function (d) {
+  framelet.result(d.deliveryId, 'x'.repeat(250), 'api');
+  framelet.result(d.deliveryId, 'second', 'api');
+  framelet.result('never-received', 'nope', 'api');
+  framelet.reportViolation('fetch', 'https://evil.example/');
+  framelet.reportViolation('fetch', 'https://evil.example/');
+  framelet.reportViolation('bogus', 't');
 });`;
 
 async function sdkSuite(label: string, make: (plugin: string, test?: Parameters<typeof buildWorkerSource>[1]) => string) {
@@ -237,7 +237,7 @@ async function sdkSuite(label: string, make: (plugin: string, test?: Parameters<
     assert.equal(w.posted.length, 1);
   });
   await check(`${label}: 느린 핸들러가 다음 전달의 ack를 막지 않는다`, async () => {
-    const w = runWorker(make('famelet.onDelivery(function () { return new Promise(function (r) { setTimeout(r, 400); }); });'), true);
+    const w = runWorker(make('framelet.onDelivery(function () { return new Promise(function (r) { setTimeout(r, 400); }); });'), true);
     w.dispatch(init);
     await tick();
     w.dispatch(delivery('d1'));
@@ -246,7 +246,7 @@ async function sdkSuite(label: string, make: (plugin: string, test?: Parameters<
     assert.deepEqual(w.posted.filter((m) => m.type === 'ack').map((m) => m.deliveryId).sort(), ['d1', 'd2']);
   });
   await check(`${label}: onInit 예외 → ready 없음`, async () => {
-    const w = runWorker(make("famelet.onInit(function () { throw new Error('x'); });"), true);
+    const w = runWorker(make("framelet.onInit(function () { throw new Error('x'); });"), true);
     w.dispatch(init);
     await tick();
     assert.equal(w.posted.length, 0);
@@ -350,8 +350,8 @@ await check('변조: 켜면 4종 자기 보고, 차단 실패 없음', async () 
   );
   assert.equal(v[0]!.target, 'navigator.mediaDevices.getUserMedia → 없음');
   assert.equal(v[1]!.target, 'document=ReferenceError · parent=ReferenceError · top=ReferenceError · localStorage=ReferenceError');
-  assert.equal(v[2]!.target, 'https://example.com/famelet-tamper');
-  assert.equal(v[3]!.target, 'https://example.com/famelet-tamper.js');
+  assert.equal(v[2]!.target, 'https://example.com/framelet-tamper');
+  assert.equal(v[3]!.target, 'https://example.com/framelet-tamper.js');
 });
 
 await sdkSuite('SDK(원본)', (plugin, test) => buildWorkerSource(plugin, test));

@@ -7,7 +7,7 @@ import { useLensStore } from '../core/store';
 export type LayoutMode = 'phone' | 'desktop';
 export type LayoutChoice = 'auto' | LayoutMode;
 
-const KEY = 'famelet.layout';
+const KEY = 'framelet.layout';
 const WIDE = '(min-width: 768px)';
 
 function readChoice(): LayoutChoice {
