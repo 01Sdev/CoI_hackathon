@@ -29,7 +29,8 @@ export function observePeople(people: readonly { box: Box; score: number }[], wi
   tracks = step.tracks;
   for (const t of step.visible) if (s.consents[t.id]) s.touchConsent(t.id, t.box);
 
-  const target = pickGazeTarget(step.visible, s.session.captureFrame, width, height, GAZE_CENTER_RADIUS);
+  const keep = dwell ? { trackId: dwell.trackId, radius: VISION_CONFIG.gazeKeepRadius } : undefined;
+  const target = pickGazeTarget(step.visible, s.session.captureFrame, width, height, GAZE_CENTER_RADIUS, keep);
   dwell = stepGaze(dwell, target && !s.consents[target.id] ? target : null, now, VISION_CONFIG.gazeGraceMs);
   if (gazeHeld(dwell, now, GAZE_DWELL_MS)) s.setGazeCandidate({ trackId: dwell.trackId, box: dwell.box, since: dwell.since });
   else if (s.gaze) s.setGazeCandidate(null);
