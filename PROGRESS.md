@@ -29,7 +29,7 @@
 
 - [x] `plugins/host`: srcdoc iframe·CSP nonce·blob Worker·메시지 검증 — 트랙 B PR(plugin-host)
 - [x] 전환 공통 절차(게이트·runtimeId·3초 ready) — 같은 PR
-- [x] SDK 런타임·hello 플러그인·`/dev/` M0 페이지 — 같은 PR
+- [x] SDK 런타임·hello 플러그인·`/dev/m0.html` M0 페이지 — 같은 PR
 - [x] `main.tsx`에서 `startPluginHost()` 호출 — 트랙 B PR(calorie-tamper)
 - [ ] `main.tsx`에 `connectPluginHost(sendDeliveryMessage)`(트랙 A PR #11과 트랙 B PR이 둘 다 머지된 뒤)
 - [ ] 발표 노트북 Chrome 첫 로드에서 칼로리 iframe이 3초 안에 ready인지(부하가 높을 때 headless Chrome에서 iframe 7개가 모두 stopped인 실행이 있었다)
@@ -56,7 +56,7 @@
 | V | 볼 것 | 언제 | 누가 | 상태 |
 | --- | --- | --- | --- | --- |
 | V6 | Vercel 최소 배포(정적 + `/api/calorie` + `/hud`·`/outward` 경로 + 모델·WASM) | 배포 방식이 정해지는 즉시. V1·V9·V10·V11의 Android·배포 시험이 이것을 기다린다 | 사용자 결정 → B | 대기(배포 미정) |
-| V10 | M0: `dev/fixtures/m0-test.jpg`로 match·mismatch·timeout | 트랙 B 첫 PR(`plugins/host` + hello) | B | 통과(Chrome, 제품 SDK 통합 `/dev/` 15줄). iPhone·Android 제품 SDK 시험 남음 |
+| V10 | M0: `dev/fixtures/m0-test.jpg`로 match·mismatch·timeout | 트랙 B 첫 PR(`plugins/host` + hello) | B | 통과(Chrome, 제품 SDK 통합 `/dev/m0.html` 15줄). iPhone·Android 제품 SDK 시험 남음 |
 | V9 | Android Chrome 격리 S1~S6 | 트랙 B 첫 PR 뒤, 배포 주소에서 | B | 대기 |
 | V1 | MediaPipe 속도·GPU→CPU 대체(Android) | 트랙 A 첫 PR(0단계) 뒤, 모델 파일이 정해지고 배포 주소가 생기면 | A | iPhone 통과(첫 추론 11~14초), Android 대기 |
 | V4 | 큰 해상도 요청 시 실제 해상도·포착 시간(Android) | V1과 같이 | A | iPhone 통과, Android 대기 |
