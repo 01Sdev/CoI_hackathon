@@ -39,3 +39,15 @@ export const WIDE_WARP = {
   /** 미리보기 다시 그리기 상한(fps). 판정·포착은 읽을 때마다 그 자리에서 다시 그린다. */
   previewFps: 30,
 } as const;
+
+/** 코디 스캔 받아쓰기 녹음 상한(ms). 넘으면 녹음을 스스로 멈춘다(src/input/mic.ts). */
+export const MIC_MAX_MS = 15_000;
+
+/**
+ * 녹음 형식 후보(MediaRecorder.isTypeSupported로 앞에서부터 고른다). WebKit(Safari, iOS의 모든 브라우저)은 audio/mp4,
+ * 그 밖(Chrome 등)은 audio/webm을 먼저 본다. 둘 다 /api/stt(ElevenLabs)가 받는다.
+ */
+export const MIC_MIME_TYPES = {
+  webkit: ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'],
+  other: ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'],
+} as const;

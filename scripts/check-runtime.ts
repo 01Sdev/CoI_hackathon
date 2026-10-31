@@ -13,7 +13,8 @@ import { selectActiveConsents } from '../src/core/selectors';
 import { sha256HexSync } from '../src/broker/sha256';
 import { blendMasked, dilate, dilateRadius, shapeMask } from '../src/vision/shape';
 import { createLensStore } from '../src/core/store';
-import { WIDE_WARP } from '../src/input/config';
+import { MIC_MAX_MS, WIDE_WARP } from '../src/input/config';
+import { createMic, pickMimeType, type MicDeps, type MicState, type RecorderLike } from '../src/input/mic';
 import { applyCpuMap, buildCpuMap, sourceBoxToWarped, sourceUv, warpedBoxToSource, warpedXY, warpOutputSize, warpParams, type WarpSettings } from '../src/input/warp';
 import { gazeHeld, matchBoxes, pickConsent, pickGazeTarget, stepGaze, stepTracks, type Track } from '../src/vision/track';
 import { createHash } from 'node:crypto';
@@ -675,6 +676,137 @@ check('uncoveredFaces: 조각 밖 얼굴은 무시, 사각형 하나로 50% 이�
   assert.deepEqual(uncoveredFaces([fc], [{ x: 35, y: 35, w: 30, h: 30 }], crop2), []);
   // 둘로 나뉘어 40%씩만 덮이면 덮이지 않은 것
   assert.equal(uncoveredFaces([fc], [{ x: 40, y: 40, w: 8, h: 20 }, { x: 52, y: 40, w: 8, h: 20 }], crop2).length, 1);
+});
+
+// ── 마이크 녹음(코디 스캔 받아쓰기, src/input/mic.ts). 가짜 getUserMedia·MediaRecorder·타이머로 상태 전환을 본다 ──
+async function checkAsync(name: string, fn: () => Promise<void>) {
+  await fn();
+  passed += 1;
+  console.log(`ok  ${name}`);
+}
+function fakeMic(opts: { deny?: boolean } = {}) {
+  let t = 1000;
+  const timers: { fn: () => void; at: number; id: number }[] = [];
+  let nextId = 1;
+  const stopped: number[] = [];
+  const states: MicState[] = [];
+  const recorders: (RecorderLike & { started: number })[] = [];
+  const constraints: MediaStreamConstraints[] = [];
+  const deps: MicDeps = {
+    getUserMedia: async (c) => {
+      constraints.push(c);
+      if (opts.deny) throw new Error('NotAllowedError');
+      return { getTracks: () => [{ stop: () => stopped.push(t) }] };
+    },
+    createRecorder: (_s, mimeType) => {
+      const r = {
+        state: 'inactive',
+        mimeType: mimeType ?? '',
+        started: 0,
+        ondataavailable: null as RecorderLike['ondataavailable'],
+        onstop: null as RecorderLike['onstop'],
+        onerror: null as RecorderLike['onerror'],
+        start() {
+          r.state = 'recording';
+          r.started += 1;
+        },
+        stop() {
+          if (r.state === 'inactive') return;
+          r.state = 'inactive';
+          queueMicrotask(() => {
+            r.ondataavailable?.({ data: new Blob(['abc'], { type: r.mimeType }) });
+            r.onstop?.();
+          });
+        },
+      };
+      recorders.push(r);
+      return r;
+    },
+    isTypeSupported: (type) => type.startsWith('audio/webm') || type === 'audio/mp4',
+    webkit: false,
+    now: () => t,
+    setTimer: (fn, ms) => {
+      const id = nextId++;
+      timers.push({ fn, at: t + ms, id });
+      return id;
+    },
+    clearTimer: (h) => {
+      const i = timers.findIndex((x) => x.id === h);
+      if (i >= 0) timers.splice(i, 1);
+    },
+    onState: (st) => states.push(st),
+  };
+  const advance = async (ms: number) => {
+    t += ms;
+    for (const x of timers.filter((y) => y.at <= t)) {
+      timers.splice(timers.indexOf(x), 1);
+      x.fn();
+    }
+    await new Promise((r) => setTimeout(r, 0));
+  };
+  return { mic: createMic(deps), stopped, states, recorders, constraints, timers, advance };
+}
+
+check('녹음 형식: WebKit은 audio/mp4, 그 밖은 audio/webm;codecs=opus, 고를 것이 없으면 undefined', () => {
+  const all = () => true;
+  assert.equal(pickMimeType(all, true), 'audio/mp4');
+  assert.equal(pickMimeType(all, false), 'audio/webm;codecs=opus');
+  assert.equal(pickMimeType((t) => t === 'audio/mp4', false), 'audio/mp4');
+  assert.equal(pickMimeType(() => false, false), undefined);
+});
+
+await checkAsync('녹음 상태: 쉼 → 녹음 중(오디오만, 시작 시각) → stop()이 Blob을 주고 트랙을 바로 멈추고 다시 쉼', async () => {
+  const f = fakeMic();
+  assert.deepEqual(f.mic.getMicState(), { recording: false, startedAt: null, maxMs: MIC_MAX_MS });
+  const rec = await f.mic.startMic();
+  assert.deepEqual(f.constraints, [{ audio: true, video: false }]);
+  assert.deepEqual(f.mic.getMicState(), { recording: true, startedAt: 1000, maxMs: MIC_MAX_MS });
+  assert.equal(rec.mimeType, 'audio/webm;codecs=opus');
+  assert.equal(await f.mic.startMic(), rec); // 녹음 중에 다시 시작하면 같은 녹음
+  assert.equal(f.recorders.length, 1);
+  await f.advance(3000);
+  const blob = await rec.stop();
+  assert.equal(blob.size, 3);
+  assert.equal(blob.type, 'audio/webm;codecs=opus');
+  assert.equal(f.stopped.length, 1);
+  assert.equal(f.timers.length, 0); // 15초 타이머도 지운다
+  assert.deepEqual(f.mic.getMicState(), { recording: false, startedAt: null, maxMs: MIC_MAX_MS });
+  assert.deepEqual(f.states.map((x) => x.recording), [true, false]);
+});
+
+await checkAsync('녹음 상한: 15초 직전에는 녹음 중, 15초가 되면 스스로 멈추고 ended·stop()이 같은 Blob', async () => {
+  const f = fakeMic();
+  const rec = await f.mic.startMic();
+  await f.advance(MIC_MAX_MS - 1);
+  assert.equal(f.mic.getMicState().recording, true);
+  assert.equal(f.stopped.length, 0);
+  await f.advance(1);
+  const ended = await rec.ended;
+  assert.ok(ended && ended.size === 3);
+  assert.equal(f.stopped.length, 1);
+  assert.equal(f.mic.getMicState().recording, false);
+  assert.equal(await rec.stop(), ended);
+});
+
+await checkAsync('녹음 취소: 트랙을 바로 멈추고 Blob 없음(ended null, stop() 거부), 다음 녹음은 새로 시작', async () => {
+  const f = fakeMic();
+  const rec = await f.mic.startMic();
+  rec.cancel();
+  assert.equal(f.stopped.length, 1);
+  assert.equal(f.mic.getMicState().recording, false);
+  assert.equal(await rec.ended, null);
+  await assert.rejects(rec.stop());
+  const again = await f.mic.startMic();
+  assert.notEqual(again, rec);
+  f.mic.cancelMic();
+  assert.equal(f.stopped.length, 2);
+});
+
+await checkAsync('녹음 거부: getUserMedia 실패면 startMic이 거부하고 상태는 쉼 그대로', async () => {
+  const f = fakeMic({ deny: true });
+  await assert.rejects(f.mic.startMic());
+  assert.equal(f.mic.getMicState().recording, false);
+  assert.deepEqual(f.states, []);
 });
 
 console.log(`\n${passed}개 통과`);
