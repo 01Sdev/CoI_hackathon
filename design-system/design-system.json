@@ -1,0 +1,19 @@
+{
+  "v": 3,
+  "layout": "files",
+  "createdOnFiles": { "v": 1, "at": "2026-10-31T18:29:02Z" },
+  "title": "framelet",
+  "namespace": "framelet",
+  "libraries": [],
+  "sections": {},
+  "groups": [],
+  "assetGroups": {},
+  "blobs": {},
+  "docs": { "sections": [] },
+  "lastChange": {
+    "by": "Kimdonggyun",
+    "at": "2026-10-31T18:29:02Z",
+    "via": "GitHub · 01Sdev/CoI_hackathon@2bb041b",
+    "note": "src/ui/theme.css와 docs/designs/design-system.md에서 처음 만듦: 색 14개 × 3테마, 글자 스타일 12개, 모서리 4개, 재질 2개, 그림자 1개, Pretendard 4굵기"
+  }
+}
