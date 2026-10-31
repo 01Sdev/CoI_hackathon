@@ -10,12 +10,16 @@ export type LauncherApp = 'calorie' | 'outfit' | 'tamper';
 
 export type GlassScreen =
   | { name: 'permission' }
+  /** 카메라를 거부했거나 열지 못함. 녹화 영상으로 가지 않고 안내와 "다시 시도"(새로고침)만 둔다. */
+  | { name: 'no-camera' }
   | { name: 'home' }
   | { name: 'launcher' }
   | { name: 'app'; app: LauncherApp };
 
 export type GlassEvent =
   | { type: 'allow' }
+  /** "허용 안 함", 브라우저 권한 창 거부, 카메라 오류(A가 녹화 영상으로 바꿈 = session.input.fallbackFrom). */
+  | { type: 'camera-off' }
   | { type: 'open-framelet' }
   | { type: 'open-app'; app: LauncherApp }
   /** 화면 아래 가운데 홈 알약(비전 프로 디지털 크라운 역할): 앱 → 런처, 런처 → 홈. */
@@ -26,6 +30,8 @@ export function glassReduce(s: GlassScreen, e: GlassEvent): GlassScreen {
   switch (e.type) {
     case 'allow':
       return s.name === 'permission' ? { name: 'home' } : s;
+    case 'camera-off':
+      return { name: 'no-camera' };
     case 'open-framelet':
       return s.name === 'home' ? { name: 'launcher' } : s;
     case 'open-app':

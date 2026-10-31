@@ -1,5 +1,5 @@
 // "/" 첫 진입 흐름(docs/designs/glass-home.md, 사용자 요구 2026-11-01). 스마트 글래스가 없어 아이폰 사파리로 글래스 시야를 흉내 낸다.
-// 카메라 권한 질문 → AR 홈(비전 프로 배치 4/5/4, 정가운데 framelet) → framelet 런처(칼로리·코디 스캔·변조 시험·추가...) → 고른 앱.
+// 카메라 권한 질문(거부·오류면 안내 화면) → AR 홈(비전 프로 배치 4/5/4, 정가운데 framelet) → framelet 런처(칼로리·코디 스캔·변조 시험·추가...) → 고른 앱.
 // 카메라 영상은 A의 mountPreview(Stage의 Preview)가 그리고, 광각 휘어짐도 A가 입력 단계에서 넣는다. C는 <video>·원본 픽셀을 만지지 않는다.
 // 글래스 느낌은 가장자리를 살짝 어둡게 하는 비네트와 둥근 시야 가장자리로만 낸다(시야각 숫자는 적지 않는다).
 // 플러그인은 런처에서 고를 때 그 하나만 켜고, 런처·홈으로 돌아오면 끈다(setPluginEnabled). 앱 화면은 기존 글래스 HUD(Hud)다.
@@ -12,7 +12,6 @@ import type { InputKind } from '../core/types';
 import { FrameletMark, HOME_ICON_BG, HomeIcon, LAUNCHER_BG, LauncherIcon } from './GlassIcons';
 import { cameraFor, enabledKind, glassReduce, homeApps, homeRows, type GlassScreen, type LauncherApp } from './glassHome';
 import { Hud } from './Hud';
-import { CameraFallbackNotice } from './screens/StatusPanels';
 import { unlockAudio } from './signal';
 import { EngineGate, Stage } from './Stage';
 import type { LayoutMode } from './useLayoutMode';
@@ -31,6 +30,11 @@ export function GlassFlow({ layout, autostart = false }: { layout: LayoutMode; a
   // framelet 아이콘 자리에서 런처가 커지며 열리게, 누른 아이콘의 중심(화면 비율)을 둔다.
   const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
   usePluginsFor(screen);
+  // 권한 창 거부·카메라 오류: A가 녹화 영상으로 바꾸며 fallbackFrom을 남긴다. 이 흐름에서는 안내 화면으로 간다.
+  const cameraFailed = useLensStore((s) => s.session.input?.fallbackFrom != null);
+  useEffect(() => {
+    if (cameraFailed) dispatch({ type: 'camera-off' });
+  }, [cameraFailed]);
 
   useEffect(() => {
     if (!toast) return;
@@ -38,16 +42,23 @@ export function GlassFlow({ layout, autostart = false }: { layout: LayoutMode; a
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  // 녹화 영상 대체(/demo 영상)는 이 흐름에서 쓰지 않는다(사용자 결정 2026-11-01): 안내와 새로고침만 둔다.
+  // Stage가 사라지면 A의 mountPreview 정리가 녹화 영상도 멈춘다.
+  if (screen.name === 'no-camera') return <NoCamera />;
+
   if (screen.name === 'permission') {
     // 아이폰 가로(874px)는 폭으로는 데스크톱이라, 폭이 아니라 터치 기기인지로 후면 카메라를 고른다.
     const camera: InputKind = cameraFor(layout, typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
-    // 고르면 둘 다 홈으로 간다. "허용 안 함"은 거부 경로와 같은 녹화 영상이다.
-    const start = (kind: InputKind) => {
-      unlockAudio();
-      selectInput(kind);
-      dispatch({ type: 'allow' });
-    };
-    return <Permission onAllow={() => start(camera)} onDeny={() => start('video')} />;
+    return (
+      <Permission
+        onAllow={() => {
+          unlockAudio();
+          selectInput(camera);
+          dispatch({ type: 'allow' });
+        }}
+        onDeny={() => dispatch({ type: 'camera-off' })}
+      />
+    );
   }
 
   const say = (text: string) => setToast((t) => ({ text, n: (t?.n ?? 0) + 1 }));
@@ -69,7 +80,6 @@ export function GlassFlow({ layout, autostart = false }: { layout: LayoutMode; a
         )}
         {screen.name === 'app' && <EngineGate ready={<Hud variant="phone" />} />}
         <div className="fm-glasshome__lens" aria-hidden="true" />
-        <CameraFallbackNotice />
         {toast && (
           <p key={toast.n} className="fm-glasshome__toast" role="status">
             {toast.text}
@@ -118,6 +128,27 @@ function Permission({ onAllow, onDeny }: { onAllow(): void; onDeny(): void }) {
           </button>
           <button type="button" className="fm-glassperm__btn fm-glassperm__btn--primary" onClick={onAllow}>
             허용
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/**
+ * 카메라 없이는 볼 수 없다는 안내(권한 질문과 같은 톤). "다시 시도"는 새로고침해서 권한 질문부터 다시 한다.
+ * iOS 사파리는 한 번 거부하면 새로고침 전까지 다시 묻지 않는다.
+ */
+function NoCamera() {
+  return (
+    <main className="fm-glassperm">
+      <div className="fm-glassperm__body" role="alertdialog" aria-labelledby="fm-glassperm-off">
+        <p id="fm-glassperm-off" className="fm-glassperm__question">
+          카메라 없이는 볼 수 없어요.
+        </p>
+        <div className="fm-glassperm__actions">
+          <button type="button" className="fm-glassperm__btn fm-glassperm__btn--primary" onClick={() => location.reload()}>
+            다시 시도
           </button>
         </div>
       </div>
