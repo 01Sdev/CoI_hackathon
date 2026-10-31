@@ -22,6 +22,7 @@ import {
   sourceToView,
   viewToSource,
 } from '../src/ui/geometry';
+import { cameraFor, enabledKind, glassReduce, HOME_CENTER, HOME_ROWS, homeApps, homeRows, type GlassScreen } from '../src/ui/glassHome';
 import { isGlassButtonKey } from '../src/ui/glassKeys';
 import { calorieView, formatBytes, josa, parseCalorieLine } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
@@ -374,6 +375,43 @@ check('talkPanelPlacement: 답 패널은 흰 틀의 사람 수를 덮지 않는�
   assert.deepEqual(talkPanelPlacement({ top: 100, right: 700 }, wide), { top: 16, maxHeight: 400 });
   // 숫자가 패널보다 아래에 있어 세로로 안 겹치면 그대로.
   assert.equal(talkPanelPlacement({ top: 900, right: 337 }, { w: 390, h: 1400 }).top, 16);
+});
+
+check('glassReduce: 허용 → 홈 → 런처 → 앱, 홈 알약은 앱 → 런처 → 홈, 다른 이벤트는 그대로', () => {
+  const p: GlassScreen = { name: 'permission' };
+  const home = glassReduce(p, { type: 'allow' });
+  assert.deepEqual(home, { name: 'home' });
+  assert.equal(glassReduce(p, { type: 'open-framelet' }), p, '허용 전에는 홈을 건너뛰지 않는다');
+  const launcher = glassReduce(home, { type: 'open-framelet' });
+  assert.deepEqual(launcher, { name: 'launcher' });
+  assert.equal(glassReduce(home, { type: 'open-app', app: 'calorie' }), home, '홈에서 바로 앱을 열지 않는다');
+  const app = glassReduce(launcher, { type: 'open-app', app: 'outfit' });
+  assert.deepEqual(app, { name: 'app', app: 'outfit' });
+  assert.deepEqual(glassReduce(app, { type: 'home-pill' }), { name: 'launcher' });
+  assert.deepEqual(glassReduce(launcher, { type: 'home-pill' }), { name: 'home' });
+  assert.equal(glassReduce(home, { type: 'home-pill' }), home);
+  assert.equal(glassReduce(app, { type: 'allow' }), app);
+});
+
+check('enabledKind·cameraFor: 플러그인은 앱 화면에서 그 하나만, 터치 기기는 가로여도 후면 카메라', () => {
+  assert.equal(enabledKind({ name: 'app', app: 'tamper' }), 'tamper');
+  for (const name of ['permission', 'home', 'launcher'] as const) assert.equal(enabledKind({ name }), null);
+  assert.equal(cameraFor('desktop', true), 'rear', '아이폰 가로 874px는 폭으로는 데스크톱');
+  assert.equal(cameraFor('phone', false), 'rear');
+  assert.equal(cameraFor('desktop', false), 'webcam');
+});
+
+check('homeApps·homeRows: 4/5/4 열세 칸, 정가운데(둘째 줄 3번째)가 framelet', () => {
+  assert.deepEqual([...HOME_ROWS], [4, 5, 4]);
+  const apps = homeApps(APP_NAME);
+  assert.equal(apps.length, 13);
+  assert.equal(new Set(apps.map((a) => a.id)).size, 13, '같은 앱이 두 번 나오지 않는다');
+  const rows = homeRows(apps);
+  assert.deepEqual(rows.map((r) => r.length), [4, 5, 4]);
+  assert.equal(rows[1]![2]!.id, 'framelet');
+  assert.equal(rows[1]![2]!.label, APP_NAME);
+  assert.equal(apps[HOME_CENTER]!.id, 'framelet');
+  assert.equal(apps.filter((a) => a.id === 'framelet').length, 1);
 });
 
 console.log(`\n${passed}개 통과`);

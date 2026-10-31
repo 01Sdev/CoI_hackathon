@@ -1,12 +1,13 @@
 // 메인 화면(/). 휴대폰 웹은 스마트 글래스가 없어 그 시야를 휴대폰 브라우저로 그대로 흉내 내는 화면이다(앱 화면이 아니다).
-// 그래서 기본은 카메라 전체 화면 + 글래스 HUD(#44 흰 틀·동의 수, 플러그인 화면, 코디 스캔)뿐이다(사용자 결정 2026-11-01: 지금 UI는
-// 최대한 걷어 내고 플랫폼은 #44를 따른다). 휴대폰·데스크톱 모두 같다.
-// ?tools를 붙이면 예전 도구 배치(위쪽 줄·하단 시트, 데스크톱은 오른쪽 탭·발표자 컨트롤)를 보인다. 기록·확인 화면·앱 관리·비교 모드는 거기 있다.
+// 기본은 글래스 흐름(GlassFlow): 카메라 허용 → AR 홈 → framelet 런처 → 고른 앱의 글래스 HUD(#44 흰 틀, 플러그인 화면, 코디 스캔).
+// 휴대폰·데스크톱 모두 같다(사용자 요구 2026-11-01, docs/designs/glass-home.md. 플랫폼은 #44를 따른다).
+// ?tools를 붙이면 예전 시작 화면과 도구 배치(위쪽 줄·하단 시트, 데스크톱은 오른쪽 탭·발표자 컨트롤)를 보인다. 기록·확인 화면·앱 관리·비교 모드는 거기 있다.
 
 import { useState } from 'react';
 import { useLensStore } from '../core/store';
 import type { InputKind } from '../core/types';
 import { ConfirmScreen } from '../proof/ConfirmScreen';
+import { GlassFlow } from './GlassFlow';
 import { LogSheet } from '../proof/LogSheet';
 import { Hud } from './Hud';
 import { useOutwardPublisher } from './outward';
@@ -33,6 +34,8 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
   // 바깥 표시(/outward)는 휴대폰·데스크톱 메인 창만 보낸다. /hud 창까지 보내면 두 값이 번갈아 보인다.
   useOutwardPublisher();
 
+  if (!TOOLS) return <GlassFlow layout={layout.mode} autostart={autostart} />;
+
   if (!started) {
     const start = (kind: InputKind) => {
       unlockAudio();
@@ -40,17 +43,6 @@ export function MainScreen({ autostart = false }: { autostart?: boolean }) {
       setStarted(true);
     };
     return <StartScreen layout={layout.mode} onStart={start} />;
-  }
-
-  if (!TOOLS) {
-    return (
-      <div className="fm-glassview">
-        <Stage className="fm-glassview__stage">
-          <EngineGate ready={<Hud variant="phone" />} />
-          <CameraFallbackNotice />
-        </Stage>
-      </div>
-    );
   }
 
   if (layout.mode === 'desktop') {

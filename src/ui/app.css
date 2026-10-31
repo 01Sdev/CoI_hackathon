@@ -1059,20 +1059,6 @@ button.fm-logcard:focus-visible,
   outline-offset: 2px;
 }
 
-/* ── 글래스 시야(기본 메인 화면): 카메라 전체 화면 + HUD만 ── */
-.fm-glassview {
-  position: relative;
-  block-size: 100dvh;
-  overflow: hidden;
-}
-.fm-glassview__stage {
-  position: absolute;
-  inset: 0;
-}
-.fm-glassview .fm-stage {
-  --fm-bottom-gap: calc(env(safe-area-inset-bottom, 0px) + 96px);
-}
-
 .fm-sheet {
   transition:
     max-block-size 320ms var(--fm-ease),

@@ -1,0 +1,299 @@
+/* 글래스 AR 홈 흐름(GlassFlow, docs/designs/glass-home.md). 아이폰 사파리 가로(874×402 근처)를 기준으로 맞추고 세로(390×844)도 깨지지 않게 한다.
+   100dvh와 safe-area inset을 쓰고, 누를 곳은 44px 이상이다. 아이콘 모양은 비전 프로 홈: 원형 아이콘 + 아래 작은 흰 글자와 그림자. */
+
+.fm-glasshome {
+  position: relative;
+  block-size: 100dvh;
+  overflow: hidden;
+  background: #000;
+}
+/* app.css(.fm-stage)가 이 파일보다 뒤에 들어가므로 두 클래스로 이긴다 */
+.fm-glasshome .fm-glasshome__stage {
+  position: absolute;
+  inset: 0;
+}
+.fm-glasshome .fm-stage {
+  --fm-bottom-gap: calc(env(safe-area-inset-bottom, 0px) + 96px);
+  --fm-talk-bottom: 52px;
+}
+
+/* 글래스 시야 느낌: 가장자리를 살짝 어둡게(비네트) + 렌즈 테두리처럼 둥근 시야 가장자리. 시야각 숫자는 적지 않는다 */
+.fm-glasshome__lens {
+  position: absolute;
+  inset: max(6px, env(safe-area-inset-top, 0px)) max(6px, env(safe-area-inset-right, 0px)) max(6px, env(safe-area-inset-bottom, 0px))
+    max(6px, env(safe-area-inset-left, 0px));
+  z-index: 3;
+  border-radius: clamp(28px, 7vmin, 56px);
+  background: radial-gradient(ellipse at center, transparent 58%, rgb(0 0 0 / 0.42) 100%);
+  box-shadow: 0 0 0 100vmax #000;
+  pointer-events: none;
+}
+
+/* ── 원형 앱 아이콘(홈·런처 공통) ── */
+.fm-ar__app {
+  --fm-press: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  inline-size: calc(var(--fm-ar-icon) * 1.32);
+  min-block-size: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.fm-ar__icon {
+  display: grid;
+  place-items: center;
+  inline-size: var(--fm-ar-icon);
+  block-size: var(--fm-ar-icon);
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow:
+    0 6px 18px rgb(0 0 0 / 0.35),
+    inset 0 0 0 1px rgb(255 255 255 / 0.18);
+  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.fm-ar__glyph {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+.fm-ar__app[data-pressed='true'] .fm-ar__icon {
+  transform: scale(0.92);
+}
+.fm-ar__app:focus-visible {
+  outline: none;
+}
+.fm-ar__app:focus-visible .fm-ar__icon {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+.fm-ar__label {
+  max-inline-size: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.75),
+    0 0 8px rgb(0 0 0 / 0.45);
+}
+
+/* ── AR 홈: 4/5/4, 가운데 정렬. 가로에서는 높이, 세로에서는 폭이 아이콘 크기를 정한다 ── */
+.fm-ar {
+  --fm-ar-icon: clamp(44px, min(15dvh, 13.5vw), 76px);
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 2.6dvh, 22px);
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) calc(env(safe-area-inset-bottom, 0px) + 24px)
+    env(safe-area-inset-left, 0px);
+  animation: fm-ar-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.fm-ar__row {
+  display: flex;
+  justify-content: center;
+}
+
+/* ── framelet 런처: 버튼 넷(가로 한 줄, 세로 2×2)을 #44 흰 틀이 감싼다 ── */
+.fm-launcher {
+  --fm-ar-icon: clamp(52px, min(19dvh, 17vw), 84px);
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) calc(env(safe-area-inset-bottom, 0px) + 28px)
+    env(safe-area-inset-left, 0px);
+  transform-origin: var(--fm-launch-x, 50%) var(--fm-launch-y, 50%);
+  animation: fm-launch-in 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.fm-launcher__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.7);
+}
+.fm-launcher__mark {
+  display: block;
+  inline-size: 22px;
+  block-size: 22px;
+}
+.fm-launcher__box {
+  position: relative;
+  padding: clamp(18px, 5dvh, 32px) clamp(18px, 4vw, 40px);
+}
+/* #44 흰 틀 모양(selection-frame.css)을 장식으로만 쓴다: 끌 수 없고 누를 수 없다 */
+.fm-launcher__deco .fm-launcher__frame {
+  inset: 0;
+}
+.fm-launcher__deco .fm-selection__handle {
+  pointer-events: none;
+}
+.fm-launcher__grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: clamp(8px, 2vw, 20px);
+}
+@media (orientation: portrait) {
+  .fm-launcher__grid {
+    grid-template-columns: repeat(2, auto);
+    row-gap: 22px;
+  }
+}
+.fm-launcher__app .fm-ar__label {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* ── 알림과 홈 알약 ── */
+.fm-glasshome__toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 52px);
+  z-index: 9;
+  translate: -50% 0;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgb(20 20 24 / 0.72);
+  color: #fff;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: fm-ar-in 200ms ease-out both;
+}
+/* 비전 프로 디지털 크라운 역할. 보이는 알약은 작지만 누를 자리는 44px 이상 */
+.fm-glasshome__pill {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 4px);
+  z-index: 9;
+  translate: -50% 0;
+  display: grid;
+  place-items: center;
+  inline-size: 96px;
+  block-size: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.fm-glasshome__pill > span {
+  inline-size: 56px;
+  block-size: 6px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.85);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+}
+.fm-glasshome__pill:focus-visible > span {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+
+/* ── 카메라 허용 화면 ── */
+.fm-glassperm {
+  display: grid;
+  place-items: center;
+  min-block-size: 100dvh;
+  padding: max(24px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px))
+    max(24px, env(safe-area-inset-left, 0px));
+  background: radial-gradient(ellipse at 50% 40%, #1b1d22 0%, #050506 70%);
+  color: #fff;
+  text-align: center;
+}
+.fm-glassperm__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-inline-size: 420px;
+}
+.fm-glassperm__mark {
+  display: block;
+  inline-size: 56px;
+  block-size: 56px;
+}
+.fm-glassperm__title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 700;
+}
+.fm-glassperm__lines {
+  margin: 0;
+  color: rgb(255 255 255 / 0.72);
+  font-size: 14px;
+  line-height: 21px;
+}
+.fm-glassperm__allow {
+  min-block-size: 48px;
+  min-inline-size: 200px;
+  margin-top: 8px;
+  padding: 0 28px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #000;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.fm-glassperm__allow:focus-visible {
+  outline: 2px solid #19ae9f;
+  outline-offset: 3px;
+}
+.fm-glassperm__note {
+  color: rgb(255 255 255 / 0.5);
+  font-size: 12px;
+}
+
+@keyframes fm-ar-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes fm-launch-in {
+  from {
+    opacity: 0;
+    transform: scale(0.18);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fm-ar,
+  .fm-launcher,
+  .fm-glasshome__toast {
+    animation: none;
+  }
+  .fm-ar__icon {
+    transition: none;
+  }
+}
