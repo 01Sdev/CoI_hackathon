@@ -247,7 +247,9 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
       (want) => {
         if (!want) return;
         if (!want.enabled) {
-          if (st().plugins[id]?.status !== 'terminated') st().setPluginRuntime(id, { status: 'terminated', runtimeId: null, runtimePolicy: null });
+          // stopped(전환 실패)는 스토어가 enabled를 끄며 생긴 변화라 그대로 둔다. 사용자가 다시 켜야 풀린다.
+          const status = st().plugins[id]?.status;
+          if (status !== 'terminated' && status !== 'stopped') st().setPluginRuntime(id, { status: 'terminated', runtimeId: null, runtimePolicy: null });
           return;
         }
         st().setPluginRuntime(id, { status: 'loading' });
