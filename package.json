@@ -13,7 +13,8 @@
     "check:plugins": "tsx scripts/check-plugins.ts",
     "check:api": "tsx scripts/check-api.ts",
     "check:ui": "tsx scripts/check-ui.ts",
-    "check:runtime": "tsx scripts/check-runtime.ts"
+    "check:runtime": "tsx scripts/check-runtime.ts",
+    "check:boot": "tsx scripts/check-boot.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.135.0",
