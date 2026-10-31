@@ -62,8 +62,8 @@
 - **결정(2026-10-31):** Selfie는 2단계 가림의 모양만 정한다(PRD F23, SRS FR-016a, P1, 1차 통합 뒤). 범위·분기·카운터·출구 재검사는 BlazeFace와 사람 검출 그대로. 트랙 A가 BlazeFace 경로를 끝낸 뒤 맡는다.
 
 
-- [ ] 물체 판정 모델: MediaPipe Tasks `ObjectDetector`가 읽는 `.tflite`(메타데이터 포함). COCO `pizza` 클래스가 있어야 한다. 지금 명세 기준은 EfficientDet-Lite0
-  - 2026-10-31: 공식 주소 파일(`object_detector/efficientdet_lite0/float32/1/`)과 해시는 같다. 이 파일의 라이선스 문구를 찾지 못해 넣지 않았다(PR #5 `THIRD_PARTY_NOTICES.md` 4절에 찾아본 곳). 사용자 결정 대기
+- [x] 물체 판정 모델: MediaPipe Tasks `ObjectDetector`가 읽는 `.tflite`(메타데이터 포함). COCO `pizza` 클래스가 있어야 한다. 지금 명세 기준은 EfficientDet-Lite0
+  - 2026-10-31: `efficientdet_lite0.tflite`(float32)를 PR #5에 넣었다. 이 파일을 다루는 라이선스 문구는 없다. Kaggle `tensorflow/efficientdet`의 TFLite lite0 변형이 Apache 2.0인 것을 간접 근거로 삼기로 사용자가 정했다(`THIRD_PARTY_NOTICES.md` 4절)
 - [x] 얼굴 모델: MediaPipe `FaceDetector`용 `.tflite`. 명세 기준은 BlazeFace short-range(약 2m 안의 얼굴용, V2 참고)
   - 2026-10-31: `blaze_face_short_range.tflite`를 PR #5에 넣었다. 모델 카드 Apache-2.0
 - [x] Selfie 모델: `selfie_multiclass_256x256.tflite`를 `track-a/selfie-mask`에 넣었다(e465282). 모델 카드 Apache-2.0
