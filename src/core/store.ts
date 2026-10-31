@@ -12,11 +12,12 @@ import { createStore } from 'zustand/vanilla';
 import { LOG_LIMIT, RECENT_WINDOW_MS, SKIP_DEDUP_MS, THROUGHPUT_WINDOW_MS } from './constants';
 import { resolveAllowedOrigins, validateManifest, type ManifestResult } from './manifest';
 import { PLUGIN_SEEDS, type PluginSeed } from './plugins';
-import { selectCanSend } from './selectors';
+import { selectCanSend, selectDesiredRuntime, type DesiredRuntime } from './selectors';
 import type {
   Counter,
   Delivery,
   Detection,
+  EngineState,
   InputKind,
   InputSource,
   LiveObservation,
@@ -35,7 +36,10 @@ export type NewLogEntry = Omit<LogEntry, 'id' | 'sessionId' | 'at' | 'deliveryId
 export type NewDetection = Omit<Detection, 'id' | 'logEntryId'>;
 export type NewDelivery = Omit<Delivery, 'id' | 'sendStatus' | 'ackSha256' | 'ackStatus' | 'processedAt'>;
 export type NewSceneDecision = Omit<SceneDecision, 'id' | 'sessionId' | 'confirmedAt'>;
-export type RuntimePatch = Partial<Pick<Plugin, 'status' | 'runtimeId' | 'runtimePolicy' | 'gateOpen'>>;
+export type RuntimePatch = Partial<Pick<Plugin, 'status' | 'runtimeId' | 'runtimePolicy' | 'gateOpen'>> & {
+  /** 게이트를 열 때(gateOpen: true) 그 iframe을 만든 때의 selectDesiredRuntime 값. 지금 값과 다르면 스토어가 게이트를 닫아 둔다. */
+  desired?: DesiredRuntime;
+};
 
 export interface LensState {
   session: Session;
@@ -50,6 +54,8 @@ export interface LensState {
   detections: Record<string, Detection[]>;
   counter: Counter;
   liveObservation: LiveObservation | null;
+  /** 판정 엔진 준비 상태. 새 세션에도 유지된다(모델은 다시 받지 않는다). */
+  engine: EngineState;
   /** pluginId → 최신 결과 줄. */
   results: Record<string, ResultLine>;
   /** `${pluginId}|${reason}` → 마지막으로 받은 skip 시각. 버려진 skip은 시각을 바꾸지 않는다. */
@@ -76,6 +82,8 @@ export interface LensState {
   /** cooldownUntil을 생략하면 기존 값 유지. */
   setPluginBusy(pluginId: string, busy: boolean, cooldownUntil?: number): void;
   setLiveObservation(obs: LiveObservation | null): void;
+  /** 바꿀 필드만 넘긴다. failed면 A는 포착도 멈춘다(전달 정지). */
+  setEngine(patch: Partial<EngineState>): void;
   addSceneDecision(d: NewSceneDecision): SceneDecision;
   /** hold·skip·violation만. skip이 같은 플러그인·같은 사유로 10초 안에 또 오면 버리고 null. hold는 window60s.holds +1. */
   addLog(entry: NewLogEntry, detections?: readonly NewDetection[]): LogEntry | null;
@@ -94,14 +102,21 @@ export interface LensState {
   recordRuns(runs: { stage0Runs?: number; faceDetectRuns?: number; sourceFrames?: number }): void;
 
   // ── B(격리·플러그인) ──
-  /** status가 ready가 아니면 gateOpen = false로 강제. stopped·terminated면 enabled = false(사용자가 다시 켜야 함). */
+  /**
+   * status가 ready가 아니면 gateOpen = false로 강제. stopped·terminated면 enabled = false(사용자가 다시 켜야 함).
+   * gateOpen: true와 함께 desired를 주면, 지금 selectDesiredRuntime과 다를 때 게이트를 열지 않는다(낡은 정책 방지).
+   */
   setPluginRuntime(pluginId: string, patch: RuntimePatch): void;
   /** prepared에서만 바뀌고 true. dispatched일 때만 Counter에 쌓는다. 바뀐 뒤 스토어의 Blob 참조를 놓는다. */
   markDelivery(deliveryId: string, status: 'dispatched' | 'failed'): boolean;
   /** dispatched·pending일 때만 받고 true. sha256 = null이면 timeout(타이머는 B). 불일치면 violation 로그. */
   setAck(deliveryId: string, sha256: string | null): boolean;
-  /** source가 api면 counter.apiSends +1(플러그인 자기 보고 기준). */
-  setResult(pluginId: string, line: ResultLine): void;
+  /**
+   * 결과 줄. 이 플러그인에 실제로 보낸(dispatched) 전달의 첫 결과일 때만 받고 true.
+   * 없는 전달·보내지 않은 전달·다른 플러그인·두 번째 결과·새 세션 전의 결과는 버리고 false.
+   * 받은 결과의 source가 api면 counter.apiSends +1(플러그인 자기 보고 기준).
+   */
+  setResult(pluginId: string, line: ResultLine): boolean;
 }
 
 export interface LensStoreOptions {
@@ -137,6 +152,10 @@ export function createLensStore(opts: LensStoreOptions = {}) {
     ((url: string) => {
       if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url);
     });
+  /** 결과 줄을 이미 받은 deliveryId. 새 세션에서 비운다. */
+  const answered = new Set<string>();
+  const sameDesired = (a: DesiredRuntime, b: DesiredRuntime) =>
+    a.enabled === b.enabled && a.manifestVersion === b.manifestVersion && a.connect === b.connect && a.sessionId === b.sessionId;
   const revoke = (url: string | null) => {
     if (url) revokeUrl(url);
   };
@@ -247,6 +266,7 @@ export function createLensStore(opts: LensStoreOptions = {}) {
         detections: {},
         counter: emptyCounter(initial.id),
         liveObservation: null,
+        engine: { status: 'idle', loadedBytes: null, totalBytes: null, detail: null },
         results: {},
         lastSkipAt: {},
 
@@ -307,6 +327,7 @@ export function createLensStore(opts: LensStoreOptions = {}) {
 
         startNewSession: () =>
           set((s) => {
+            answered.clear();
             for (const d of Object.values(s.deliveries)) revoke(d.thumbnailRef);
             const session = freshSession(s.session);
             const plugins: Record<string, Plugin> = {};
@@ -351,6 +372,8 @@ export function createLensStore(opts: LensStoreOptions = {}) {
           }),
 
         setLiveObservation: (obs) => set({ liveObservation: obs }),
+
+        setEngine: (patch) => set((s) => ({ engine: { ...s.engine, ...patch } })),
 
         addSceneDecision: (d) => {
           const decision: SceneDecision = { ...d, id: newId('scene'), sessionId: get().session.id, confirmedAt: clock() };
@@ -405,8 +428,13 @@ export function createLensStore(opts: LensStoreOptions = {}) {
           set((s) => {
             const p = s.plugins[pluginId];
             if (!p) return {};
-            const next: Plugin = { ...p, ...patch };
+            const { desired, ...fields } = patch;
+            const next: Plugin = { ...p, ...fields };
             if (next.status !== 'ready') next.gateOpen = false;
+            if (fields.gateOpen && desired) {
+              const now = selectDesiredRuntime(s, pluginId);
+              if (!now || !sameDesired(now, desired)) next.gateOpen = false;
+            }
             if (patch.status === 'stopped' || patch.status === 'terminated') next.enabled = false;
             return { plugins: { ...s.plugins, [pluginId]: next } };
           }),
@@ -460,11 +488,16 @@ export function createLensStore(opts: LensStoreOptions = {}) {
           return true;
         },
 
-        setResult: (pluginId, line) =>
+        setResult: (pluginId, line) => {
+          const d = get().deliveries[line.deliveryId];
+          if (!d || d.pluginId !== pluginId || d.sendStatus !== 'dispatched' || answered.has(line.deliveryId)) return false;
+          answered.add(line.deliveryId);
           set((s) => ({
             results: { ...s.results, [pluginId]: line },
             counter: line.source === 'api' ? { ...s.counter, apiSends: s.counter.apiSends + 1 } : s.counter,
-          })),
+          }));
+          return true;
+        },
       };
     }),
   );
