@@ -2,9 +2,9 @@
 // 시간 인자 now는 performance.now() 기준이다(Date.now()를 넘기면 기록이 모두 지난 것으로 보인다).
 // 기간 판정은 tick에 기대지 않고 여기서 직접 한다. tick은 메모리 정리와 화면 갱신용이다.
 
-import { RECENT_WINDOW_MS, THROUGHPUT_WINDOW_MS } from './constants';
+import { CONSENT_LOST_MS, RECENT_WINDOW_MS, THROUGHPUT_WINDOW_MS } from './constants';
 import type { LensState } from './store';
-import type { RuntimePolicy } from './types';
+import type { Consent, RuntimePolicy } from './types';
 
 type CounterView = Pick<LensState, 'counter'>;
 
@@ -87,4 +87,19 @@ export function selectThroughput(s: CounterView, now: number = perfNow()): Throu
   }
   const ratio = t.sourceFrames > 0 ? (t.stage0Runs + t.faceDetectRuns) / (2 * t.sourceFrames) : null;
   return { ...t, ratio };
+}
+
+/** 코디 스캔 동의가 아직 살아 있는가: 만료 전이고 CONSENT_LOST_MS 안에 보였다. tick에 기대지 않는다. */
+export function consentAlive(c: Consent, now: number): boolean {
+  return now < c.expiresAt && now - c.lastSeenAt <= CONSENT_LOST_MS;
+}
+
+/** 살아 있는 동의 목록. A가 코디 스캔 조각을 만들 때 쓴다. */
+export function selectActiveConsents(s: Pick<LensState, 'consents'>, now: number = perfNow()): Consent[] {
+  return Object.values(s.consents).filter((c) => consentAlive(c, now));
+}
+
+/** 흰 틀의 사람 수(#44 SelectionFrame peopleCount) = 살아 있는 동의 수. 평소 0. */
+export function selectConsentCount(s: Pick<LensState, 'consents'>, now: number = perfNow()): number {
+  return selectActiveConsents(s, now).length;
 }

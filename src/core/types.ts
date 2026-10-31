@@ -7,7 +7,7 @@ import type { Manifest } from './manifest';
 export type SceneLabel = 'food' | 'person' | 'none';
 export type InputKind = 'webcam' | 'rear' | 'video';
 export type ViewMode = 'phone' | 'desktop' | 'hud' | 'outward';
-export type PluginKind = 'calorie' | 'tamper' | 'hello';
+export type PluginKind = 'calorie' | 'tamper' | 'hello' | 'outfit';
 export type PluginStatus = 'loading' | 'ready' | 'stopped' | 'terminated';
 export type Branch = '2a' | '2b' | '2c' | '2d' | 'raw';
 export type DeliveryBranch = Exclude<Branch, '2d'>;
@@ -15,7 +15,8 @@ export type LogKind = 'deliver' | 'hold' | 'skip' | 'violation';
 export type Enforced = 'host' | 'plugin-report';
 export type SendStatus = 'prepared' | 'dispatched' | 'failed';
 export type AckStatus = 'pending' | 'match' | 'mismatch' | 'timeout';
-export type MaskKind = 'none' | 'face' | 'head';
+/** body: 코디 스캔 조각에 들어온, 동의하지 않은 사람의 몸 전체(docs/designs/outfit-pipelines.md). */
+export type MaskKind = 'none' | 'face' | 'head' | 'body';
 
 /** 좌표. 단위는 필드 설명을 따른다(0~1 비율 또는 원본 px). */
 export interface Box {
@@ -242,4 +243,43 @@ export interface UsageSample {
   at: number;
   /** 그 Delivery의 thumbnailRef를 같이 쓴다. 로그에서 밀려나도 여기 남아 있으면 해제하지 않는다. */
   thumbnailRef: string;
+}
+
+// ── 코디 스캔(docs/designs/outfit-pipelines.md) ──
+
+/** 시야 가운데 원 안에 GAZE_DWELL_MS 넘게 머문 사람. A가 쓰고 C가 그 근처에 "마스크 해제" 칩을 띄운다. */
+export interface GazeCandidate {
+  /** A가 0단계 사람 상자를 IoU로 이어 붙인 id. 사람 신원과 무관하고 세션 안에서만 쓴다. */
+  trackId: string;
+  /** 원본 프레임 0~1. */
+  box: Box;
+  /** 이 사람이 가운데 원에 들어온 때(performance.now). */
+  since: number;
+}
+
+/** 착용자가 "마스크 해제"로 허락한 사람. 이 사람만 코디 스캔에 보낸다. 얼굴은 늘 가린다. */
+export interface Consent {
+  trackId: string;
+  /** 마지막으로 본 상자(원본 프레임 0~1). A가 touchConsent로 갱신한다. */
+  box: Box;
+  grantedAt: number;
+  lastSeenAt: number;
+  /** grantedAt + CONSENT_MAX_MS. */
+  expiresAt: number;
+}
+
+/** 코디 스캔에 말로 물은 한 번. 호스트(B)가 asking을 question으로 보내고, answer를 받으면 recordAnswer. */
+export interface OutfitTurn {
+  id: string;
+  pluginId: string;
+  /** 질문과 함께 보낸 조각(그 플러그인에 dispatched된 가장 최근 전달). */
+  deliveryId: string | null;
+  question: string;
+  answer: string | null;
+  status: 'asking' | 'answered' | 'failed';
+  source: 'api' | 'fallback' | null;
+  /** failed일 때 짧은 사유(호스트 문구). */
+  failReason: string | null;
+  askedAt: number;
+  answeredAt: number | null;
 }
