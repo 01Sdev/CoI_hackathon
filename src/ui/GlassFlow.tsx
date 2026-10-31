@@ -1,5 +1,5 @@
 // "/" 첫 진입 흐름(docs/designs/glass-home.md, 사용자 요구 2026-11-01). 스마트 글래스가 없어 아이폰 사파리로 글래스 시야를 흉내 낸다.
-// 카메라 허용 → AR 홈(비전 프로 배치 4/5/4, 정가운데 framelet) → framelet 런처(칼로리·코디 스캔·변조 시험·추가...) → 고른 앱.
+// 카메라 권한 질문 → AR 홈(비전 프로 배치 4/5/4, 정가운데 framelet) → framelet 런처(칼로리·코디 스캔·변조 시험·추가...) → 고른 앱.
 // 카메라 영상은 A의 mountPreview(Stage의 Preview)가 그리고, 광각 휘어짐도 A가 입력 단계에서 넣는다. C는 <video>·원본 픽셀을 만지지 않는다.
 // 글래스 느낌은 가장자리를 살짝 어둡게 하는 비네트와 둥근 시야 가장자리로만 낸다(시야각 숫자는 적지 않는다).
 // 플러그인은 런처에서 고를 때 그 하나만 켜고, 런처·홈으로 돌아오면 끈다(setPluginEnabled). 앱 화면은 기존 글래스 HUD(Hud)다.
@@ -41,15 +41,13 @@ export function GlassFlow({ layout, autostart = false }: { layout: LayoutMode; a
   if (screen.name === 'permission') {
     // 아이폰 가로(874px)는 폭으로는 데스크톱이라, 폭이 아니라 터치 기기인지로 후면 카메라를 고른다.
     const camera: InputKind = cameraFor(layout, typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
-    return (
-      <Permission
-        onAllow={() => {
-          unlockAudio();
-          selectInput(camera);
-          dispatch({ type: 'allow' });
-        }}
-      />
-    );
+    // 고르면 둘 다 홈으로 간다. "허용 안 함"은 거부 경로와 같은 녹화 영상이다.
+    const start = (kind: InputKind) => {
+      unlockAudio();
+      selectInput(kind);
+      dispatch({ type: 'allow' });
+    };
+    return <Permission onAllow={() => start(camera)} onDeny={() => start('video')} />;
   }
 
   const say = (text: string) => setToast((t) => ({ text, n: (t?.n ?? 0) + 1 }));
@@ -106,23 +104,22 @@ function usePluginsFor(screen: GlassScreen) {
   }, [want]);
 }
 
-function Permission({ onAllow }: { onAllow(): void }) {
+/** 카메라 권한만 담백하게 묻는다(사용자 요청 2026-11-01): 질문 한 줄과 버튼 둘. */
+function Permission({ onAllow, onDeny }: { onAllow(): void; onDeny(): void }) {
   return (
     <main className="fm-glassperm">
-      <div className="fm-glassperm__body">
-        <span className="fm-glassperm__mark">
-          <FrameletMark />
-        </span>
-        <h1 className="fm-glassperm__title">스마트 글래스 시야로 봐요</h1>
-        <p className="fm-glassperm__lines">
-          이 휴대폰을 글래스처럼 들고 보세요.
-          <br />
-          카메라 화면 위에 글래스 홈이 떠요. 판정은 이 기기 안에서 해요.
+      <div className="fm-glassperm__body" role="dialog" aria-labelledby="fm-glassperm-q">
+        <p id="fm-glassperm-q" className="fm-glassperm__question">
+          카메라 권한을 허용할까요?
         </p>
-        <button type="button" className="fm-glassperm__allow" onClick={onAllow}>
-          카메라 허용
-        </button>
-        <span className="fm-glassperm__note">허용하지 않으면 녹화 영상으로 보여 드려요</span>
+        <div className="fm-glassperm__actions">
+          <button type="button" className="fm-glassperm__btn" onClick={onDeny}>
+            허용 안 함
+          </button>
+          <button type="button" className="fm-glassperm__btn fm-glassperm__btn--primary" onClick={onAllow}>
+            허용
+          </button>
+        </div>
       </div>
     </main>
   );

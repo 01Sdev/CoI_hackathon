@@ -216,14 +216,14 @@
   outline-offset: 4px;
 }
 
-/* ── 카메라 허용 화면 ── */
+/* ── 카메라 권한 질문: 질문 한 줄과 버튼 둘(허용 안 함 / 허용) ── */
 .fm-glassperm {
   display: grid;
   place-items: center;
   min-block-size: 100dvh;
   padding: max(24px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px))
     max(24px, env(safe-area-inset-left, 0px));
-  background: radial-gradient(ellipse at 50% 40%, #1b1d22 0%, #050506 70%);
+  background: #000;
   color: #fff;
   text-align: center;
 }
@@ -231,48 +231,41 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 20px;
+}
+.fm-glassperm__question {
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+}
+.fm-glassperm__actions {
+  display: flex;
   gap: 12px;
-  max-inline-size: 420px;
 }
-.fm-glassperm__mark {
-  display: block;
-  inline-size: 56px;
-  block-size: 56px;
-}
-.fm-glassperm__title {
-  margin: 0;
-  font-size: 22px;
-  line-height: 30px;
-  font-weight: 700;
-}
-.fm-glassperm__lines {
-  margin: 0;
-  color: rgb(255 255 255 / 0.72);
-  font-size: 14px;
-  line-height: 21px;
-}
-.fm-glassperm__allow {
-  min-block-size: 48px;
-  min-inline-size: 200px;
-  margin-top: 8px;
-  padding: 0 28px;
-  border: 0;
+.fm-glassperm__btn {
+  min-block-size: 44px;
+  min-inline-size: 120px;
+  padding: 0 20px;
+  border: 1px solid rgb(255 255 255 / 0.35);
   border-radius: 999px;
-  background: #fff;
-  color: #000;
+  background: none;
+  color: #fff;
   font: inherit;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   touch-action: manipulation;
 }
-.fm-glassperm__allow:focus-visible {
+.fm-glassperm__btn--primary {
+  border-color: #fff;
+  background: #fff;
+  color: #000;
+  font-weight: 600;
+}
+.fm-glassperm__btn:focus-visible {
   outline: 2px solid #19ae9f;
   outline-offset: 3px;
-}
-.fm-glassperm__note {
-  color: rgb(255 255 255 / 0.5);
-  font-size: 12px;
 }
 
 @keyframes fm-ar-in {
