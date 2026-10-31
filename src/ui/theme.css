@@ -2,6 +2,8 @@
  * famelet 디자인 토큰. 근거: docs/designs/design-system.md (팀 시안 "LensGate OS" Dark/Light를 따르고 다듬은 것).
  * 테마는 <html data-theme="dark|light">. 기본은 dark(시안: 어두운 실내·야간·기본값). /hud는 항상 dark + 유리 없음.
  * 색은 의미에만 쓴다: safe = 아무도 넘어가지 않음, exposed = 비교 모드·노출, blocked = 차단, hold = 보류(색 없음).
+ * lens(파랑)는 의미가 없는 유일한 색이다: 브랜드 점, 데이터 선, 로딩 스캔, 키보드 포커스.
+ * 글자 규칙(design-system.md §5): Text는 55% 이상 유리, Sub는 74% 유리에만, 32% 유리에는 글자를 두지 않는다.
  */
 
 @import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
@@ -13,12 +15,13 @@
 
   --fm-bg: #0c0b0a;
   --fm-text: #ffffff;
-  --fm-sub: #b5a99a;
+  /* 시안 #B5A99A에서 밝힘: 74% 유리·흰 물체 위 대비 3.6 → 4.8 */
+  --fm-sub: #cfc3b4;
   --fm-safe: #4ade80;
   --fm-exposed: #f2b45a;
   --fm-blocked: #f87171;
-  /* 브랜드 표시 전용. HUD 안에서는 쓰지 않는다(차단 빨강과 헷갈림). */
-  --fm-clay: #e08a7a;
+  /* 시안 Clay #E08A7A 대체: 차단 빨강과 색차 6 → 28 */
+  --fm-lens: #71bfff;
   /* 채운 버튼의 글자색 */
   --fm-on-text: #0c0b0a;
 
@@ -42,7 +45,8 @@
   --fm-safe: #15803d;
   --fm-exposed: #a15c07;
   --fm-blocked: #c53030;
-  --fm-clay: #b85a45;
+  /* 시안 Clay #B85A45 대체: 차단·노출과 색차 7 → 24 이상 */
+  --fm-lens: #286cab;
   --fm-on-text: #ffffff;
 
   --fm-glass-panel: rgb(255 253 250 / 0.74);
@@ -58,6 +62,8 @@
 :root {
   --fm-font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo',
     'Noto Sans KR', sans-serif;
+  /* 판독값(바이트·비율·점수·시각·코드). 기기 내장 고정폭이라 내려받지 않는다. */
+  --fm-font-mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
   /* 보조 설명 전용. 12px 미만으로 쓰지 않는다. */
   --fm-font-serif: 'Noto Serif KR', 'AppleMyungjo', serif;
 
@@ -94,6 +100,7 @@
   --fm-safe: #4ade80;
   --fm-exposed: #f2b45a;
   --fm-blocked: #f87171;
+  --fm-lens: #71bfff;
   --fm-on-text: #000000;
   --fm-glass-panel: transparent;
   --fm-glass-capsule: transparent;
@@ -244,16 +251,128 @@ body {
   font-size: var(--fm-size-counter-sm);
   border-width: 2px;
 }
+/* 다이얼 눈금(60칸) */
+.fm-orb::before {
+  content: '';
+  position: absolute;
+  inset: -15px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    color-mix(in srgb, var(--fm-tone, var(--fm-safe)) 50%, transparent) 0 0.8deg,
+    transparent 0.8deg 6deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4.5px));
+  pointer-events: none;
+}
+/* 10초 창 남은 시간 호. M ≥ 1일 때 --fm-window(1 → 0)를 C가 넣는다. 0이 되면 M이 0으로 돌아간다 */
+.fm-orb::after {
+  content: '';
+  position: absolute;
+  inset: -15px;
+  border-radius: 50%;
+  background: conic-gradient(var(--fm-tone, var(--fm-safe)) calc(var(--fm-window, 0) * 360deg), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  pointer-events: none;
+}
+.fm-orb--sm::before,
+.fm-orb--sm::after {
+  inset: -11px;
+}
 
-/* ── 대상 프레임: 14px 모서리, 가운데 위에 물체 이름표 ── */
+/* ── 판독값: 바이트·비율·점수·시각·분기 코드 ── */
+.fm-readout {
+  font-family: var(--fm-font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--fm-sub);
+}
+.fm-kicker {
+  font-family: var(--fm-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fm-sub);
+}
+
+/* ── 로딩 스캔(모델 받는 중): 위에서 아래로 훑는 선 ── */
+.fm-scan {
+  position: relative;
+  overflow: hidden;
+}
+.fm-scan::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  block-size: 18%;
+  inset-block-start: -18%;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--fm-lens) 22%, transparent) 70%,
+    color-mix(in srgb, var(--fm-lens) 70%, transparent) 99%,
+    transparent
+  );
+  animation: fm-scan 2.2s linear infinite;
+  pointer-events: none;
+}
+@keyframes fm-scan {
+  to {
+    transform: translateY(660%);
+  }
+}
+
+/* ── 다크 화면의 아주 옅은 주사선(나이트 비전 질감, 색은 바꾸지 않는다) ── */
+.fm-scanlines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--fm-text) 3.5%, transparent) 0 1px,
+    transparent 1px 3px
+  );
+  pointer-events: none;
+}
+[data-theme='light'] .fm-scanlines {
+  background-image: none;
+}
+
+/* ── 대시보드 격자(데스크톱 처리량 패널) ── */
+.fm-grid {
+  background-image:
+    linear-gradient(var(--fm-hairline) 1px, transparent 1px),
+    linear-gradient(90deg, var(--fm-hairline) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ── 대상 프레임: 14px 모서리 + 바깥 모서리 브래킷(물체 추적 표시). 사람에게는 쓰지 않는다 ── */
 .fm-frame {
   position: absolute;
-  border: 2px solid var(--fm-text);
+  border: 1.5px solid color-mix(in srgb, var(--fm-text) 70%, transparent);
   border-radius: var(--fm-r-frame);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--fm-bg) 30%, transparent),
-    0 0 24px color-mix(in srgb, var(--fm-text) 18%, transparent);
+    0 0 24px color-mix(in srgb, var(--fm-text) 16%, transparent);
   transition: inset var(--fm-dur-state) var(--fm-ease);
+}
+.fm-frame::before {
+  --b: 16px;
+  --w: 2.5px;
+  content: '';
+  position: absolute;
+  inset: -7px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--fm-text) 0 0) top left / var(--b) var(--w),
+    linear-gradient(var(--fm-text) 0 0) top left / var(--w) var(--b),
+    linear-gradient(var(--fm-text) 0 0) top right / var(--b) var(--w),
+    linear-gradient(var(--fm-text) 0 0) top right / var(--w) var(--b),
+    linear-gradient(var(--fm-text) 0 0) bottom left / var(--b) var(--w),
+    linear-gradient(var(--fm-text) 0 0) bottom left / var(--w) var(--b),
+    linear-gradient(var(--fm-text) 0 0) bottom right / var(--b) var(--w),
+    linear-gradient(var(--fm-text) 0 0) bottom right / var(--w) var(--b);
+  background-repeat: no-repeat;
 }
 .fm-frame__tag {
   position: absolute;
@@ -286,7 +405,7 @@ body {
   box-shadow: var(--fm-shadow);
 }
 .fm-btn:focus-visible {
-  outline: 2px solid var(--fm-text);
+  outline: 2px solid var(--fm-lens);
   outline-offset: 3px;
 }
 
@@ -344,6 +463,10 @@ body {
   .fm-flash,
   .fm-toast {
     animation-duration: 1ms;
+  }
+  .fm-scan::after {
+    animation: none;
+    inset-block-start: 41%;
   }
   .fm-toast {
     animation:
