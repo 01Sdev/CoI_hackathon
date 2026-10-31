@@ -13,6 +13,7 @@ framelet이 가져다 쓰는 라이브러리, 모델, 폰트, 외부 서비스�
 | React, React DOM | 18.3.1 | MIT | https://github.com/facebook/react | 화면 |
 | zustand | 5.0.16 | MIT | https://github.com/pmndrs/zustand | 공용 상태 스토어(`src/core/store.ts`) |
 | @mediapipe/tasks-vision | 1.2.0 | Apache-2.0 | https://github.com/google-ai-edge/mediapipe | 물체·얼굴·사람 검출 런타임과 WASM |
+| onnxruntime-web | 1.30.0 | MIT | https://github.com/microsoft/onnxruntime | 칼로리 플러그인 Worker 안 기기 안 모델 실행(`/ort/`에 JS·WASM 6개를 같은 출처로 내보냄, CDN 아님) |
 
 ## 2. 폰트 (배포물에 포함, PR #3부터)
 
@@ -58,7 +59,7 @@ WASM 파일(`public/wasm/`)은 `@mediapipe/tasks-vision` 패키지의 `wasm/` �
 | 가져다 쓴 것 | 우리가 만든 것 |
 | --- | --- |
 | 물체·얼굴·사람 검출 모델과 런타임(MediaPipe) | 0~2단계 판정 흐름, 2a~2d 분기 규칙, 출구 재검사 |
-| 화면 라이브러리(React), 상태 관리(zustand) | 플러그인 격리(sandbox iframe + Worker + CSP)와 메시지 계약 |
+| 화면 라이브러리(React), 상태 관리(zustand), 모델 실행기(onnxruntime-web) | 플러그인 격리(sandbox iframe + Worker + CSP)와 메시지 계약, 격리 안 기기 안 모델 배선 |
 | 폰트(Pretendard, Noto Serif KR) | 매니페스트 검증, 전환 절차, 증명 로그, 카운터 |
 | 칼로리 추정 AI(Claude API) | HUD, `/outward`, 디자인 시스템, `/api/calorie` 서버 |
 

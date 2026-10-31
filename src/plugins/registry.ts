@@ -5,15 +5,29 @@ import { CALORIE_TABLE, X_LABEL_MAX, X_LABEL_RE, fallbackText } from '../core/ca
 import { CALORIE_CLIENT_TIMEOUT_MS } from '../core/constants';
 import type { PluginKind } from '../core/types';
 import { caloriePlugin } from './calorie';
+import { calorieOnDevice, type OnDeviceConfig } from './calorie-model';
 import { helloPlugin } from './hello';
 import { pluginCall } from './sdk/source';
 import { TAMPER_TARGETS, tamperPlugin } from './tamper';
 
+/** 칼로리 Worker 소스. /dev 페이지는 자리표시 모델 경로를 넣거나 null로 기기 안 모델을 끈다. */
+export function calorieSource(onDevice: OnDeviceConfig | null = calorieOnDevice()): string {
+  // 표 밖 문구는 core가 정한다(유효하지 않은 라벨의 fallbackText).
+  return pluginCall(
+    caloriePlugin,
+    CALORIE_TABLE,
+    X_LABEL_RE.source,
+    X_LABEL_MAX,
+    CALORIE_CLIENT_TIMEOUT_MS,
+    fallbackText(''),
+    onDevice,
+  );
+}
+
 export function pluginSourceFor(kind: PluginKind): string | null {
   switch (kind) {
     case 'calorie':
-      // 표 밖 문구는 core가 정한다(유효하지 않은 라벨의 fallbackText).
-      return pluginCall(caloriePlugin, CALORIE_TABLE, X_LABEL_RE.source, X_LABEL_MAX, CALORIE_CLIENT_TIMEOUT_MS, fallbackText(''));
+      return calorieSource();
     case 'tamper':
       return pluginCall(tamperPlugin, TAMPER_TARGETS);
     case 'hello':

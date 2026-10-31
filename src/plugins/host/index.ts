@@ -191,7 +191,13 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
     iframe.dataset.pluginId = plugin.id;
     iframe.dataset.runtimeId = rt.runtimeId;
     try {
-      iframe.srcdoc = buildSrcdoc(nonce, buildCsp(nonce, connectList), `${NAME_HELPER_SHIM}(${iframeBootstrap.toString()})();`);
+      // 기기 안 모델(onnxruntime-web)은 칼로리만 쓴다. buildCsp가 connectList 안의 origin일 때만 받아들인다.
+      const wasmOrigin = plugin.kind === 'calorie' ? hostOrigin : null;
+      iframe.srcdoc = buildSrcdoc(
+        nonce,
+        buildCsp(nonce, connectList, wasmOrigin),
+        `${NAME_HELPER_SHIM}(${iframeBootstrap.toString()})();`,
+      );
     } catch (err) {
       console.warn(`[plugins] ${plugin.id}: srcdoc 생성 실패`, err);
       return null;

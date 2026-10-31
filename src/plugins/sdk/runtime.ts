@@ -138,7 +138,7 @@ export function installFrameletSdk(
     },
     result(deliveryId, text, source) {
       if (typeof deliveryId !== 'string' || !received.has(deliveryId) || resulted.has(deliveryId)) return;
-      if (source !== 'api' && source !== 'fallback') return;
+      if (source !== 'on-device' && source !== 'api' && source !== 'fallback') return;
       resulted.add(deliveryId);
       post({ type: 'result', deliveryId, text: clip(String(text), options.textLimit), source });
     },

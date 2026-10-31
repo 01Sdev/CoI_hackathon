@@ -57,7 +57,7 @@ flowchart LR
 
 | 규칙 | 허용 위치 |
 | --- | --- |
-| `drawImage(video…)`·`getImageData`·`getUserMedia`·`srcObject`·`captureStream`·`createImageBitmap`·`toBlob` | `input/`, `vision/` (`toBlob`은 `vision/`·`broker/`) |
+| `drawImage(video…)`·`getImageData`·`getUserMedia`·`srcObject`·`captureStream`·`createImageBitmap`·`toBlob` | `input/`, `vision/` (`toBlob`은 `vision/`·`broker/`). 이 표는 호스트 코드 규칙이다. 칼로리 플러그인의 하위 Worker가 받은 가린 조각 JPEG를 `createImageBitmap`·`OffscreenCanvas`로 디코드하는 것은 격리 안의 일이다(IF-08 "기기 안 모델") |
 | `sendDelivery()` 호출(플러그인에 바이트를 보내는 유일한 함수) | `broker/` 한 곳 |
 | iframe으로의 `postMessage` | `plugins/host` 안 `sendInit`·`sendDelivery`만 |
 | 호스트 코드의 `fetch`·`XMLHttpRequest`·`WebSocket` | 없음(모델·WASM 정적 로드 제외). **라이브러리가 몰래 보내는 요청도 막는다(P0, 2026-10-31 추가):** MediaPipe tasks-vision 1.2.0이 `https://odml.pa.googleapis.com/v1/log`로 POST를 시도한다(독립 데모 실측, 본문 미확인). 막는 방법은 아래 "호스트 페이지 CSP"와 V15 |
@@ -107,7 +107,7 @@ type HostToPlugin =
 type PluginToHost =
   | { type: 'ready'; pluginId: string }                                                      // IF-03
   | { type: 'ack'; deliveryId: string; sha256: string }                                      // IF-04
-  | { type: 'result'; deliveryId: string; text: string; source: 'api' | 'fallback' }        // IF-05
+  | { type: 'result'; deliveryId: string; text: string; source: 'on-device' | 'api' | 'fallback' } // IF-05
   | { type: 'violation'; attempt: 'camera' | 'hostDom' | 'fetch' | 'script';                // IF-06
       target: string };                                   // 플러그인 자기 보고. 호스트가 enforcedBy: 'plugin-report'로 기록
 ```
@@ -171,7 +171,7 @@ type PluginToHost =
 ```ts
 framelet.onInit(handler: (init: FrameletInit) => void | Promise<void>): void
 framelet.onDelivery(handler: (d: FrameletDelivery) => void | Promise<void>): void
-framelet.result(deliveryId: string, text: string, source: 'api' | 'fallback'): void
+framelet.result(deliveryId: string, text: string, source: 'on-device' | 'api' | 'fallback'): void
 framelet.reportViolation(attempt: 'camera' | 'hostDom' | 'fetch' | 'script', target: string): void
 // FrameletInit = { pluginId, manifest, apiBase: string | null }
 // FrameletDelivery = { deliveryId, scene, objectLabel, width, height, bytes, blob }
@@ -184,10 +184,10 @@ framelet.reportViolation(attempt: 'camera' | 'hostDom' | 'fetch' | 'script', tar
 | ack | SDK는 `delivery`를 받으면 **핸들러를 부르기 전에** 받은 Blob의 SHA-256을 계산해 `ack`를 보낸다(IF-04). `crypto.subtle`을 먼저 쓰고, 없으면 순수 JS로 계산한다. 해시는 소문자 hex다 |
 | 동시 처리 | 메시지마다 따로 `해시 → ack → 핸들러 호출`을 실행한다. 핸들러를 await해서 다음 `delivery`를 막지 않는다(칼로리 핸들러는 3초까지 걸리고, `maxPerMinute` 30이면 포착 간격이 2초라 줄을 세우면 다음 ack가 2초 제한을 넘는다). 해시 계산이 실패하면 ack도 핸들러 호출도 없다(호스트가 2초 뒤 `timeout`으로 기록) |
 | onDelivery | 핸들러 예외는 SDK가 잡고 아무것도 보내지 않는다. 결과 줄이 없으면 C는 이전 결과를 그대로 둔다 |
-| result | `deliveryId`당 1번만 보낸다. 두 번째부터는 SDK가 버린다. 받은 적 없는 `deliveryId`나 `source`가 `api`·`fallback`이 아니면 보내지 않는다. `text`는 `String(text).slice(0, 200)`(UTF-16 길이, 호스트 검사와 같은 기준). `source: 'api'`는 서버 응답으로 만든 줄에만 쓴다 |
+| result | `deliveryId`당 1번만 보낸다. 두 번째부터는 SDK가 버린다. 받은 적 없는 `deliveryId`나 `source`가 `on-device`·`api`·`fallback`이 아니면 보내지 않는다. `text`는 `String(text).slice(0, 200)`(UTF-16 길이, 호스트 검사와 같은 기준). `source: 'on-device'`는 플러그인 Worker 안 모델로 만든 줄에만, `source: 'api'`는 서버 응답으로 만든 줄에만 쓴다 |
 | reportViolation | IF-06 자기 보고다. `attempt`가 네 값이 아니면 보내지 않는다. `target`은 `String(target).slice(0, 512)`. 같은 `attempt + '\n' + 자른 target`은 1번만 보낸다. 호스트 한도를 넘는 메시지는 iframe 종료로 이어지므로(위 "플러그인 입력 위생") SDK가 먼저 맞춘다 |
 | 조립 | 호스트가 `code = SDK_SOURCE + '\n' + 플러그인 소스`를 만들어 `init`에 싣는다. 부트스트랩은 그 `code`로 blob Worker를 만들고, Worker에는 `{ type: 'init', pluginId, manifest, apiBase }`만 보낸다(`code` 제외). Worker가 보낸 메시지는 그대로 `parent.postMessage(data, '*')`로 넘긴다. 검증은 호스트가 한다 |
-| 네트워크 | 플러그인은 `fetch`를 직접 쓴다. CSP `connect-src`가 허용 목록 밖을 막는다. 칼로리 플러그인의 규칙은 다음과 같다. `apiBase`가 null이면 요청하지 않고 고정표를 쓴다. 아니면 `fetch` 바로 전에 3초 타이머를 시작하고, 같은 `AbortSignal`로 `res.text()`까지 덮는다. `objectLabel`이 `X_LABEL_RE`를 통과할 때만 `x-label`을 붙인다. 실패(중단·네트워크 오류·비 200)는 고정표로 처리하고 **`reportViolation`을 부르지 않는다**(서버 장애가 HUD 빨강으로 보이지 않게) |
+| 네트워크 | 플러그인은 `fetch`를 직접 쓴다. CSP `connect-src`가 허용 목록 밖을 막는다. 칼로리 플러그인의 규칙은 다음과 같다. `apiBase`가 null이면 요청하지 않고 고정표를 쓴다. 아니면 먼저 기기 안 모델(IF-08 "기기 안 모델")을 쓰고, 준비 전·실행 중·실패·시간 초과면 서버로 간다. 서버 요청은 `fetch` 바로 전에 3초 타이머를 시작하고, 같은 `AbortSignal`로 `res.text()`까지 덮는다. `objectLabel`이 `X_LABEL_RE`를 통과할 때만 `x-label`을 붙인다. 실패(중단·네트워크 오류·비 200)는 고정표로 처리하고 **`reportViolation`을 부르지 않는다**(서버 장애가 HUD 빨강으로 보이지 않게) |
 | 지킬 수 없는 것 | 플러그인 코드는 같은 Worker에 있어서 `self.postMessage`를 직접 부르거나 SDK 함수를 바꿀 수 있다. 그래서 SDK가 보낸 값도 플러그인 자기 보고로 취급한다(IF-04·06과 같은 전제). 호스트의 메시지 검증과 한도가 실제 방어선이다 |
 
 ### IF-07 `/outward` BroadcastChannel
@@ -216,6 +216,7 @@ type OutwardMessage = { type: 'outward'; apps: number; compareMode: boolean; at:
 | CORS | 모든 응답 `Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: X-Framelet-Body-Bytes, X-Framelet-Body-SHA256, X-Framelet-Kcal-Clamped`. `OPTIONS` → 204 + `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: content-type, x-label`, `Access-Control-Max-Age: 600`(기본 사전 요청 캐시가 5초라 10초 간격 POST마다 OPTIONS가 붙는 것을 줄인다. origin `null`에서 캐시되는지는 미검증, V5에서 본다). iPhone Safari 실측(S12): HTTPS Worker에서 `Origin: null`, `image/jpeg`, `x-label: banana`로 OPTIONS 뒤 POST가 도달해 200을 받았다(시험 서버는 Allow-Methods에 `GET, OPTIONS`도 넣었다. 실제 API·오류·요청 제한은 미검증). 전달 수는 POST만 센다 |
 | 서버 | 이미지 저장·로깅 안 함. `ANTHROPIC_API_KEY`(클라이언트에 두지 않음), `CALORIE_MODEL`(기본 `claude-haiku-5-5`). 모델 호출 방식은 아래 "서버의 모델 호출" |
 | 시간 제한 | 칼로리 플러그인은 `fetch` 전부터 `res.text()`까지 3초 안에 끝나지 않으면 중단하고 고정표로 넘어간다 [팀원 D7]. 서버는 상류(모델) 호출에 **2.2초**만 준다(2026-10-31, 8초에서 줄임). 플러그인의 3초에는 사전 요청·업로드·콜드 스타트·본문 읽기·해시가 함께 들어가므로 서버 몫을 그만큼 짧게 둔다. 플러그인이 포기한 뒤까지 서버가 기다리면 비용만 들고 결과는 버려진다. Anthropic SDK 재시도는 끈다(`maxRetries: 0`). V5에서 p95가 2.2초를 넘으면 이 값을 다시 정한다 |
+| 기기 안 모델 (2026-11-01 사용자 결정) | 칼로리 플러그인은 서버보다 먼저 calorie-lens(https://hf.co/shalev396/calorie-lens, MIT, DINOv2-B 기반) ONNX를 **플러그인 Worker가 만든 하위 Worker 안에서** 돌린다. 호스트는 모델을 돌리지 않는다. 순서: 기기 안 모델 → `/api/calorie` → 고정표. 결과 `${ko} 약 ${kcal}kcal`, 이름은 0단계 라벨의 고정표 이름(표에 없으면 `음식`), 숫자는 모델 출력(전체 kcal, 단위 kcal)을 반올림해 10~3000으로 자른다. 출력이 5~5000 밖이거나 유한하지 않으면 단위·정규화가 어긋난 것으로 보고 서버로 간다. `source: 'on-device'`. 카운터 `apiSends`는 `source: 'api'` 결과만 세므로 기기 안 결과는 들어가지 않는다(요청이 없다). 시작: `init`에 `apiBase`가 있고 `manifest.network`에 `$ORIGIN`이 있을 때 `ready`를 막지 않고 하위 Worker를 띄워 `<apiBase>/models/calorie-lens/model.json`과 조각을 받아 이어 붙이고 세션을 만든 뒤 0 입력으로 두 번 돌려 둔다. 두 번째 실행이 2.5초를 넘으면 그 기기에서는 쓰지 않는다. `model.json`: `files`(경로 없는 이름 1~8개, 순서대로 이어 붙이면 ONNX 파일 하나, 각 50MB 아래), `input`(`name`, `width`·`height` 1~1024, RGB `mean` 0~1·`std` 0 초과 1 이하(0~1 화소 기준), `resize` `stretch` 또는 `center-crop`, `cropFraction`(HF `crop_pct`, 0 초과 1 이하, 기본 1)), `output`(`name`, 평탄화한 `index`, 기본 0). 출력을 kcal로 되돌리는 계산은 ONNX 안에 넣는다. 모델을 바꿀 때는 경로나 파일 이름을 바꾼다(`/models/*`는 1년 `immutable` 캐시). 실행기: WebGPU 어댑터가 있으면 `ort.webgpu.min.js`(`webgpu` → 실패 시 `wasm`), 없으면 `ort.wasm.min.js`. 단일 스레드, 프록시 없음. 전달마다: 받은 JPEG를 하위 Worker에서 `createImageBitmap`·`OffscreenCanvas`로 디코드·전처리해 돌린다. 시간 제한은 핸들러가 전달을 받은 때(ack 뒤)부터 2.5초이고, 넘거나 실행 중이면 서버로 간다. 연달아 2번 넘거나 한 실행이 5초를 넘게 끝나지 않으면 그 iframe에서는 끈다. 그래서 최악의 결과 시간은 2.5초 + 서버 3초다. 모델 파일 요청은 `connect-src`의 호스트 origin 안이다. 실패해도 `reportViolation`을 부르지 않는다. onnxruntime-web 1.30.0 파일은 같은 origin `/ort/`에서 내보낸다(CDN 아님) |
 | 플러그인 폴백 | `apiBase: null`(비교 모드), 중단·네트워크 오류·CSP 차단·비 200 → `CALORIE_TABLE[objectLabel]`(`src/core/calorie.ts`)로 `${ko} 약 ${kcal}kcal`, 표에 없으면 `음식(종류 미상)`. `source: 'fallback'`. 표(kcal): banana 바나나 105, apple 사과 95, orange 오렌지 62, donut 도넛 250, pizza 피자 285, sandwich 샌드위치 300, cake 케이크 350, hot dog 핫도그 290, broccoli 브로콜리 30, carrot 당근 25. 서버도 같은 표를 쓴다(응답 처리의 보정). Worker 코드는 문자열이라 B가 `JSON.stringify(CALORIE_TABLE)`를 끼워 넣는다 |
 
 #### 서버의 모델 호출 (2026-10-31 추가)
@@ -321,7 +322,7 @@ declare function validateManifest(json: string, pluginId: string): { ok: true; m
 | 범위·타입 위반, 모르는 필드 → 전체 거부, 기존 값 유지 | "몇 줄 변경이 즉시 반영"(PRD 목표)을 조용한 무시로 거짓으로 만들지 않기 위해 |
 | 통과하면 A가 `manifest.version`을 올리고 B가 iframe을 다시 만든다 | 다음 전달부터 반영(F11) |
 
-iframe 문서 CSP(B가 생성해 `srcdoc`의 `<meta>`에 넣는다): `default-src 'none'; script-src 'nonce-<랜덤>'; worker-src blob:; connect-src <network 치환 결과 또는 'none'>` [제안: `script-src`·`worker-src` 추가분, 검토 메모 1]. nonce는 B가 iframe을 만들 때마다 `crypto.getRandomValues`로 새로 만들어 meta와 부트스트랩 `<script nonce>`에 같이 넣는다. 서버가 필요 없다. 이 구성은 iPhone Safari 실측(S1·S2·S3)에서 확인됐다. 팀원 v2가 Chrome에서 시험한 `script-src 'unsafe-inline'`은 대안이며 Safari에서는 미검증이다. 매니페스트 문자열이 `content="..."` 속성에 들어가므로 아래 `network` 정규식이 따옴표 주입도 막는다.
+iframe 문서 CSP(B가 생성해 `srcdoc`의 `<meta>`에 넣는다): `default-src 'none'; script-src 'nonce-<랜덤>'; worker-src blob:; connect-src <network 치환 결과 또는 'none'>` [제안: `script-src`·`worker-src` 추가분, 검토 메모 1]. **칼로리만(2026-11-01):** `connect-src`에 호스트 origin이 있을 때 `script-src 'nonce-<랜덤>' 'wasm-unsafe-eval' <호스트 origin>/ort/`가 된다. 기기 안 모델이 WASM을 컴파일하고 `/ort/`의 onnxruntime-web 스크립트를 불러오기 위해서다. 같은 origin은 이미 `connect-src`에 있으므로 바깥으로 나가는 새 통로는 아니다. 스크립트 출처는 `/ort/` 경로까지만 열어, 호스트의 다른 JS(`/assets/*`)는 Worker가 실행할 수 없다. `/ort/`에는 고정한 패키지 파일만 둔다. 비교 모드(`connect-src 'none'`)와 `$ORIGIN`을 지운 매니페스트(F14)에는 붙지 않는다. origin이 `null`인 Worker가 받으므로 `/models/*`·`/ort/*`에는 `Access-Control-Allow-Origin: *`를 붙인다(`vercel.json`, 개발 서버 `vite.config.ts`). nonce는 B가 iframe을 만들 때마다 `crypto.getRandomValues`로 새로 만들어 meta와 부트스트랩 `<script nonce>`에 같이 넣는다. 서버가 필요 없다. 이 구성은 iPhone Safari 실측(S1·S2·S3)에서 확인됐다. 팀원 v2가 Chrome에서 시험한 `script-src 'unsafe-inline'`은 대안이며 Safari에서는 미검증이다. 매니페스트 문자열이 `content="..."` 속성에 들어가므로 아래 `network` 정규식이 따옴표 주입도 막는다.
 
 **호스트 페이지의 외부 요청 차단 (P0, 2026-10-31 추가, 방법은 V15로 확정):** MediaPipe의 로그 요청(`odml.pa.googleapis.com`)이 나가면 "밖으로 나간 것은 조각 한 장뿐"이라는 발표 주장과 네트워크 탭 증거가 깨진다. 두 겹으로 막는다.
 1. **호스트 코드 가드:** `main.tsx`가 MediaPipe를 불러오기 전에, 호스트 창의 `fetch`·`XMLHttpRequest`·`navigator.sendBeacon`이 같은 origin이 아닌 주소로 가면 막고 `console.warn`을 남기게 감싼다. 브라우저가 강제하는 경계는 아니지만 라이브러리 요청은 이것으로 멈춘다.

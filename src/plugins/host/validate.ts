@@ -40,7 +40,7 @@ export function parsePluginMessage(data: unknown, limits: Limits = PLUGIN_MESSAG
   const allowed = KEYS[type as PluginToHost['type']];
   if (keys.length !== allowed.length || !allowed.every((k) => keys.includes(k))) return format(`${type} 필드 구성이 다름`);
   if (type === 'ack' && !SHA256_HEX.test(rec.sha256 as string)) return format('ack sha256 형식');
-  if (type === 'result' && rec.source !== 'api' && rec.source !== 'fallback') return format('result source 값');
+  if (type === 'result' && !['on-device', 'api', 'fallback'].includes(rec.source as string)) return format('result source 값');
   if (type === 'violation' && !ATTEMPTS.includes(rec.attempt as string)) return format('violation attempt 값');
 
   const size = new TextEncoder().encode(JSON.stringify(rec)).length;

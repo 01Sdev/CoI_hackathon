@@ -11,7 +11,8 @@ import { buildCsp, buildSrcdoc, safeConnectList } from '../src/plugins/host/csp'
 import { parsePluginMessage, violationReason } from '../src/plugins/host/validate';
 import { CALORIE_TABLE, X_LABEL_MAX, X_LABEL_RE, fallbackText } from '../src/core/calorie';
 import { caloriePlugin } from '../src/plugins/calorie';
-import { pluginSourceFor } from '../src/plugins/registry';
+import { buildModelWorkerSource, parseModelSpec, toTensorData, type OnDeviceConfig } from '../src/plugins/calorie-model';
+import { calorieSource, pluginSourceFor } from '../src/plugins/registry';
 import { sha256Pure } from '../src/plugins/sdk/sha256';
 import { buildWorkerSource, pluginCall } from '../src/plugins/sdk/source';
 
@@ -278,7 +279,7 @@ async function runCalorie(apiBase: string | null, fetchImpl: (call: FetchCall, s
     return fetchImpl(call, init.signal);
   };
   // 시간 제한은 50ms로 줄여 넣는다(제품은 CALORIE_CLIENT_TIMEOUT_MS = 3초).
-  const src = buildWorkerSource(pluginCall(caloriePlugin, CALORIE_TABLE, X_LABEL_RE.source, X_LABEL_MAX, 50, fallbackText('')));
+  const src = buildWorkerSource(pluginCall(caloriePlugin, CALORIE_TABLE, X_LABEL_RE.source, X_LABEL_MAX, 50, fallbackText(''), null));
   const w = runWorker(src, true, { fetch: fetchMock, AbortController, Response });
   w.dispatch({ ...init, apiBase });
   await tick();
@@ -335,6 +336,357 @@ await check('칼로리: Worker 고정표 문구 = core fallbackText(표 10종·�
 });
 
 // ── 변조 플러그인(Worker처럼 document·navigator·importScripts가 없는 vm) ──
+// ── 칼로리 기기 안 모델(§2.10) ──
+await check('CSP: 칼로리 wasm은 connect-src 안 origin일 때만, script-src는 그 origin의 /ort/까지만', () => {
+  const o = 'https://framelet-demo.vercel.app';
+  assert.equal(
+    buildCsp('bm9uY2U=', [o], o),
+    `default-src 'none'; script-src 'nonce-bm9uY2U=' 'wasm-unsafe-eval' ${o}/ort/; worker-src blob:; connect-src ${o}`,
+  );
+  assert.equal(buildCsp('bm9uY2U=', [], o), "default-src 'none'; script-src 'nonce-bm9uY2U='; worker-src blob:; connect-src 'none'");
+  assert.equal(buildCsp('bm9uY2U=', [o], 'https://other.example'), `default-src 'none'; script-src 'nonce-bm9uY2U='; worker-src blob:; connect-src ${o}`);
+  assert.equal(buildCsp('bm9uY2U=', [o]), `default-src 'none'; script-src 'nonce-bm9uY2U='; worker-src blob:; connect-src ${o}`);
+});
+
+const placeholderDir = new URL('../dev/fixtures/calorie-lens-placeholder/', import.meta.url);
+const placeholderSpec = JSON.parse(readFileSync(new URL('model.json', placeholderDir), 'utf8')) as unknown;
+await check('model.json: 자리표시 명세 통과, 경로·잘못된 값 거부', () => {
+  const s = parseModelSpec(placeholderSpec);
+  assert.deepEqual(s.files, ['model.onnx.0', 'model.onnx.1']);
+  assert.equal(s.input.resize, 'center-crop');
+  assert.equal(s.output.index, 0);
+  const base = placeholderSpec as { files: string[]; input: Record<string, unknown>; output: Record<string, unknown> };
+  for (const files of [[], ['../x.onnx'], ['a/b.onnx'], ['.hidden'], Array(9).fill('p')]) {
+    assert.throws(() => parseModelSpec({ ...base, files }), /model\.json/, JSON.stringify(files));
+  }
+  for (const input of [
+    { std: [0.2, 0, 0.2] },
+    { std: [58, 57, 57] },
+    { mean: [124, 116, 104] },
+    { mean: [0, 0] },
+    { width: 0 },
+    { width: 2000 },
+    { resize: 'fill' },
+    { cropFraction: 0 },
+    { name: 'a b' },
+  ]) {
+    assert.throws(() => parseModelSpec({ ...base, input: { ...base.input, ...input } }), /model\.json/, JSON.stringify(input));
+  }
+  assert.throws(() => parseModelSpec({ ...base, output: { name: 'kcal', index: -1 } }), /model\.json/);
+  // 생략 가능: resize(stretch)·cropFraction(1)·index(0).
+  const min = parseModelSpec({ files: ['m'], input: { name: 'x', width: 4, height: 4, mean: [0, 0, 0], std: [1, 1, 1] }, output: { name: 'y' } });
+  assert.deepEqual([min.input.resize, min.input.cropFraction, min.output.index], ['stretch', 1, 0]);
+});
+
+await check('toTensorData: RGBA → NCHW, (v/255 − mean)/std', () => {
+  const rgba = [255, 0, 51, 9, 0, 255, 102, 9]; // 2×1
+  const t = toTensorData(rgba, 2, 1, [0.5, 0.5, 0.2], [0.5, 0.25, 0.1]);
+  assert.deepEqual([...t].map((x) => Math.round(x * 1000) / 1000), [1, -1, -2, 2, 0, 2]);
+});
+
+/** 칼로리 플러그인 안에서 만든 하위 Worker 대역. */
+class FakeModel {
+  static made: FakeModel[] = [];
+  sent: Record<string, unknown>[] = [];
+  terminated = false;
+  private ls: ((e: { data: unknown }) => void)[] = [];
+  constructor(public url: string) {
+    FakeModel.made.push(this);
+  }
+  addEventListener(t: string, l: (e: { data: unknown }) => void) {
+    if (t === 'message') this.ls.push(l);
+  }
+  postMessage(m: Record<string, unknown>) {
+    // vm 쪽 객체를 이 realm 객체로(deepEqual은 프로토타입까지 본다).
+    this.sent.push({ ...m });
+  }
+  terminate() {
+    this.terminated = true;
+  }
+  emit(data: unknown) {
+    for (const l of this.ls) l({ data });
+  }
+  runs() {
+    return this.sent.filter((m) => m.type === 'run');
+  }
+}
+async function onDeviceWorker(
+  apiBase: string | null,
+  fetchImpl = async () => new Response('피자 약 300kcal', { status: 200 }),
+  network: string[] = ['$ORIGIN'],
+  make: (onDevice: OnDeviceConfig) => string = (onDevice) =>
+    buildWorkerSource(pluginCall(caloriePlugin, CALORIE_TABLE, X_LABEL_RE.source, X_LABEL_MAX, 50, fallbackText(''), onDevice)),
+) {
+  FakeModel.made = [];
+  const calls: string[] = [];
+  const onDevice = { workerSource: '/*model*/', ortPath: '/ort/', modelPath: '/models/calorie-lens/', timeoutMs: 50 };
+  const src = make(onDevice);
+  const w = runWorker(src, true, {
+    fetch: (url: string) => (calls.push(url), fetchImpl()),
+    AbortController,
+    Response,
+    Worker: FakeModel,
+    URL: { createObjectURL: () => 'blob:model' },
+  });
+  w.dispatch({ ...init, apiBase, manifest: { ...manifest, network } });
+  await tick();
+  const results = () => w.posted.filter((m) => m.type === 'result');
+  const send = async (id: string, label = 'pizza', ms = 30) => {
+    w.dispatch({ ...delivery(id), objectLabel: label });
+    await tick(ms);
+  };
+  return { w, calls, results, send, model: FakeModel.made[0] };
+}
+const answer = (m: FakeModel, kcal: unknown) => m.emit({ type: 'out', id: m.runs().at(-1)!.id, kcal });
+
+await check('기기 안: 준비되면 on-device("피자 약 1235kcal"), API 요청 0, 받을 곳은 호스트 /ort/·/models/', async () => {
+  const r = await onDeviceWorker('https://h.example');
+  assert.ok(r.model);
+  assert.deepEqual(r.model.sent[0], {
+    type: 'load',
+    ortBase: 'https://h.example/ort/',
+    modelBase: 'https://h.example/models/calorie-lens/',
+    budgetMs: 50,
+  });
+  r.model.emit({ type: 'loaded', ep: 'wasm' });
+  r.w.dispatch(delivery('d1'));
+  await tick();
+  assert.equal(r.model.runs().length, 1);
+  assert.ok(r.model.runs()[0]!.blob instanceof Blob);
+  answer(r.model, 1234.6);
+  await tick();
+  assert.deepEqual(r.results(), [{ type: 'result', deliveryId: 'd1', text: '피자 약 1235kcal', source: 'on-device' }]);
+  assert.equal(r.calls.length, 0);
+});
+await check('기기 안: 준비 전 → API, 이름은 0단계 라벨(표 밖은 "음식"), 범위 10~3000', async () => {
+  const r = await onDeviceWorker('https://h.example');
+  await r.send('d1');
+  assert.deepEqual(r.results()[0], { type: 'result', deliveryId: 'd1', text: '피자 약 300kcal', source: 'api' });
+  assert.equal(r.model!.runs().length, 0);
+  r.model!.emit({ type: 'loaded', ep: 'wasm' });
+  for (const [id, label, kcal, text] of [
+    ['d2', 'bowl', 412.4, '음식 약 412kcal'],
+    ['d3', 'pizza', 7, '피자 약 10kcal'],
+    ['d4', 'hot dog', 4_200, '핫도그 약 3000kcal'],
+  ] as const) {
+    r.w.dispatch({ ...delivery(id), objectLabel: label });
+    await tick();
+    answer(r.model!, kcal);
+    await tick();
+    assert.equal(r.results().at(-1)!.text, text, label);
+    assert.equal(r.results().at(-1)!.source, 'on-device');
+  }
+});
+await check('기기 안: 실패 값(null·NaN·0 이하)과 5~5000 밖(단위 어긋남) → API', async () => {
+  const r = await onDeviceWorker('https://h.example');
+  r.model!.emit({ type: 'loaded', ep: 'wasm' });
+  for (const [i, kcal] of [null, Number.NaN, 0, -5, 'x', 0.42, 4.9, 5_001].entries()) {
+    r.w.dispatch(delivery(`d${i}`));
+    await tick();
+    answer(r.model!, kcal);
+    await tick();
+    assert.equal(r.results().at(-1)!.source, 'api', String(kcal));
+  }
+  assert.equal(r.model!.terminated, false);
+});
+await check('기기 안: 시간 초과 → API, 실행 중 전달은 바로 API, 연달아 2번 넘으면 끈다', async () => {
+  const r = await onDeviceWorker('https://h.example');
+  r.model!.emit({ type: 'loaded', ep: 'wasm' });
+  r.w.dispatch(delivery('d1'));
+  await tick(5);
+  r.w.dispatch(delivery('d2')); // d1이 아직 실행 중
+  await tick(120);
+  assert.equal(r.model!.runs().length, 1);
+  assert.deepEqual(r.results().map((m) => [m.deliveryId, m.source]), [['d2', 'api'], ['d1', 'api']]);
+  answer(r.model!, 500); // 늦은 답: busy만 풀린다
+  await r.send('d3', 'pizza', 120);
+  assert.equal(r.model!.runs().length, 2);
+  assert.equal(r.results().at(-1)!.source, 'api');
+  assert.equal(r.model!.terminated, true);
+  await r.send('d4');
+  assert.equal(r.model!.runs().length, 2);
+});
+await check('기기 안: 한 실행이 제한의 2배를 넘게 안 끝나면 끈다', async () => {
+  const r = await onDeviceWorker('https://h.example');
+  r.model!.emit({ type: 'loaded', ep: 'wasm' });
+  await r.send('d1', 'pizza', 60); // 답 없음 → 50ms 뒤 API, 실행 중 표시는 남는다
+  await r.send('d2', 'pizza', 60); // 아직 2배(100ms) 전: 바로 API
+  assert.equal(r.model!.terminated, false);
+  await tick(20);
+  await r.send('d3');
+  assert.equal(r.model!.terminated, true);
+  assert.deepEqual(r.results().map((m) => m.source), ['api', 'api', 'api']);
+});
+await check('기기 안: failed면 끄고 API, 비교 모드(apiBase null)·network에 $ORIGIN 없음(F14)은 하위 Worker 없음', async () => {
+  const r = await onDeviceWorker('https://h.example');
+  r.model!.emit({ type: 'failed', reason: '404' });
+  assert.equal(r.model!.terminated, true);
+  await r.send('d1');
+  assert.equal(r.results()[0]!.source, 'api');
+  const c = await onDeviceWorker(null);
+  assert.equal(c.model, undefined);
+  await c.send('d1');
+  assert.deepEqual(c.results()[0], { type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' });
+  assert.equal(c.calls.length, 0);
+  const f14 = await onDeviceWorker('https://h.example', undefined, []);
+  assert.equal(f14.model, undefined);
+  await f14.send('d1');
+  assert.equal(f14.results()[0]!.source, 'api');
+});
+await check('기기 안: 제품 calorie 소스에 하위 Worker·경로·2.5초가 들어 있다', () => {
+  const src = pluginSourceFor('calorie')!;
+  assert.match(src, /"ortPath":"\/ort\/","modelPath":"\/models\/calorie-lens\/","timeoutMs":2500/);
+  assert.ok(src.includes(JSON.stringify(buildModelWorkerSource())));
+});
+
+/** 하위 Worker 본문을 vm에서(가짜 ort·fetch·디코드). */
+async function runModelWorker(
+  opts: { gpu?: boolean; gpuFails?: boolean; specStatus?: number; outIndex?: number; runMs?: number; budgetMs?: number },
+  source = buildModelWorkerSource(),
+) {
+  const posted: Record<string, unknown>[] = [];
+  const listeners: ((e: { data: unknown }) => void)[] = [];
+  const imported: string[] = [];
+  const created: { bytes: Uint8Array; eps: string[] }[] = [];
+  const draws: number[][] = [];
+  const feeds: { name: string; dims: number[]; data: Float32Array }[] = [];
+  const parts: Record<string, Uint8Array> = { 'a.0': new Uint8Array([1, 2, 3]), 'a.1': new Uint8Array([4, 5]) };
+  const spec = {
+    files: ['a.0', 'a.1'],
+    input: { name: 'pixel_values', width: 4, height: 4, mean: [0.5, 0.5, 0.5], std: [0.5, 0.5, 0.5], resize: 'center-crop', cropFraction: 0.5 },
+    output: { name: 'kcal', index: opts.outIndex ?? 1 },
+  };
+  const ort = {
+    env: { wasm: { numThreads: 4, proxy: true, wasmPaths: null as unknown } },
+    Tensor: class {
+      constructor(
+        public type: string,
+        public data: Float32Array,
+        public dims: number[],
+      ) {}
+    },
+    InferenceSession: {
+      create: async (bytes: Uint8Array, o: { executionProviders: string[] }) => {
+        created.push({ bytes, eps: o.executionProviders });
+        if (opts.gpuFails && o.executionProviders[0] === 'webgpu') throw new Error('no webgpu');
+        return {
+          run: async (f: Record<string, { data: Float32Array; dims: number[] }>) => {
+            if (opts.runMs) await new Promise((r) => setTimeout(r, opts.runMs));
+            for (const [name, t] of Object.entries(f)) feeds.push({ name, dims: t.dims, data: t.data });
+            return { kcal: { data: new Float32Array([1, 777.25]) } };
+          },
+        };
+      },
+    },
+  };
+  const ctx: Record<string, unknown> = {
+    postMessage: (m: unknown) => posted.push(m as Record<string, unknown>),
+    addEventListener: (_t: string, l: (e: { data: unknown }) => void) => listeners.push(l),
+    importScripts: (u: string) => {
+      imported.push(u);
+      ctx.ort = ort;
+    },
+    navigator: opts.gpu ? { gpu: { requestAdapter: async () => ({}) } } : {},
+    fetch: async (url: string) => {
+      if (url.endsWith('model.json')) return new Response(JSON.stringify(spec), { status: opts.specStatus ?? 200 });
+      const name = url.slice(url.lastIndexOf('/') + 1);
+      const part = parts[name];
+      return part ? new Response(new Blob([part.slice()])) : new Response('x', { status: 404 });
+    },
+    createImageBitmap: async () => ({ width: 8, height: 6, close() {} }),
+    OffscreenCanvas: class {
+      constructor(
+        public w: number,
+        public h: number,
+      ) {}
+      getContext() {
+        const { w, h } = this;
+        return {
+          drawImage: (_b: unknown, ...a: number[]) => draws.push(a),
+          getImageData: () => ({ data: new Uint8ClampedArray(w * h * 4).fill(255) }),
+        };
+      }
+    },
+    performance,
+    Blob,
+    Uint8Array,
+    Float32Array,
+    Response,
+  };
+  ctx.self = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(source, ctx);
+  const send = (data: unknown) => listeners.forEach((l) => l({ data }));
+  send({ type: 'load', ortBase: 'https://h.example/ort/', modelBase: 'https://h.example/models/calorie-lens/', budgetMs: opts.budgetMs ?? 2_500 });
+  await tick(30 + 2 * (opts.runMs ?? 0));
+  return { posted, imported, created, draws, feeds, ort, send };
+}
+await check('하위 Worker: wasm 판 불러오기, 단일 스레드, 조각 이어 붙이기, 첫 실행 뒤 loaded', async () => {
+  const m = await runModelWorker({});
+  assert.deepEqual(m.imported, ['https://h.example/ort/ort.wasm.min.js']);
+  assert.equal(m.ort.env.wasm.numThreads, 1);
+  assert.equal(m.ort.env.wasm.proxy, false);
+  assert.deepEqual({ ...(m.ort.env.wasm.wasmPaths as object) }, {
+    mjs: 'https://h.example/ort/ort-wasm-simd-threaded.mjs',
+    wasm: 'https://h.example/ort/ort-wasm-simd-threaded.wasm',
+  });
+  assert.deepEqual([...m.created[0]!.bytes], [1, 2, 3, 4, 5]);
+  assert.deepEqual([...m.created[0]!.eps], ['wasm']);
+  assert.equal(m.feeds.length, 2); // 준비 실행 2번
+  assert.equal(m.posted[0]!.type, 'loaded');
+  assert.equal(m.posted[0]!.ep, 'wasm');
+  assert.equal(m.posted[0]!.bytes, 5);
+});
+await check('하위 Worker: 디코드·가운데 자르기·NCHW, 출력 index의 kcal', async () => {
+  const m = await runModelWorker({});
+  m.send({ type: 'run', id: 7, blob: new Blob([fixture], { type: 'image/jpeg' }) });
+  await tick(30);
+  // 8×6을 짧은 변 4/0.5=8로 맞추면 k=8/6: 원본에서 3×3을 가운데에서 잘라 4×4로.
+  assert.deepEqual(m.draws.at(-1), [2.5, 1.5, 3, 3, 0, 0, 4, 4]);
+  const f = m.feeds.at(-1)!;
+  assert.deepEqual([f.name, [...f.dims], f.data.length, f.data[0], f.data[47]], ['pixel_values', [1, 3, 4, 4], 48, 1, 1]);
+  assert.deepEqual(m.posted.at(-1)!.type, 'out');
+  assert.deepEqual([m.posted.at(-1)!.id, m.posted.at(-1)!.kcal], [7, 777.25]);
+});
+await check('하위 Worker: WebGPU면 webgpu 판·asyncify, 세션 실패 시 wasm으로', async () => {
+  const g = await runModelWorker({ gpu: true });
+  assert.deepEqual(g.imported, ['https://h.example/ort/ort.webgpu.min.js']);
+  assert.equal((g.ort.env.wasm.wasmPaths as { wasm: string }).wasm, 'https://h.example/ort/ort-wasm-simd-threaded.asyncify.wasm');
+  assert.deepEqual(g.created.map((c) => [...c.eps]), [['webgpu', 'wasm']]);
+  assert.equal(g.posted[0]!.ep, 'webgpu');
+  const f = await runModelWorker({ gpu: true, gpuFails: true });
+  assert.deepEqual(f.created.map((c) => [...c.eps]), [['webgpu', 'wasm'], ['wasm']]);
+  assert.equal(f.posted[0]!.ep, 'wasm');
+});
+await check('하위 Worker: 두 번째 준비 실행이 제한을 넘는 기기는 failed(느림)', async () => {
+  const m = await runModelWorker({ runMs: 40, budgetMs: 20 });
+  assert.equal(m.posted[0]!.type, 'failed');
+  assert.match(String(m.posted[0]!.reason), /느림: 실행 \d+ms > 20ms/);
+});
+await check('하위 Worker: model.json 404·출력 index 밖 → failed·out null', async () => {
+  const m = await runModelWorker({ specStatus: 404 });
+  assert.equal(m.posted[0]!.type, 'failed');
+  assert.equal(m.imported.length, 0);
+  const o = await runModelWorker({ outIndex: 5 });
+  o.send({ type: 'run', id: 1, blob: new Blob([fixture]) });
+  await tick(30);
+  assert.equal(o.posted.at(-1)!.kcal, null);
+});
+await check('자리표시 모델: 실제 onnxruntime-web(Node, wasm)으로 300 + 100·평균', async () => {
+  const ortNode = await import('onnxruntime-web');
+  ortNode.env.wasm.numThreads = 1;
+  const s = parseModelSpec(placeholderSpec);
+  const bytes = Buffer.concat(s.files.map((f) => readFileSync(new URL(f, placeholderDir))));
+  const session = await ortNode.InferenceSession.create(new Uint8Array(bytes), { executionProviders: ['wasm'] });
+  const { width: W, height: H, mean, std } = s.input;
+  const rgba = new Uint8ClampedArray(W * H * 4).fill(128);
+  const out = await session.run({ [s.input.name]: new ortNode.Tensor('float32', toTensorData(rgba, W, H, mean, std), [1, 3, H, W]) });
+  const expected = 300 + (100 * [0, 1, 2].reduce((a, c) => a + (128 / 255 - mean[c]!) / std[c]!, 0)) / 3;
+  // float32 합이라 15만 값 평균에서 0.03쯤 어긋난다. 표시는 반올림한 정수다.
+  assert.ok(Math.abs(Number(out[s.output.name]!.data[s.output.index]) - expected) < 0.1);
+  await session.release();
+});
+
 await check('변조: 켜면 4종 자기 보고, 차단 실패 없음', async () => {
   const w = runWorker(buildWorkerSource(pluginSourceFor('tamper')!), true, {
     fetch: async () => {
@@ -361,7 +713,7 @@ const VITE_BASELINE_TARGET = ['chrome107', 'edge107', 'firefox104', 'safari16'];
 const bundled = await build({
   stdin: {
     contents:
-      "export { buildWorkerSource } from './src/plugins/sdk/source';\nexport { pluginSourceFor } from './src/plugins/registry';",
+      "export { buildWorkerSource } from './src/plugins/sdk/source';\nexport { pluginSourceFor, calorieSource } from './src/plugins/registry';\nexport { buildModelWorkerSource } from './src/plugins/calorie-model';",
     resolveDir: new URL('..', import.meta.url).pathname,
     loader: 'ts',
   },
@@ -373,7 +725,12 @@ const bundled = await build({
 });
 const minified = (await import(
   `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0]!.text).toString('base64')}`
-)) as { buildWorkerSource: typeof buildWorkerSource; pluginSourceFor: typeof pluginSourceFor };
+)) as {
+  buildWorkerSource: typeof buildWorkerSource;
+  pluginSourceFor: typeof pluginSourceFor;
+  calorieSource: typeof calorieSource;
+  buildModelWorkerSource: typeof buildModelWorkerSource;
+};
 await check('축소판: Worker 소스가 원본과 다르다(실제로 축소됨)', () => {
   assert.notEqual(minified.buildWorkerSource(''), buildWorkerSource(''));
 });
@@ -385,6 +742,24 @@ await check('축소판: hello 플러그인 결과 줄', async () => {
   w.dispatch(delivery('d1'));
   await tick(50);
   assert.match(w.posted[2]!.text as string, /document:undefined/);
+});
+
+await check('축소판: 칼로리 기기 안 경로(on-device 결과)와 하위 Worker 본문', async () => {
+  const r = await onDeviceWorker('https://h.example', undefined, ['$ORIGIN'], (onDevice) =>
+    minified.buildWorkerSource(minified.calorieSource({ ...onDevice, workerSource: minified.buildModelWorkerSource() })),
+  );
+  r.model!.emit({ type: 'loaded', ep: 'wasm' });
+  r.w.dispatch(delivery('d1'));
+  await tick();
+  answer(r.model!, 640.4);
+  await tick();
+  assert.deepEqual(r.results(), [{ type: 'result', deliveryId: 'd1', text: '피자 약 640kcal', source: 'on-device' }]);
+  assert.notEqual(minified.buildModelWorkerSource(), buildModelWorkerSource());
+  const m = await runModelWorker({}, minified.buildModelWorkerSource());
+  assert.equal(m.posted[0]!.type, 'loaded');
+  m.send({ type: 'run', id: 3, blob: new Blob([fixture], { type: 'image/jpeg' }) });
+  await tick(30);
+  assert.deepEqual([m.posted.at(-1)!.id, m.posted.at(-1)!.kcal], [3, 777.25]);
 });
 
 console.log(`\n${passed}개 통과`);
