@@ -1,9 +1,12 @@
-// 착용자 제어(F22, FR-058): 휴대폰 하단 시트의 "전달 일시 정지"와 앱별 끄기.
+// 착용자 제어(F22, FR-058): 휴대폰 하단 시트의 "전달 일시 정지"와 앱별 끄기. 앱 줄의 "규약 보기"는 그 자리에
+// 규약 화면(ProtocolView, 안 B)을 열고, 닫으면 목록으로 돌아온다.
 // 발표자 화면(F20)과 같은 스토어 상태를 쓴다: setPaused(selectCanSend가 막음), setPluginEnabled(끄면 B가 그 앱의 iframe을 종료).
 // 이미 보낸 데이터는 되돌릴 수 없으므로 그 사실을 같이 보인다.
 
+import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useLensStore } from '../core/store';
+import { ProtocolView } from '../proof/ProtocolView';
 import { PLUGIN_NAME, PLUGIN_STATUS } from './labels';
 import { sanitizeAppText } from './sanitize';
 
@@ -23,6 +26,8 @@ export function WearerControls() {
   const paused = useLensStore((s) => s.session.paused);
   const setPaused = useLensStore((s) => s.setPaused);
   const ids = useLensStore(useShallow((s) => s.pluginOrder));
+  const [protocol, setProtocol] = useState<string | null>(null);
+  if (protocol) return <ProtocolView pluginId={protocol} onClose={() => setProtocol(null)} />;
   return (
     <section className="fm-wearer" aria-label="착용자 제어">
       <div className="fm-wearer__row">
@@ -38,7 +43,7 @@ export function WearerControls() {
       </div>
       <span className="fm-kicker fm-wearer__head">apps</span>
       {ids.map((id) => (
-        <AppRow key={id} id={id} />
+        <AppRow key={id} id={id} onOpenProtocol={() => setProtocol(id)} />
       ))}
       <p className="fm-readout fm-wearer__note" role="note">
         이미 받은 데이터는 회수하지 않습니다. 끄면 그 앱을 종료하고 다음부터 보내지 않습니다.
@@ -47,7 +52,7 @@ export function WearerControls() {
   );
 }
 
-function AppRow({ id }: { id: string }) {
+function AppRow({ id, onOpenProtocol }: { id: string; onOpenProtocol(): void }) {
   const p = useLensStore(
     useShallow((s) => {
       const x = s.plugins[id];
@@ -68,6 +73,9 @@ function AppRow({ id }: { id: string }) {
           {label} · {p.purpose}
         </span>
       </span>
+      <button type="button" className="fm-btn fm-btn--sm fm-glass fm-protocol-open" aria-label={`${name} 규약 보기`} onClick={onOpenProtocol}>
+        규약 보기
+      </button>
       <label className="fm-switch">
         <input type="checkbox" role="switch" checked={p.enabled} onChange={(e) => setEnabled(id, e.target.checked)} />
         <span aria-hidden="true" />
