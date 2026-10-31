@@ -25,7 +25,7 @@ export const THROUGHPUT_WINDOW_MS = 60_000;
 export const ACK_TIMEOUT_MS = 2_000;
 /** 전환 공통 절차 ⑤: 새 iframe의 ready를 기다리는 시간. 넘으면 stopped. */
 export const READY_TIMEOUT_MS = 3_000;
-/** IF-08: 플러그인 SDK가 /api/calorie 응답을 기다리는 시간. 넘으면 고정표. */
+/** IF-08: 칼로리 플러그인이 fetch 전부터 res.text()까지 기다리는 시간. 넘으면 고정표. 서버의 상류 제한은 2.2초. */
 export const CALORIE_CLIENT_TIMEOUT_MS = 3_000;
 
 /** 플러그인에서 받는 메시지 한도(02-SSRD "플러그인 입력 위생"). */
