@@ -281,11 +281,13 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
         rt.readyTimer = null;
         const desired = selectDesiredRuntime(act(), rt.pluginId);
         if (!desired || !shallow(desired, rt.desired)) return;
+        // desired도 넘긴다: 스토어가 한 번 더 대조해, 지금 값과 다르면 게이트를 열지 않는다.
         act().setPluginRuntime(rt.pluginId, {
           status: 'ready',
           runtimeId: rt.runtimeId,
           runtimePolicy: rt.policy,
           gateOpen: true,
+          desired: rt.desired,
         });
         return;
       }
@@ -303,6 +305,7 @@ export function createPluginHost(opts: PluginHostOptions = {}): PluginHost {
         if (!rt.sent.has(msg.deliveryId)) return formatError(rt, '이 iframe에 보내지 않은 deliveryId의 result');
         if (rt.resulted.has(msg.deliveryId)) return;
         rt.resulted.add(msg.deliveryId);
+        // 스토어가 dispatched 전달의 첫 결과만 받는다. false면 버린 것이다.
         act().setResult(rt.pluginId, { deliveryId: msg.deliveryId, text: msg.text, source: msg.source, at: now() });
         return;
       }
@@ -425,38 +428,15 @@ export function startPluginHost(): () => void {
   };
 }
 
-/** IF-02. A broker만 부른다. 호스트가 없으면 failed. */
+/**
+ * IF-02. A broker가 부른다. 허브가 main.tsx에서 `connectPluginHost((_id, msg) => { sendDelivery(msg.deliveryId); })`로
+ * 잇는다(02-SSRD "트랙 연결 기준"). 안에서 markDelivery를 쓰므로 A의 요구(돌아오기 전 기록)를 지킨다. 호스트가 없으면 failed.
+ */
 export function sendDelivery(deliveryId: string): boolean {
   if (defaultHost) return defaultHost.sendDelivery(deliveryId);
   const s = lensStore.getState();
   if (s.deliveries[deliveryId]?.sendStatus === 'prepared') s.markDelivery(deliveryId, 'failed');
   return false;
-}
-
-type DeliveryMessage = Extract<HostToPlugin, { type: 'delivery' }>;
-
-/**
- * 트랙 A broker의 `connectPluginHost(send)`에 넘기는 모양(PR #11의 SendDelivery). 받은 메시지가 스토어 Delivery와
- * 같을 때(같은 Blob 객체 포함)만 sendDelivery로 보낸다. 다르면 failed. 실제로 보내는 메시지는 스토어에서 다시 만든다.
- */
-export function sendDeliveryMessage(pluginId: string, msg: DeliveryMessage): void {
-  const s = lensStore.getState();
-  const d = s.deliveries[msg.deliveryId];
-  if (!d || d.sendStatus !== 'prepared') return;
-  const same =
-    d.pluginId === pluginId &&
-    d.blob === msg.blob &&
-    d.bytes === msg.bytes &&
-    d.scene === msg.scene &&
-    d.objectLabel === msg.objectLabel &&
-    d.width === msg.width &&
-    d.height === msg.height;
-  if (!same) {
-    console.warn(`[plugins] 전달 메시지가 스토어 Delivery와 다름(${pluginId}, ${msg.deliveryId})`);
-    s.markDelivery(d.id, 'failed');
-    return;
-  }
-  sendDelivery(msg.deliveryId);
 }
 
 /** Delivery.sha256(소문자 16진). crypto.subtle(LAN HTTP에서는 없음)이 없으면 순수 JS. */

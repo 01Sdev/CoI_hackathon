@@ -9,7 +9,8 @@ import { build } from 'esbuild';
 import { PLUGIN_MESSAGE_LIMITS } from '../src/core/constants';
 import { buildCsp, buildSrcdoc, safeConnectList } from '../src/plugins/host/csp';
 import { parsePluginMessage, violationReason } from '../src/plugins/host/validate';
-import { CALORIE_FALLBACK_TABLE, UNKNOWN_FOOD_TEXT, caloriePlugin } from '../src/plugins/calorie';
+import { CALORIE_TABLE, X_LABEL_MAX, X_LABEL_RE, fallbackText } from '../src/core/calorie';
+import { caloriePlugin } from '../src/plugins/calorie';
 import { pluginSourceFor } from '../src/plugins/registry';
 import { sha256Pure } from '../src/plugins/sdk/sha256';
 import { buildWorkerSource, pluginCall } from '../src/plugins/sdk/source';
@@ -72,10 +73,11 @@ await check('검증: 형식 오류(모양·키·열거값·Blob)', () => {
   bad({ type: 'result', deliveryId: 'd', text: new Blob(['x']), source: 'api' }, 'format');
   bad(Object.assign(Object.create(null), { type: 'ready', pluginId: 'x' }), 'format');
 });
-await check('검증: text 200자 통과, 201자 한도(코드 포인트, 이모지 200개 통과)', () => {
+await check('검증: text 200 통과, 201 한도(UTF-16 길이: 이모지 100개 = 200 통과, 101개 한도)', () => {
   ok({ type: 'result', deliveryId: 'd', text: 'a'.repeat(L.text), source: 'api' });
-  ok({ type: 'result', deliveryId: 'd', text: '🍕'.repeat(L.text), source: 'api' });
+  ok({ type: 'result', deliveryId: 'd', text: '🍕'.repeat(L.text / 2), source: 'api' });
   bad({ type: 'result', deliveryId: 'd', text: 'a'.repeat(L.text + 1), source: 'api' }, 'limit');
+  bad({ type: 'result', deliveryId: 'd', text: '🍕'.repeat(L.text / 2 + 1), source: 'api' }, 'limit');
 });
 await check('검증: ID 128자·target 512자·8KiB', () => {
   ok({ type: 'ready', pluginId: 'p'.repeat(L.id) });
@@ -83,7 +85,7 @@ await check('검증: ID 128자·target 512자·8KiB', () => {
   bad({ type: 'ack', deliveryId: 'd'.repeat(L.id + 1), sha256: hex64 }, 'limit');
   ok({ type: 'violation', attempt: 'script', target: 't'.repeat(L.target) });
   bad({ type: 'violation', attempt: 'script', target: 't'.repeat(L.target + 1) }, 'limit');
-  // 길이 한도 안이지만 직렬화가 8KiB를 넘는 경우: 512자 × 4바이트(이모지) ≈ 2KiB라 크기 한도는 따로 만든다.
+  // 길이 한도 안에서는 직렬화가 8KiB에 닿지 않으므로 크기 한도는 따로 줄여 본다.
   const big = parsePluginMessage({ type: 'result', deliveryId: 'd', text: 'a', source: 'api' }, { ...L, maxSerializedBytes: 40 });
   assert.equal(big.ok, false);
   if (!big.ok) assert.equal(big.kind, 'limit');
@@ -191,7 +193,7 @@ async function sdkSuite(label: string, make: (plugin: string, test?: Parameters<
     await tick(50);
     assert.deepEqual(w.posted[1], { type: 'ack', deliveryId: 'd1', sha256: M0_SHA256 });
     assert.equal(w.posted[2]!.type, 'result');
-    assert.equal((w.posted[2]!.text as string).length, 200);
+    assert.equal((w.posted[2]!.text as string).length, 200); // String.slice(0, 200)
     assert.deepEqual(w.posted[3], { type: 'violation', attempt: 'fetch', target: 'https://evil.example/' });
     assert.equal(w.posted.length, 4);
   });
@@ -220,6 +222,28 @@ async function sdkSuite(label: string, make: (plugin: string, test?: Parameters<
     s.dispatch(delivery('d1'));
     await tick(50);
     assert.equal(s.posted.length, 1);
+  });
+  await check(`${label}: 해시 실패(Blob 읽기 실패) → ack·핸들러 없음`, async () => {
+    class BrokenBlob extends Blob {
+      override arrayBuffer(): Promise<ArrayBuffer> {
+        return Promise.reject(new Error('read failed'));
+      }
+    }
+    const w = runWorker(make(probePlugin), true);
+    w.dispatch(init);
+    await tick();
+    w.dispatch({ ...delivery('d1'), blob: new BrokenBlob([fixture]) });
+    await tick(50);
+    assert.equal(w.posted.length, 1);
+  });
+  await check(`${label}: 느린 핸들러가 다음 전달의 ack를 막지 않는다`, async () => {
+    const w = runWorker(make('famelet.onDelivery(function () { return new Promise(function (r) { setTimeout(r, 400); }); });'), true);
+    w.dispatch(init);
+    await tick();
+    w.dispatch(delivery('d1'));
+    w.dispatch(delivery('d2'));
+    await tick(80);
+    assert.deepEqual(w.posted.filter((m) => m.type === 'ack').map((m) => m.deliveryId).sort(), ['d1', 'd2']);
   });
   await check(`${label}: onInit 예외 → ready 없음`, async () => {
     const w = runWorker(make("famelet.onInit(function () { throw new Error('x'); });"), true);
@@ -254,7 +278,7 @@ async function runCalorie(apiBase: string | null, fetchImpl: (call: FetchCall, s
     return fetchImpl(call, init.signal);
   };
   // 시간 제한은 50ms로 줄여 넣는다(제품은 CALORIE_CLIENT_TIMEOUT_MS = 3초).
-  const src = buildWorkerSource(pluginCall(caloriePlugin, CALORIE_FALLBACK_TABLE, 50, UNKNOWN_FOOD_TEXT));
+  const src = buildWorkerSource(pluginCall(caloriePlugin, CALORIE_TABLE, X_LABEL_RE.source, X_LABEL_MAX, 50, fallbackText('')));
   const w = runWorker(src, true, { fetch: fetchMock, AbortController, Response });
   w.dispatch({ ...init, apiBase });
   await tick();
@@ -281,14 +305,11 @@ await check('칼로리: 비 200(502·429) → 고정표, 기록 없음', async (
     assert.deepEqual(r.posted.slice(1), [{ type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' }]);
   }
 });
-await check('칼로리: 요청 실패(CSP·네트워크) → violation fetch + 고정표', async () => {
+await check('칼로리: 요청 실패(CSP·네트워크) → 고정표, reportViolation 없음', async () => {
   const r = await runCalorie('https://h.example', async () => {
     throw new TypeError('Failed to fetch');
   });
-  assert.deepEqual(r.posted.slice(1), [
-    { type: 'violation', attempt: 'fetch', target: 'https://h.example/api/calorie' },
-    { type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' },
-  ]);
+  assert.deepEqual(r.posted.slice(1), [{ type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' }]);
 });
 await check('칼로리: 시간 초과(abort) → 고정표, 기록 없음', async () => {
   const r = await runCalorie('https://h.example', never);
@@ -299,10 +320,18 @@ await check('칼로리: apiBase null(비교 모드) → 요청 0, 고정표', as
   assert.equal(r.calls.length, 0);
   assert.deepEqual(r.posted.slice(1), [{ type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' }]);
 });
-await check('칼로리: 고정표 밖·헤더에 못 싣는 라벨 → 고정표 밖 문구, x-label 없음', async () => {
-  const r = await runCalorie('https://h.example', async () => new Response('x', { status: 502 }), 'Bowl!');
-  assert.deepEqual({ ...r.calls[0]!.headers }, { 'Content-Type': 'image/jpeg' });
-  assert.equal(r.posted[1]!.text, UNKNOWN_FOOD_TEXT);
+await check('칼로리: 규칙 밖 라벨(대문자·연속 공백·33자) → x-label 없음, 고정표 밖 문구', async () => {
+  for (const label of ['Bowl!', 'hot  dog', 'a'.repeat(33)]) {
+    const r = await runCalorie('https://h.example', async () => new Response('x', { status: 502 }), label);
+    assert.deepEqual({ ...r.calls[0]!.headers }, { 'Content-Type': 'image/jpeg' });
+    assert.equal(r.posted[1]!.text, '음식(종류 미상)');
+  }
+});
+await check('칼로리: Worker 고정표 문구 = core fallbackText(표 10종·표 밖·규칙 밖)', async () => {
+  for (const label of [...Object.keys(CALORIE_TABLE), 'bowl', 'cup', 'Pizza', 'pizza ', 'hot  dog', '']) {
+    const r = await runCalorie(null, async () => new Response('x'), label);
+    assert.equal(r.posted[1]!.text, fallbackText(label), JSON.stringify(label));
+  }
 });
 
 // ── 변조 플러그인(Worker처럼 document·navigator·importScripts가 없는 vm) ──

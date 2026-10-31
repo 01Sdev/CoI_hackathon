@@ -37,10 +37,8 @@ export function installFameletSdk(
   const resulted = new Set<string>();
   const reported = new Set<string>();
 
-  const clip = (s: string, max: number) => {
-    const cps = Array.from(s);
-    return cps.length > max ? cps.slice(0, max).join('') : s;
-  };
+  // 호스트 검사와 같은 기준(UTF-16 길이)으로 자른다.
+  const clip = (s: string, max: number) => s.slice(0, max);
 
   const hash = async (bytes: Uint8Array) => {
     const subtle = options.forcePureHash ? undefined : scope.crypto?.subtle;
@@ -89,12 +87,17 @@ export function installFameletSdk(
     const deliveryId = m.deliveryId;
     if (!ready || typeof deliveryId !== 'string' || !(blob instanceof Blob) || received.has(deliveryId)) return;
     received.add(deliveryId);
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    if (options.testAckMode !== 'suppress') {
+    // 메시지마다 따로 해시 → ack → 핸들러. 해시가 실패하면 ack도 핸들러 호출도 없다(호스트가 2초 뒤 timeout).
+    let sha256: string;
+    try {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
       if (options.testAckMode === 'corrupt' && bytes.length > 0) bytes[0] = bytes[0]! ^ 0xff;
-      // 핸들러보다 먼저 보낸다(IF-04).
-      post({ type: 'ack', deliveryId, sha256: await hash(bytes) });
+      sha256 = await hash(bytes);
+    } catch {
+      return;
     }
+    // 핸들러보다 먼저 보낸다(IF-04).
+    if (options.testAckMode !== 'suppress') post({ type: 'ack', deliveryId, sha256 });
     const handler = deliveryHandler;
     if (!handler) return;
     const d: FameletDelivery = {

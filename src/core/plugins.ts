@@ -40,8 +40,9 @@ export const PLUGIN_SEEDS: readonly PluginSeed[] = [
   {
     id: 'hello',
     kind: 'hello',
-    // M0 관문용 개발 플러그인. ack만 돌려준다.
-    manifestJson: json({ purpose: '개발용 연결 확인', scenes: ['food', 'person'], network: [] }),
+    // M0 관문용이자 발표용 두 번째 소비자("장면 기록", PRD F21 P2). 같은 피자 조각을 64px·통신 없이 받아
+    // 같은 제한과 로그가 적용되는 것을 보여 준다. 결과 줄은 고정 문장("피자 장면 기록됨").
+    manifestJson: json({ purpose: '장면 기록(두 번째 앱)', scenes: ['food'], maxSide: 64, network: [] }),
     enabledByDefault: false,
   },
 ];
