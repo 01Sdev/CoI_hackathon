@@ -60,7 +60,7 @@ flowchart LR
 | `drawImage(video…)`·`getImageData`·`getUserMedia`·`srcObject`·`captureStream`·`createImageBitmap`·`toBlob` | `input/`, `vision/` (`toBlob`은 `vision/`·`broker/`). 이 표는 호스트 코드 규칙이다. 칼로리 플러그인의 하위 Worker가 받은 가린 조각 JPEG를 `createImageBitmap`·`OffscreenCanvas`로 디코드하는 것은 격리 안의 일이다(IF-08 "기기 안 모델") |
 | `sendDelivery()` 호출(플러그인에 바이트를 보내는 유일한 함수) | `broker/` 한 곳 |
 | iframe으로의 `postMessage` | `plugins/host` 안 `sendInit`·`sendDelivery`·`sendQuestions`(코디 스캔 IF-09)만 |
-| 호스트 코드의 `fetch`·`XMLHttpRequest`·`WebSocket` | 없음(모델·WASM 정적 로드 제외. 코디 스캔 받아쓰기의 같은 origin `POST /api/stt`(녹음 Blob만, IF-12)도 제외, 2026-11-01 [허브 확인 필요]). **라이브러리가 몰래 보내는 요청도 막는다(P0, 2026-10-31 추가):** MediaPipe tasks-vision 1.2.0이 `https://odml.pa.googleapis.com/v1/log`로 POST를 시도한다(독립 데모 실측, 본문 미확인). 막는 방법은 아래 "호스트 페이지 CSP"와 V15 |
+| 호스트 코드의 `fetch`·`XMLHttpRequest`·`WebSocket` | 없음(모델·WASM 정적 로드 제외. 코디 스캔 실시간 받아쓰기의 같은 origin `POST /api/scribe-token`(본문 없음, IF-12)과 그 토큰으로 여는 ElevenLabs 웹소켓(A)도 제외, 2026-11-01 [허브 확인 필요]). **라이브러리가 몰래 보내는 요청도 막는다(P0, 2026-10-31 추가):** MediaPipe tasks-vision 1.2.0이 `https://odml.pa.googleapis.com/v1/log`로 POST를 시도한다(독립 데모 실측, 본문 미확인). 막는 방법은 아래 "호스트 페이지 CSP"와 V15 |
 | 플러그인이 보낸 문자열 렌더링 | `textContent`만(`innerHTML` 금지. 호스트 XSS는 곧 원본 접근이다) |
 | 카메라 미리보기 | A가 `mountPreview(container)`를 export하고 C는 컨테이너만 넘긴다. `<video>`·MediaStream 참조는 스토어에 넣지 않는다. 미리보기는 좌우 반전하지 않는다 [제안]. HUD 대상 위치(`liveObservation.targetBox`, 소스 프레임 기준 0~1. 확정 전 후보도 따라 움직인다)를 그대로 겹치기 위해서다. HUD "장면"은 `liveObservation.label`(확정 장면)이다. C는 `src/input/preview.ts`의 `mountPreview`를 쓰며, 처음 붙일 때 A 런타임이 시작된다 |
 | `/dev/*` 테스트 페이지(목 호출 포함) | 프로덕션 빌드에서 제외 |
@@ -225,15 +225,15 @@ framelet.answer(questionId: string, text: string, source: 'api' | 'fallback'): v
 
 **IF-11 `/api/outfit`.** `POST`, 본문 JSON `{ image: string /* base64 JPEG */, question: string }` → `200 { answer: string }`. 서버 환경 변수 `GEMINI_API_KEY`(Google Gemini). 15초 안에 답이 없거나 키가 없으면 대체 문구. 사람의 신원·나이·인종·건강은 추측하지 않고, 브랜드는 로고·글자가 보일 때만 말한다. 받는 곳은 framelet 서버 → Google이므로 규약 보기에 적는다. **B 결정(2026-11-01, `api/outfit.ts`):** 응답은 `200 { answer, source: 'api' | 'fallback' }`(대체 문구도 200, 문구는 `OUTFIT_FALLBACK_TEXT`). 판정은 OPTIONS 204(`Allow-Headers: content-type`) → 405 → 429(인스턴스 고정 창 60초 30건) → 413(본문 1MB, 디코드한 JPEG 600KiB) → 415(JSON 아님·JPEG 아님) → 400(JSON·질문 1~300자·base64). 모델은 Gemini 문서의 안정판 중 가장 빠른 `gemini-3.5-flash-lite`(이미지 입력, 생각 기본 minimal, `OUTFIT_MODEL`로 바꿈), REST `v1beta/models/<모델>:generateContent`(`x-goog-api-key`, `systemInstruction`, 이미지 → 질문 순, `maxOutputTokens` 512). 서버 상태를 남기는 Interactions API는 쓰지 않는다. 답은 생각 조각을 빼고 1,000자로 자른다. 로그는 `outfit fallback <이유>` 한 줄만(이미지·질문·답·키 없음). 플러그인은 받은 조각을 deliveryId별로 최근 4개만 들고 있고, 요청부터 본문까지 18초 안에 끝나지 않으면 대체 문구로 답한다.
 
-**IF-12 `/api/stt` (2026-11-01 사용자 결정: 받아쓰기를 ElevenLabs로).** 코디 스캔 대화 막대의 받아쓰기. 녹음은 A, 화면 훅은 C, 서버는 B(`api/stt.ts`). 말소리는 framelet 서버를 거쳐 ElevenLabs로 나가고 글자만 돌아온다.
+**IF-12 `/api/scribe-token` (2026-11-01 사용자 결정: 받아쓰기를 ElevenLabs 실시간으로).** 코디 스캔 대화 막대의 실시간 받아쓰기. 연결은 A(브라우저 → ElevenLabs 웹소켓), 화면 훅은 C, 토큰 서버는 B(`api/scribe-token.ts`). 말소리는 브라우저에서 ElevenLabs로 바로 가고, framelet 서버는 일회용 토큰만 발급한다.
 
 | 항목 | 내용 |
 | --- | --- |
-| 요청 | 같은 origin `POST /api/stt`, 본문 = 녹음 Blob 그대로, `Content-Type: audio/webm`(Chrome·Android, Opus) 또는 `audio/mp4`(사파리, AAC). `;codecs=` 붙어도 된다. 녹음은 15초까지(A가 지킨다). 서버는 2MiB(2,097,152B)까지만 받는다 |
-| 응답 200 | `{ "text": string }`. 공백을 한 칸으로 줄이고 앞뒤를 잘라 300자(`OUTFIT_QUESTION_MAX`)까지. 조용하면 `""` |
-| 오류 | 405(POST 아님) → 429(인스턴스 고정 창 60초 30건) → 413(Content-Length 또는 실제 2MiB 초과) → 415(형식이 둘이 아님, 또는 머리 바이트가 webm EBML `1A45DFA3`·mp4 `ftyp`가 아님) → 400(0바이트) → **503 `{ "error": "stt unavailable" }`**(키 없음, 상류 비 200, 10초 초과, 응답 형식 오류). 503이면 C가 브라우저 받아쓰기로 넘어간다. 오류 본문은 모두 JSON, `Cache-Control: no-store` |
-| 상류 | ElevenLabs `POST https://api.elevenlabs.io/v1/speech-to-text`, 헤더 `xi-api-key`, multipart: `model_id`(`scribe_v2`, 문서상 일반 받아쓰기 최신판, `STT_MODEL`로 바꿈), `language_code` `ko`(자동 감지 끔), `tag_audio_events` false, `diarize` false, `file`(`speech.webm`·`speech.mp4`). 엔터프라이즈 무보관 모드는 `ELEVENLABS_ZERO_RETENTION=1`일 때만 `?enable_logging=false` |
-| 서버 | 키는 `ELEVENLABS_API_KEY`(레포·클라이언트·메시지에 없음). 녹음·글자는 저장하지 않고 로그는 `stt 503 <이유>` 한 줄만. 같은 origin에서만 부르므로 CORS는 열지 않는다. Vercel `maxDuration` 30초 |
+| 요청 | 같은 origin `POST /api/scribe-token`, 본문 없음. `Origin`의 host가 요청 host(`x-forwarded-host` → `host`)와 같아야 하고, `Sec-Fetch-Site`가 있으면 `same-origin`이어야 한다. 아니면 403. CORS는 열지 않는다 |
+| 응답 200 | `{ "token": string }`. ElevenLabs 일회용 토큰(`realtime_scribe`): 15분 뒤 만료, 한 번 쓰면 끝. 질문 한 번에 하나를 받는다 |
+| 오류 | 405(POST 아님) → 403(같은 출처 아님) → 429(인스턴스 고정 창 60초 20건) → **503 `{ "error": string }`**(키 없음, 상류 비 200, 5초 초과, 응답 형식 오류). 문구: 키 없음·시간 초과·형식은 "음성 받아쓰기를 지금 쓸 수 없어요", 401·403 "음성 제공사 인증 오류", 429 "음성 제공사 요청 제한", 422 "음성 제공사 요청 형식 오류", 그 밖 "음성 제공사 오류". 503이면 C가 브라우저 받아쓰기로 넘어간다. 모두 JSON, `Cache-Control: no-store` |
+| 상류 | ElevenLabs `POST https://api.elevenlabs.io/v1/single-use-token/realtime_scribe`, 헤더 `xi-api-key`, 본문 없음(공식 SDK `tokens.singleUse.create("realtime_scribe")`와 같은 호출) |
+| 서버 | 키는 `ELEVENLABS_API_KEY`(레포·클라이언트·메시지에 없음). 응답은 토큰만, 키는 응답·로그에 넣지 않는다. 토큰도 로그에 남기지 않고, 로그는 `scribe-token 503 <이유>` 한 줄만. Vercel `maxDuration` 10초 |
 
 ### IF-07 `/outward` BroadcastChannel
 

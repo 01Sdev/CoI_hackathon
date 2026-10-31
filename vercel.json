@@ -1,7 +1,7 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "functions": { "api/outfit.ts": { "maxDuration": 30 }, "api/stt.ts": { "maxDuration": 30 } },
+  "functions": { "api/outfit.ts": { "maxDuration": 30 }, "api/scribe-token.ts": { "maxDuration": 10 } },
   "rewrites": [
     { "source": "/hud", "destination": "/index.html" },
     { "source": "/outward", "destination": "/index.html" }

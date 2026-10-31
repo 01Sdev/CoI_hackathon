@@ -74,7 +74,7 @@ The fine-tuned weights were modified by training on Nutrition5k and FlavoriaFood
 | --- | --- | --- |
 | Anthropic Claude API (`claude-haiku-5-5`) | `/api/calorie` 서버 함수의 칼로리 추정 | 유료 API. 이미 가린 조각만 보낸다. 키는 서버 환경 변수에만 둔다 |
 | Google Gemini API (`gemini-3.5-flash-lite`, REST `generateContent`, 패키지 없음) | `/api/outfit` 서버 함수의 코디 스캔 답(02-SSRD IF-11) | 유료 API(Google 약관). 착용자가 동의한 사람의 얼굴을 가린 조각과 질문만 보낸다. 키는 서버 환경 변수 `GEMINI_API_KEY`에만 둔다. https://ai.google.dev/gemini-api/docs |
-| ElevenLabs Speech-to-Text (`scribe_v2`, REST `POST /v1/speech-to-text`, 패키지 없음) | `/api/stt` 서버 함수의 코디 스캔 받아쓰기(02-SSRD IF-12) | 유료 API(ElevenLabs 약관). 착용자가 말한 녹음(15초 안)만 보내고 글자만 받는다. 서버는 녹음을 저장하지 않는다. ElevenLabs 쪽 보관은 엔터프라이즈 무보관 모드(`enable_logging=false`, `ELEVENLABS_ZERO_RETENTION=1`)가 아니면 그쪽 정책을 따른다. 키는 서버 환경 변수 `ELEVENLABS_API_KEY`에만 둔다. https://elevenlabs.io/docs/api-reference/speech-to-text/convert |
+| ElevenLabs Speech-to-Text 실시간(Scribe Realtime, 일회용 토큰 `realtime_scribe`) | 코디 스캔 실시간 받아쓰기(02-SSRD IF-12). 서버 함수 `/api/scribe-token`은 일회용 토큰(15분, 한 번 사용)만 만들고, 말소리는 브라우저가 그 토큰으로 ElevenLabs 웹소켓에 바로 보낸다 | 유료 API(ElevenLabs 약관). 말소리와 받아쓴 글자는 framelet 서버를 거치지 않고 저장하지 않는다. ElevenLabs 쪽 보관은 그쪽 정책을 따른다. 키는 서버 환경 변수 `ELEVENLABS_API_KEY`에만 두고 브라우저에는 토큰만 간다. 브라우저 쪽 연결 코드(`@elevenlabs/client` 등)의 고지는 트랙 A가 넣는다. https://elevenlabs.io/docs/api-reference/tokens/create |
 | Vercel (예정) | 배포 | 배포 방식 확정 전 |
 
 ## 6. 발표용 구분

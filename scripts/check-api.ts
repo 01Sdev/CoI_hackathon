@@ -1,4 +1,4 @@
-// api/calorie·api/outfit·api/stt assertion 스크립트. 실행: npm run check:api
+// api/calorie·api/outfit·api/scribe-token assertion 스크립트. 실행: npm run check:api
 // 실제 @anthropic-ai/sdk를 가짜 상류(로컬 HTTP 서버)에 붙여 판정 순서·요청 모양·시간 제한·재시도 없음·응답 처리·502 로그를 본다(TC-053).
 // 진짜 모델 호출(V5)은 키가 있을 때 scripts/measure-calorie.ts로 따로 잰다.
 
@@ -22,7 +22,7 @@ import {
   SYSTEM_INSTRUCTION as OUTFIT_SYSTEM,
   createOutfitHandler,
 } from '../api/outfit';
-import { DEFAULT_MODEL as STT_DEFAULT_MODEL, MAX_AUDIO_BYTES as STT_MAX_AUDIO_BYTES, createSttHandler } from '../api/stt';
+import { ERROR_TEXT as SCRIBE_ERRORS, TOKEN_TYPE, createScribeTokenHandler } from '../api/scribe-token';
 import { OUTFIT_FALLBACK_TEXT } from '../src/plugins/outfit';
 
 let passed = 0;
@@ -371,126 +371,108 @@ await check('outfit: 생각(thought) 조각은 빼고, 1,000자로 자른다. �
   assert.deepEqual(codes, [200, 200, 429]);
 });
 
-// ── /api/stt(IF-12, ElevenLabs Speech-to-Text) ──
-// 가짜 녹음: 머리만 진짜(webm EBML, mp4 ftyp). 상류는 주입한 fetch로 대신해 multipart 내용을 그대로 본다.
-const webm = (n = 64) => {
-  const b = new Uint8Array(n);
-  b.set([0x1a, 0x45, 0xdf, 0xa3]);
-  return b;
-};
-const mp4 = (n = 64) => {
-  const b = new Uint8Array(n);
-  b.set([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
-  return b;
-};
-interface SttCall {
+// ── /api/scribe-token(IF-12, ElevenLabs 일회용 토큰) ──
+// 상류는 주입한 fetch로 대신한다. 키는 시험용 가짜 값이고 응답·로그 어디에도 나오면 안 된다.
+const SCRIBE_KEY = 'test-eleven-key-not-real';
+interface ScribeCall {
   url: string;
+  method: string;
   key: string | null;
-  fields: Record<string, string>;
-  file: { type: string; size: number; name: string } | null;
+  body: unknown;
 }
-const sttCalls: SttCall[] = [];
-let sttReply: () => Promise<Response> = async () => new Response(JSON.stringify({ text: ' 이 옷  어디 거야? ', language_code: 'kor', words: [] }));
-const fakeEleven: typeof fetch = async (input, init) => {
-  const form = init?.body as FormData;
-  const fields: Record<string, string> = {};
-  let file: SttCall['file'] = null;
-  for (const [k, v] of form.entries()) {
-    if (typeof v === 'string') fields[k] = v;
-    else file = { type: v.type, size: v.size, name: (v as File).name };
-  }
-  sttCalls.push({ url: String(input), key: new Headers(init?.headers).get('xi-api-key'), fields, file });
+const scribeCalls: ScribeCall[] = [];
+let scribeReply: () => Promise<Response> = async () => new Response(JSON.stringify({ token: 'sutkn_1234567890' }));
+const fakeTokenApi: typeof fetch = async (input, init) => {
+  scribeCalls.push({ url: String(input), method: init?.method ?? 'GET', key: new Headers(init?.headers).get('xi-api-key'), body: init?.body ?? null });
   const signal = init?.signal;
   return Promise.race([
-    sttReply(),
+    scribeReply(),
     new Promise<Response>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason))),
   ]);
 };
-const stt = createSttHandler({ apiKey: 'test-key-not-real', baseURL: 'https://eleven.test', rateLimit: big, timeoutMs: 200, fetch: fakeEleven });
-const speak = (body: BodyInit | null, type = 'audio/webm;codecs=opus', h = stt, extra: Record<string, string> = {}) =>
-  h(new Request('http://localhost/api/stt', { method: 'POST', body, headers: { 'content-type': type, ...extra } }));
+const scribe = createScribeTokenHandler({ apiKey: SCRIBE_KEY, baseURL: 'https://eleven.test', rateLimit: big, timeoutMs: 200, fetch: fakeTokenApi });
+const sameOrigin = { origin: 'https://framelet-demo.vercel.app', host: 'framelet-demo.vercel.app', 'sec-fetch-site': 'same-origin' };
+const mint = (headers: Record<string, string> = sameOrigin, h = scribe, method = 'POST') =>
+  h(new Request('https://framelet-demo.vercel.app/api/scribe-token', { method, headers }));
 
-await check(`stt: webm → ElevenLabs ${STT_DEFAULT_MODEL}·ko·xi-api-key, 200 {text}만(공백 정리)`, async () => {
-  sttCalls.length = 0;
-  const r = await speak(webm(1_000));
+await check(`scribe-token: 같은 출처 POST → ElevenLabs single-use-token/${TOKEN_TYPE}(xi-api-key, 본문 없음) → 200 {token}만`, async () => {
+  scribeCalls.length = 0;
+  const r = await mint();
   assert.equal(r.status, 200);
   assert.equal(r.headers.get('cache-control'), 'no-store');
-  assert.equal(r.headers.get('access-control-allow-origin'), null); // 같은 origin에서만 부른다
-  assert.deepEqual(await r.json(), { text: '이 옷 어디 거야?' });
-  const c = sttCalls[0]!;
-  assert.equal(c.url, 'https://eleven.test/v1/speech-to-text');
-  assert.equal(c.key, 'test-key-not-real');
-  assert.deepEqual(c.fields, { model_id: STT_DEFAULT_MODEL, language_code: 'ko', tag_audio_events: 'false', diarize: 'false' });
-  assert.deepEqual(c.file, { type: 'audio/webm', size: 1_000, name: 'speech.webm' });
+  assert.equal(r.headers.get('access-control-allow-origin'), null);
+  const text = await r.text();
+  assert.deepEqual(JSON.parse(text), { token: 'sutkn_1234567890' });
+  assert.ok(!text.includes(SCRIBE_KEY));
+  assert.deepEqual(scribeCalls, [{ url: 'https://eleven.test/v1/single-use-token/realtime_scribe', method: 'POST', key: SCRIBE_KEY, body: null }]);
 });
-await check('stt: 사파리 mp4도, 무보관 모드(ELEVENLABS_ZERO_RETENTION)는 enable_logging=false', async () => {
-  sttCalls.length = 0;
-  assert.equal((await speak(mp4(), 'audio/mp4')).status, 200);
-  assert.deepEqual(sttCalls[0]!.file, { type: 'audio/mp4', size: 64, name: 'speech.mp4' });
-  const zero = createSttHandler({ apiKey: 'test-key-not-real', baseURL: 'https://eleven.test', zeroRetention: true, fetch: fakeEleven });
-  await speak(webm(), 'audio/webm', zero);
-  assert.equal(sttCalls.at(-1)!.url, 'https://eleven.test/v1/speech-to-text?enable_logging=false');
+await check('scribe-token: 다른 출처·Origin 없음·sec-fetch-site cross-site → 403, GET → 405, 상류 0건', async () => {
+  scribeCalls.length = 0;
+  assert.equal((await mint({ origin: 'https://evil.example', host: 'framelet-demo.vercel.app' })).status, 403);
+  assert.equal((await mint({ host: 'framelet-demo.vercel.app' })).status, 403);
+  assert.equal((await mint({ ...sameOrigin, 'sec-fetch-site': 'cross-site' })).status, 403);
+  assert.equal((await mint({ origin: 'not a url', host: 'framelet-demo.vercel.app' })).status, 403);
+  assert.equal((await mint(sameOrigin, scribe, 'GET')).status, 405);
+  assert.equal(scribeCalls.length, 0);
+  // 개발 서버: Origin http://localhost:5187 = Host localhost:5187. sec-fetch-site 없음(옛 브라우저)도 Origin이 맞으면 통과.
+  assert.equal((await mint({ origin: 'http://localhost:5187', host: 'localhost:5187' })).status, 200);
 });
-await check(`stt: 405, 415(형식·머리), 400(빈 녹음), 413(${STT_MAX_AUDIO_BYTES}B 초과: Content-Length·실제) → 상류 0건`, async () => {
-  sttCalls.length = 0;
-  assert.equal((await stt(new Request('http://localhost/api/stt', { method: 'GET' }))).status, 405);
-  assert.equal((await speak(webm(), 'audio/wav')).status, 415);
-  assert.equal((await speak(webm(), 'text/plain')).status, 415);
-  assert.equal((await speak(mp4(), 'audio/webm')).status, 415); // 머리가 webm이 아님
-  assert.equal((await speak(webm(), 'audio/mp4')).status, 415);
-  assert.equal((await speak(new Uint8Array(0))).status, 400);
-  assert.equal((await speak(webm(STT_MAX_AUDIO_BYTES + 1))).status, 413);
-  assert.equal((await speak(webm(16), 'audio/webm', stt, { 'content-length': String(STT_MAX_AUDIO_BYTES + 1) })).status, 413);
-  assert.equal(sttCalls.length, 0);
-  assert.equal((await speak(webm(STT_MAX_AUDIO_BYTES))).status, 200); // 정확히 2MiB는 통과
-});
-await check('stt: 키 없음·상류 401·422·500·시간 초과·JSON 아님·text 없음 → 503(브라우저 받아쓰기로), 로그 한 줄에 내용 없음', async () => {
+await check('scribe-token: 키 없음·상류 401·403·422·429·500·시간 초과·JSON 아님·토큰 이상 → 503 {error}, 키·토큰은 응답·로그에 없음', async () => {
   logs.length = 0;
-  sttCalls.length = 0;
+  scribeCalls.length = 0;
   const prev = process.env.ELEVENLABS_API_KEY;
   delete process.env.ELEVENLABS_API_KEY;
-  const noKey = createSttHandler({ apiKey: '', fetch: fakeEleven });
-  const nk = await speak(webm(), 'audio/webm', noKey);
-  assert.deepEqual([nk.status, await nk.json()], [503, { error: 'stt unavailable' }]);
+  const noKey = await mint(sameOrigin, createScribeTokenHandler({ apiKey: '', fetch: fakeTokenApi }));
   if (prev !== undefined) process.env.ELEVENLABS_API_KEY = prev;
-  assert.equal(sttCalls.length, 0);
-  for (const reply of [
-    async () => new Response('{"detail":"bad key"}', { status: 401 }),
-    async () => new Response('{"detail":[]}', { status: 422 }),
-    async () => new Response('x', { status: 500 }),
-    () => new Promise<Response>(() => {}), // 끝나지 않음 → 200ms에 끊음
-    async () => new Response('not json'),
-    async () => new Response(JSON.stringify({ language_code: 'kor' })),
-  ]) {
-    sttReply = reply;
-    assert.equal((await speak(webm())).status, 503);
+  assert.deepEqual([noKey.status, await noKey.json()], [503, { error: SCRIBE_ERRORS.unavailable }]);
+  assert.equal(scribeCalls.length, 0);
+  const cases: [() => Promise<Response>, string][] = [
+    [async () => new Response('{"detail":"invalid key"}', { status: 401 }), SCRIBE_ERRORS.auth],
+    [async () => new Response('{}', { status: 403 }), SCRIBE_ERRORS.auth],
+    [async () => new Response('{"detail":[]}', { status: 422 }), SCRIBE_ERRORS.invalid],
+    [async () => new Response('{}', { status: 429 }), SCRIBE_ERRORS.rate],
+    [async () => new Response('x', { status: 500 }), SCRIBE_ERRORS.upstream],
+    [() => new Promise<Response>(() => {}), SCRIBE_ERRORS.unavailable],
+    [async () => new Response('not json'), SCRIBE_ERRORS.unavailable],
+    [async () => new Response(JSON.stringify({ token: '' })), SCRIBE_ERRORS.unavailable],
+    [async () => new Response(JSON.stringify({ token: 'a b"c' })), SCRIBE_ERRORS.unavailable],
+    [async () => new Response(JSON.stringify({})), SCRIBE_ERRORS.unavailable],
+  ];
+  for (const [reply, error] of cases) {
+    scribeReply = reply;
+    const r = await mint();
+    const text = await r.text();
+    assert.deepEqual([r.status, JSON.parse(text)], [503, { error }]);
+    assert.ok(!text.includes(SCRIBE_KEY));
   }
   assert.deepEqual(
-    logs.filter((l) => l.startsWith('stt')),
+    logs.filter((l) => l.startsWith('scribe-token')),
     [
-      'stt 503 no-key',
-      'stt 503 upstream=401',
-      'stt 503 upstream=422',
-      'stt 503 upstream=500',
-      'stt 503 timeout',
-      'stt 503 format=json',
-      'stt 503 format=no-text',
+      'scribe-token 503 no-key',
+      'scribe-token 503 upstream=401',
+      'scribe-token 503 upstream=403',
+      'scribe-token 503 upstream=422',
+      'scribe-token 503 upstream=429',
+      'scribe-token 503 upstream=500',
+      'scribe-token 503 timeout',
+      'scribe-token 503 format=json',
+      'scribe-token 503 format=no-token',
+      'scribe-token 503 format=no-token',
+      'scribe-token 503 format=no-token',
     ],
   );
-  sttReply = async () => new Response(JSON.stringify({ text: '비밀 질문' }));
-  await speak(webm());
-  assert.ok(logs.every((l) => !l.includes('비밀') && !l.includes('test-key')));
+  scribeReply = async () => new Response(JSON.stringify({ token: 'sutkn_secret_token_value' }));
+  await mint();
+  assert.ok(logs.every((l) => !l.includes(SCRIBE_KEY) && !l.includes('sutkn_')));
 });
-await check('stt: 조용하면 200 빈 글자, 300자로 자름, 고정 창 429', async () => {
-  sttReply = async () => new Response(JSON.stringify({ text: '   ' }));
-  assert.deepEqual(await (await speak(webm())).json(), { text: '' });
-  sttReply = async () => new Response(JSON.stringify({ text: '가'.repeat(500) }));
-  assert.equal(((await (await speak(webm())).json()) as { text: string }).text.length, 300);
-  sttReply = async () => new Response(JSON.stringify({ text: '네' }));
-  const small = createSttHandler({ apiKey: 'test-key-not-real', baseURL: 'https://eleven.test', fetch: fakeEleven, rateLimit: { count: 2, windowMs: 60_000 } });
+await check('scribe-token: 고정 창(시험 2건) 넘으면 429, 상류 요청 없음', async () => {
+  scribeReply = async () => new Response(JSON.stringify({ token: 'sutkn_1' }));
+  const small = createScribeTokenHandler({ apiKey: SCRIBE_KEY, baseURL: 'https://eleven.test', fetch: fakeTokenApi, rateLimit: { count: 2, windowMs: 60_000 } });
+  scribeCalls.length = 0;
   const codes = [];
-  for (let i = 0; i < 3; i++) codes.push((await speak(webm(), 'audio/webm', small)).status);
+  for (let i = 0; i < 3; i++) codes.push((await mint(sameOrigin, small)).status);
   assert.deepEqual(codes, [200, 200, 429]);
+  assert.equal(scribeCalls.length, 2);
 });
 
 upstream.close();
