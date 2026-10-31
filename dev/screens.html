@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>famelet 화면별 배치도</title>
+    <!-- 화면 단위 배치도. 근거: PRD "HUD·화면 요구사항", docs/designs/design-system.md §6·§7. 개발 서버 전용(프로덕션 빌드 제외) -->
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 28px 28px 80px; }
+      h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.02em; }
+      h2 { margin: 44px 0 6px; font-size: 19px; }
+      .lead { color: var(--fm-sub); font-size: 14px; margin: 0 0 18px; max-width: 900px; line-height: 1.6; }
+      .row { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; }
+      .shot { display: grid; gap: 10px; }
+      .shot > .cap { max-width: 300px; font-size: 13px; color: var(--fm-sub); line-height: 1.5; }
+      .shot > .cap b { color: var(--fm-text); font-weight: 600; }
+      .frame { position: relative; overflow: hidden; background: var(--fm-bg); color: var(--fm-text); border: 1px solid var(--fm-hairline); }
+      .phone { width: 390px; height: 844px; border-radius: 46px; zoom: 0.62; }
+      .desk { width: 1440px; height: 900px; border-radius: 18px; zoom: 0.46; }
+      .hud { width: 600px; height: 600px; border-radius: 10px; zoom: 0.5; background: #000; }
+      .out { width: 1280px; height: 720px; border-radius: 14px; zoom: 0.32; }
+      .panel-shot { width: 520px; border-radius: 22px; zoom: 0.8; padding: 18px; }
+
+      /* 카메라 화면 흉내 */
+      .cam { position: absolute; inset: 0; }
+      [data-theme='dark'] .cam { background: linear-gradient(180deg, #3b332c 0 50%, #2a241f 50%); }
+      [data-theme='light'] .cam { background: linear-gradient(180deg, #e9e1d6 0 50%, #cdb99b 50%); }
+      .cam .plate { position: absolute; left: 22%; top: 34%; width: 50%; height: 15%; border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, #f4efe7, #d6cdc0); filter: blur(0.6px); }
+      .cam .food { position: absolute; left: 34%; top: 31.5%; font-size: 92px; filter: blur(0.2px); }
+      .cam .person { position: absolute; right: 4%; top: 22%; width: 26%; height: 60%; }
+      .cam .person::before { content: ''; position: absolute; left: 30%; top: 0; width: 40%; aspect-ratio: 1; border-radius: 50%; background: color-mix(in srgb, var(--fm-sub) 45%, transparent); filter: blur(2px); }
+      .cam .person::after { content: ''; position: absolute; left: 4%; top: 22%; width: 92%; height: 78%; border-radius: 48% 48% 10px 10px; background: color-mix(in srgb, var(--fm-sub) 35%, transparent); filter: blur(2px); }
+      .cam.dim::after { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--fm-bg) 55%, transparent); }
+      .lines { position: absolute; inset: 0; }
+
+      .abs { position: absolute; }
+      .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: -0.01em; }
+      .brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--fm-lens); box-shadow: 0 0 10px var(--fm-lens); }
+      .stack { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+      .card { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: var(--fm-r-card); }
+      .thumb { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 25px; background: color-mix(in srgb, var(--fm-text) 10%, transparent); position: relative; overflow: hidden; }
+      .thumb--masked::after { content: ''; position: absolute; right: 5px; top: 5px; width: 15px; height: 15px; border-radius: 3px; background: repeating-conic-gradient(var(--fm-sub) 0 25%, transparent 0 50%) 0 0 / 7px 7px; }
+      .thumb--hold { background: none; border: 1.5px dashed var(--fm-sub); }
+      .tag { font-family: var(--fm-font-mono); font-size: 11px; font-weight: 600; color: var(--fm-sub); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--fm-hairline); }
+      .row-title { display: flex; align-items: center; gap: 8px; }
+      .sheet { position: absolute; left: 8px; right: 8px; bottom: 8px; border-radius: 30px 30px 38px 38px; padding: 10px 14px 18px; display: grid; gap: 8px; }
+      .handle { justify-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--fm-hairline); }
+      .sheet-head { display: flex; justify-content: space-between; align-items: baseline; padding: 0 4px; }
+      .bar { height: 6px; border-radius: 3px; background: var(--fm-hairline); overflow: hidden; }
+      .bar > i { display: block; height: 100%; background: var(--fm-lens); border-radius: 3px; }
+      .check { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; font-size: 15px; }
+      .check .ok { color: var(--fm-safe); }
+      .switch { width: 46px; height: 28px; border-radius: 99px; background: var(--fm-hairline); position: relative; }
+      .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--fm-text); }
+      .switch.on { background: var(--fm-exposed); }
+      .switch.on::after { left: 21px; background: #1a1206; }
+      .tabs { display: flex; gap: 4px; padding: 4px; border-radius: 99px; }
+      .tabs span { padding: 9px 16px; border-radius: 99px; font-size: 14px; font-weight: 600; color: var(--fm-sub); }
+      .tabs span.on { background: var(--fm-text); color: var(--fm-on-text); }
+      .metric { border-radius: 18px; padding: 14px 16px; display: grid; gap: 6px; }
+      .metric .v { font-size: 30px; font-weight: 300; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+      .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      .thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+      .thumbs .thumb { width: 100%; height: auto; aspect-ratio: 1; font-size: 36px; }
+      .editor { font-family: var(--fm-font-mono); font-size: 13px; line-height: 1.7; padding: 14px; border-radius: 14px; white-space: pre; }
+      .err { color: var(--fm-blocked); }
+      .hl { background: color-mix(in srgb, var(--fm-blocked) 18%, transparent); border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>famelet 화면별 배치도</h1>
+    <p class="lead">PRD의 네 가지 화면(휴대폰·데스크톱·글래스 /hud·바깥 표시 /outward)과 시작·로딩·실패 상태입니다. HUD 요소는 장면·입력·대상 위치·카운터·결과 다섯 개만 두고, 로그는 휴대폰 하단 시트와 데스크톱 오른쪽 탭으로 보냅니다. 사람에게는 박스를 그리지 않습니다. 시연 음식은 피자입니다.</p>
+    <div id="app"></div>
+
+    <script type="module">
+      import '/src/ui/theme.css';
+
+      // ── 부품 ──
+      const cam = (dim = false, person = true) =>
+        `<div class="cam ${dim ? 'dim' : ''}"><span class="plate"></span><span class="food">🍕</span>${person ? '<span class="person"></span>' : ''}</div><div class="lines fm-scanlines"></div>`;
+      const dot = (tone) => `<span class="fm-dot" ${tone ? `data-tone="${tone}"` : ''}></span>`;
+      const capsule = (text, { tone, panel = true, style = '' } = {}) =>
+        `<span class="fm-capsule fm-glass ${panel ? 'fm-glass--panel' : ''}" ${tone ? `data-tone="${tone}"` : ''} style="${style}">${tone ? dot() : ''}${text}</span>`;
+      const reticle = (l, t, w, h, label = '피자 0.94') =>
+        `<span class="fm-frame" style="left:${l};top:${t};width:${w};height:${h}"><span class="fm-frame__tag">${label}</span></span>`;
+      const orb = (n, tone, size = 120, win = 0) =>
+        `<div class="fm-orb fm-glass fm-glass--panel" data-tone="${tone}" style="--orb:${size}px;--fm-window:${win}">${n}</div>`;
+      const top = (input = '후면 카메라', inputTone) =>
+        `<div class="abs" style="left:20px;right:20px;top:58px;display:flex;justify-content:space-between">
+           <span class="fm-capsule fm-glass fm-glass--panel brand"><span class="brand-dot"></span>famelet</span>
+           ${capsule(input, { tone: inputTone })}
+         </div>`;
+      const scene = (y = 118, text = '음식 앞', score = '0.94', extra = ' · 화면 속 1명') =>
+        `<div class="abs" style="left:0;right:0;top:${y}px;display:flex;justify-content:center">
+           <span class="fm-capsule fm-glass fm-glass--panel">${dot()}<span class="fm-scene">${text}</span><span class="fm-readout">${score}${extra}</span></span>
+         </div>`;
+      const hudBottom = (n, tone, caption, result = '피자 약 285kcal', y = 418, win = 0) =>
+        `<div class="abs stack" style="left:0;right:0;top:${y}px">${orb(n, tone, 120, win)}
+           <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">${capsule(caption, { tone })}${result ? capsule(`<span class="fm-result">${result}</span>`) : ''}</div></div>`;
+      const card = (thumb, title, code, meta, when, tone = 'safe') =>
+        `<div class="card fm-glass" data-tone="${tone}"><span class="thumb ${thumb}">${thumb.includes('hold') ? '' : '🍕'}</span>
+           <div><div class="row-title fm-label">${dot()}${title} <span class="tag">${code}</span></div><div class="fm-readout">${meta}</div></div>
+           <span class="fm-readout">${when}</span></div>`;
+      const sheet = (cards, head = '칼로리가 받은 것', count = '전달 3 · 보류 1') =>
+        `<div class="sheet fm-glass fm-glass--panel"><span class="handle"></span>
+           <div class="sheet-head"><span class="fm-label">${head}</span><span class="fm-readout">${count}</span></div>${cards}</div>`;
+      const shot = (cls, inner, title, cap, theme = 'dark', attrs = '') =>
+        `<div class="shot"><div class="frame ${cls}" data-theme="${theme}" ${attrs}>${inner}</div><div class="cap"><b>${title}</b><br>${cap}</div></div>`;
+      const twoCards =
+        card('', '전달 · 그대로', '2a', '18.6KB · 원본의 6.1% · 이 기기에서', '방금') +
+        card('thumb--masked', '전달 · 얼굴 1개 가림', '2b', '17.9KB · 원본의 6.4%', '14초 전');
+
+      // ── 휴대폰 ──
+      const phone = [
+        shot('phone',
+          `<div class="cam" style="background:var(--fm-bg)"></div><div class="lines fm-grid" style="opacity:.6"></div>
+           <div class="abs stack" style="left:28px;right:28px;top:250px;align-items:flex-start;gap:16px">
+             <span class="fm-kicker">first-person vision broker</span>
+             <div class="brand" style="font-size:44px"><span class="brand-dot" style="width:12px;height:12px"></span>famelet</div>
+             <div style="font-size:19px;line-height:1.55;font-weight:500">앱에는 필요한 조각 한 장만.<br>찍힌 사람의 얼굴은 가려서.<br>넘어간 것은 전부 로그로.</div>
+           </div>
+           <div class="abs stack" style="left:24px;right:24px;bottom:56px;align-items:stretch">
+             <button class="fm-btn fm-btn--primary" style="min-block-size:56px;font-size:17px">시작하기</button>
+             <button class="fm-btn fm-glass">녹화 영상으로 보기</button>
+             <span class="fm-readout" style="text-align:center">카메라 권한과 소리를 한 번에 켭니다 · 판정은 이 기기 안에서</span>
+           </div>`,
+          '1 · 시작', '시작 버튼 하나로 카메라 권한 요청과 오디오 잠금 해제를 같이 한다(F9). 누르는 순간 모델 내려받기를 시작한다.'),
+        shot('phone',
+          `${cam(true)}<div class="lines fm-scan"></div>${top()}
+           <div class="abs fm-glass fm-glass--panel" style="left:22px;right:22px;top:250px;border-radius:26px;padding:22px;display:grid;gap:16px">
+             <span class="fm-kicker">preparing on-device models</span>
+             <div style="font-size:22px;font-weight:600">판정 모델 받는 중</div>
+             <div class="check"><span class="ok">✓</span><span>카메라 연결</span><span class="fm-readout">720×1280</span></div>
+             <div class="check"><span class="fm-readout">··</span><span>물체 판정 모델</span><span class="fm-readout">4.1 / 7.6MB</span></div>
+             <div class="bar"><i style="width:54%"></i></div>
+             <div class="check" style="color:var(--fm-sub)"><span class="fm-readout">··</span><span>얼굴 모델</span><span class="fm-readout">대기</span></div>
+             <div class="fm-readout">보통 10초 안팎 · 아직 아무것도 보내지 않았습니다</div>
+           </div>
+           ${hudBottom('–', 'hold', '준비 중 · 전달 0', '', 560)}`,
+          '2 · 로딩', 'iPhone 첫 추론이 11~14초라 기다리는 화면이 필요하다. 카메라는 먼저 켜고(어둡게), Lens 파랑 스캔선이 훑는다. 진행은 실제 바이트로 보여 준다.'),
+        shot('phone',
+          `${cam()}<div class="lines fm-scanlines"></div>${top()}${scene()}${reticle('19%', '30%', '58%', '16%')}
+           ${hudBottom('0', 'safe', '앱에 반영된 사람 0명 · 보호됨')}${sheet(twoCards)}`,
+          '3 · 보호 중', 'HUD 다섯 요소: 입력(오른쪽 위)·장면·대상 프레임·카운터·결과. 로그는 하단 시트(끌어 올리면 전체). 브랜드는 HUD 밖 왼쪽 위.'),
+        shot('phone',
+          `${cam()}${top()}${scene()}${reticle('19%', '30%', '58%', '16%')}
+           <div class="abs" style="left:14px;right:14px;top:104px"><div class="card fm-glass fm-glass--panel" data-tone="safe" style="border-radius:22px">
+             <span class="thumb">🍕</span><div><div class="fm-label">칼로리에 사진 1장 전달</div><div class="fm-readout">18.6KB · 얼굴 0 · 방금</div></div><span class="fm-capsule" data-tone="safe" style="min-block-size:28px;padding:0 10px">${dot()}전달됨</span></div></div>
+           ${hudBottom('0', 'safe', '앱에 반영된 사람 0명 · 보호됨')}${sheet(twoCards)}
+           <div class="lines" style="box-shadow:inset 0 0 0 4px var(--fm-text), inset 0 0 50px color-mix(in srgb, var(--fm-text) 35%, transparent);border-radius:46px"></div>`,
+          '4 · 전달 순간', '기본 신호는 테두리 300ms 점멸과 "전달됨"(F9). 알림 카드는 위에서 내려와 3초 뒤 사라지는 보조 신호. 소리 120ms, Android 진동 40ms.'),
+        shot('phone',
+          `${cam()}${top('녹화 영상', 'hold')}
+           <div class="abs" style="left:14px;right:14px;top:110px"><div class="fm-glass fm-glass--panel" style="border-radius:20px;padding:14px 16px;display:grid;gap:8px">
+             <div class="fm-label">카메라를 쓸 수 없어 녹화 영상으로 바꿨어요</div>
+             <div class="fm-readout">권한 거부 · 같은 판정과 가림을 그대로 적용합니다</div>
+             <div style="display:flex;gap:8px"><button class="fm-btn fm-glass" style="min-block-size:36px;font-size:13px">카메라 다시 허용</button></div></div></div>
+           ${reticle('19%', '30%', '58%', '16%')}${hudBottom('0', 'safe', '앱에 반영된 사람 0명 · 보호됨')}${sheet(twoCards)}`,
+          '5 · 카메라 거부', 'F1 자동 전환. 실패를 숨기지 않고 무엇으로 바꿨는지 한 줄로 알린다. 입력 표시가 "녹화 영상"으로 바뀐다.'),
+        shot('phone',
+          `${cam(true)}${top()}
+           <div class="abs fm-glass fm-glass--panel" style="left:22px;right:22px;top:240px;border-radius:26px;padding:22px;display:grid;gap:14px">
+             <span class="fm-kicker">delivery stopped</span>
+             <div style="font-size:22px;font-weight:600">판정 엔진을 불러오지 못했어요</div>
+             <div style="font-size:15px;line-height:1.6">판정이 없으면 무엇이 찍혔는지 알 수 없어서, 어떤 앱에도 아무것도 보내지 않습니다.</div>
+             <div class="fm-readout">GPU 실패 → CPU 재시도 실패 · 전달 0건</div>
+             <button class="fm-btn fm-btn--primary">다시 불러오기</button></div>
+           ${hudBottom('–', 'hold', '전달 멈춤', '', 600)}`,
+          '6 · 엔진 실패', 'SRD "엔진 실패 시 전달 정지". 빨강은 변조 차단에만 쓰므로 여기서는 보류(색 없음) 톤이다.'),
+      ];
+
+      // ── 데스크톱 ──
+      const presenter = (compare) =>
+        `<div class="abs fm-glass fm-glass--panel" style="left:24px;bottom:24px;width:852px;border-radius:22px;padding:14px 18px;display:flex;align-items:center;gap:18px">
+           <span class="fm-kicker">발표자</span>
+           <span style="display:flex;align-items:center;gap:10px" class="fm-label"><span class="switch ${compare ? 'on' : ''}"></span>비교 모드</span>
+           <button class="fm-btn fm-glass" style="min-block-size:38px">전달 일시 정지</button>
+           <button class="fm-btn fm-glass" style="min-block-size:38px">새 세션 시작</button>
+           <span class="fm-readout" style="margin-left:auto">세션 03:12 · 입력 ${compare ? '녹화 영상(팀원)' : '웹캠'}</span></div>`;
+      const deskStage = (compare) =>
+        `<div class="abs" style="left:24px;top:24px;width:852px;height:770px;border-radius:28px;overflow:hidden">${cam()}<div class="lines fm-scanlines"></div>
+           ${compare ? '<div class="fm-band abs" style="left:0;right:0;top:0;z-index:2">비교 모드 · 원본 전체가 칼로리에 갑니다 · 통신은 막혀 있음</div>' : ''}
+           <div class="abs" style="left:126px;top:85px;width:600px;height:600px;border-radius:24px;outline:1px dashed var(--fm-hairline)"></div>
+           <div class="abs" style="left:20px;right:20px;top:${compare ? 52 : 20}px;display:flex;justify-content:space-between">
+             <span class="fm-capsule fm-glass fm-glass--panel brand"><span class="brand-dot"></span>famelet</span>${capsule(compare ? '녹화 영상' : '웹캠')}</div>
+           ${scene(110)}${reticle('27%', '31%', '44%', '15%')}
+           ${compare ? hudBottom('2', 'exposed', '앱에 반영된 사람 2명 · 노출', '피자 약 285kcal · 고정표', 470, 0.7) : hudBottom('0', 'safe', '앱에 반영된 사람 0명 · 보호됨', '피자 약 285kcal', 470)}</div>`;
+      const right = (tab, body) =>
+        `<div class="abs fm-glass fm-glass--panel" style="left:900px;top:24px;right:24px;bottom:24px;border-radius:28px;padding:18px;display:grid;grid-template-rows:auto 1fr;gap:16px">
+           <div class="tabs fm-glass" style="justify-self:start">${['로그', '확인 화면', '매니페스트', '처리량'].map((t) => `<span class="${t === tab ? 'on' : ''}">${t}</span>`).join('')}</div>
+           <div style="display:grid;gap:10px;align-content:start;overflow:hidden">${body}</div></div>`;
+      const spark = (pts, tone = 'var(--fm-lens)') =>
+        `<svg viewBox="0 0 200 48" style="width:100%;height:48px"><polyline fill="none" stroke="${tone}" stroke-width="2" points="${pts}"/></svg>`;
+      const desktop = [
+        shot('desk',
+          deskStage(true) + presenter(true) +
+            right('로그',
+              `<div class="sheet-head"><span class="fm-label">칼로리가 받은 것</span><span class="fm-readout">전달 4 · 차단 0 · 최근 100건</span></div>` +
+              card('', '전달 · 원본 전체', 'raw', '212KB · 원본의 100% · 비교 모드 · 서버로 안 감', '방금', 'exposed') +
+              card('', '전달 · 원본 전체', 'raw', '208KB · 원본의 100% · 비교 모드', '10초 전', 'exposed') +
+              card('thumb--masked', '전달 · 얼굴 1개 가림', '2b', '17.9KB · 원본의 6.4% · 이 기기에서', '1분 전') +
+              card('thumb--hold', '보류', '2d', '얼굴 위치 불확실 · 전달 0', '2분 전', 'hold') +
+              `<div class="fm-readout" style="padding:6px 4px">해시는 항목을 눌러 상세에서 · 2초 안에 수신 확인이 없으면 "수신 미확인"</div>`),
+          '데스크톱 A · 비교 모드(발표 0:00)', '상단 주황 띠, 카운터 주황 2명, 오브 바깥 호가 10초 창의 남은 시간을 보여 준다. 스위치는 이 발표자 화면에만 있다(F17·F20).'),
+        shot('desk',
+          deskStage(false) + presenter(false) +
+            right('처리량',
+              `<div class="grid3">
+                 <div class="metric fm-glass fm-grid"><span class="fm-kicker">0단계 판정</span><span class="v">298<span class="fm-readout"> /분</span></span>${spark('0,30 20,26 40,28 60,22 80,25 100,20 120,24 140,21 160,23 180,19 200,22')}</div>
+                 <div class="metric fm-glass fm-grid"><span class="fm-kicker">얼굴 검출</span><span class="v">12<span class="fm-readout"> /분</span></span>${spark('0,40 20,40 40,30 60,40 80,40 100,28 120,40 140,40 160,30 180,40 200,40')}</div>
+                 <div class="metric fm-glass fm-grid"><span class="fm-kicker">모델 호출 비율</span><span class="v">0.52</span><div class="bar"><i style="width:52%"></i></div><span class="fm-readout">매 프레임 두 모델 = 1.00</span></div>
+               </div>
+               <div class="grid3">
+                 <div class="metric fm-glass" data-tone="safe"><span class="fm-kicker">원본 서버 전송</span><span class="v" style="color:var(--fm-safe)">0<span class="fm-readout">건</span></span></div>
+                 <div class="metric fm-glass"><span class="fm-kicker">가린 조각 API 전송</span><span class="v">6<span class="fm-readout">건 · 자기 보고</span></span></div>
+                 <div class="metric fm-glass" style="opacity:.6"><span class="fm-kicker">기업 서버 재검사</span><span class="v" style="font-size:20px">미구현</span><span class="fm-readout">켜는 토글 없음(F19)</span></div>
+               </div>
+               <div class="metric fm-glass fm-grid"><span class="fm-kicker">직전 60초 · 전달 6 · 보류 1</span>${spark('0,44 30,44 31,8 33,44 70,44 71,8 73,44 110,44 111,8 113,44 150,44 151,8 153,44 190,44 191,8 193,44 200,44', 'var(--fm-text)')}</div>`),
+          '데스크톱 B · 처리량(F16)', '다차원 실시간 대시보드: 판정 실행 수, 얼굴 검출 수, 모델 호출 비율, 서버 전송 수를 한 화면에. 데이터 선은 의미 없는 Lens 파랑, 서버 전송 0건만 초록.'),
+      ];
+      const panels = [
+        shot('panel-shot',
+          `<div class="sheet-head"><span class="fm-label">칼로리 플러그인이 본 것은 이 사진 6장뿐</span><span class="fm-readout">외 0장</span></div>
+           <div class="thumbs" style="margin-top:12px">${Array.from({ length: 6 }, (_, i) => `<span class="thumb ${i % 3 === 1 ? 'thumb--masked' : ''}">🍕</span>`).join('')}</div>
+           <div class="fm-readout" style="margin-top:12px">목적: 음식 칼로리 추정 · 장면: food · 긴 변 256px · 분당 6장</div>
+           <div style="display:flex;gap:8px;margin-top:14px"><button class="fm-btn fm-btn--primary">확인</button><button class="fm-btn fm-glass">닫기</button></div>`,
+          '확인 화면(F12)', '로그의 전달 수와 썸네일 수가 같다. 100장을 넘어 해제된 것은 "외 k장"으로 맞춘다.'),
+        shot('panel-shot',
+          `<div class="sheet-head"><span class="fm-label">칼로리 매니페스트</span>${capsule('준비됨', { tone: 'safe', style: 'min-block-size:28px;font-size:12px' })}</div>
+           <div class="editor fm-glass" style="margin-top:12px">{
+  "purpose": "음식 칼로리 추정",
+  "scenes": ["food"],
+  "maxSide": <span class="hl">1000</span>,
+  "maxPerMinute": 6,
+  "network": ["$ORIGIN"]
+}</div>
+           <div class="err fm-label" style="margin-top:10px;display:flex;gap:8px;align-items:center">${dot('blocked')}적용하지 않았습니다</div>
+           <div class="fm-readout" style="margin-top:4px">maxSide: 32–512 정수여야 합니다(현재 1000) · 기존 값(256)으로 계속 전달합니다</div>
+           <div style="display:flex;gap:8px;margin-top:14px"><button class="fm-btn fm-btn--primary" style="opacity:.4">적용</button><button class="fm-btn fm-glass">되돌리기</button></div>`,
+          '매니페스트 편집기(F11)', '검증 실패는 기존 값을 유지한다는 사실까지 말한다. 여기서 빨강은 오류 표시가 아니라 "적용 안 됨"을 알리는 데만 쓴다.'),
+        shot('panel-shot',
+          `<div class="card fm-glass fm-glass--panel" data-tone="hold" style="grid-template-columns:44px 1fr">
+             <span class="thumb thumb--hold"></span>
+             <div><div class="fm-label">칼로리가 멈췄어요</div><div class="fm-readout">새 권한으로 3초 안에 준비되지 않았습니다 · 이전 권한으로 돌아가지 않습니다</div></div></div>
+           <div style="display:flex;gap:8px;margin-top:12px"><button class="fm-btn fm-btn--primary">다시 켜기</button></div>
+           <div class="card fm-glass fm-glass--panel" data-tone="blocked" style="grid-template-columns:44px 1fr;margin-top:16px">
+             <span class="thumb thumb--hold" style="border-color:var(--fm-blocked)"></span>
+             <div><div class="row-title fm-label">${dot()}변조 플러그인 · 차단 4</div><div class="fm-readout">카메라 · 호스트 화면 · 외부 서버 · 외부 스크립트 · 플러그인 내부 보고</div></div></div>`,
+          '플러그인 상태 카드', '전환 실패(stopped)는 보류 톤, 변조 차단은 빨강. 차단 수는 카운터 오브가 아니라 이 카드와 배지에만 나온다.'),
+      ];
+
+      // ── 글래스 HUD(/hud) ──
+      const hudInner = (opts) =>
+        `${opts.band ? '<div class="fm-band abs" style="left:0;right:0;top:0;font-size:24px;min-block-size:44px;background:transparent;color:var(--fm-exposed);border-bottom:2px solid var(--fm-exposed)">비교 모드</div>' : ''}
+         <div class="abs" style="left:0;right:0;top:${opts.band ? 66 : 30}px;display:flex;justify-content:center"><span class="fm-capsule fm-glass" style="min-block-size:52px;padding:0 22px">${dot()}<span class="fm-scene">음식 앞</span></span></div>
+         <span class="abs fm-label" style="right:28px;top:${opts.band ? 76 : 40}px;color:var(--fm-sub)">녹화 영상</span>
+         <span class="fm-frame" style="left:150px;top:200px;width:300px;height:130px"></span>
+         <div class="abs stack" style="left:0;right:0;top:372px;gap:14px">
+           <div class="fm-orb" data-tone="${opts.tone}" style="--orb:132px;--fm-window:${opts.win || 0}">${opts.n}</div>
+           <span class="fm-result">${opts.result}</span></div>
+         ${opts.flash ? '<div class="lines" style="box-shadow:inset 0 0 0 5px #fff"></div><span class="abs fm-label" style="left:0;right:0;top:150px;text-align:center">전달됨</span>' : ''}`;
+      const hud = [
+        shot('hud', hudInner({ n: '0', tone: 'safe', result: '피자 약 285kcal' }), '/hud · 보호 중', '검은색 = 투명(가산형). 유리·흐림 없음, 본문 24px·카운터 72px. 다섯 요소만.', 'dark', 'data-view="hud"'),
+        shot('hud', hudInner({ n: '0', tone: 'safe', result: '피자 약 285kcal', flash: true }), '/hud · 전달 순간', '테두리가 300ms 밝아지고 "전달됨". 알림 카드는 쓰지 않는다. D-pad 좌우로 최근 전달물 선택.', 'dark', 'data-view="hud"'),
+        shot('hud', hudInner({ n: '2', tone: 'exposed', result: '피자 약 285kcal · 고정표', band: true, win: 0.6 }), '/hud · 비교 모드', '주황은 상단 띠와 카운터에만(PRD HUD 규칙). 띠는 채우지 않고 선으로 둬서 시야를 가리지 않는다.', 'dark', 'data-view="hud"'),
+      ];
+
+      // ── 바깥 표시(/outward) ──
+      const outward = (n, tone, sub, stale = false) =>
+        `<div class="abs stack" style="inset:0;justify-content:center;gap:22px;${stale ? 'opacity:.55' : ''}">
+           <span class="fm-kicker" style="font-size:22px">${stale ? 'connection lost' : 'famelet · outward'}</span>
+           <div style="font-size:64px;font-weight:600;letter-spacing:-0.02em">지금 당신의 얼굴을 본 앱</div>
+           <div class="fm-num" style="font-size:300px;line-height:.9;font-weight:300;color:${stale ? 'var(--fm-sub)' : `var(--fm-${tone})`}">${stale ? '–' : n}<span style="font-size:90px">${stale ? '' : '개'}</span></div>
+           <div class="fm-readout" style="font-size:28px">${sub}</div></div>`;
+      const out = [
+        shot('out', outward(0, 'safe', '최근 10초 기준 · 메인 창과 동기화됨'), '/outward · 0개', '찍히는 사람을 향한 화면. 숫자는 화면 높이의 40%(PRD는 30% 이상). 0이면 초록.'),
+        shot('out', outward(1, 'exposed', '비교 모드 · 10초 안에 0으로 돌아갑니다'), '/outward · 1개', '1 이상이면 주황. 비교 모드를 끄면 10초 창이 지나며 0이 된다.'),
+        shot('out', outward(0, 'safe', '메인 창 신호가 5초 넘게 없습니다', true), '/outward · 연결 끊김', '낡은 숫자로 거짓 안심을 주지 않도록 회색 "–"로 바꾼다(IF-07 제안).'),
+      ];
+
+      const section = (title, lead, shots) => `<h2>${title}</h2><p class="lead">${lead}</p><div class="row">${shots.join('')}</div>`;
+      document.getElementById('app').innerHTML =
+        section('휴대폰 · 심사위원 폰', '후면 카메라 전체 화면 + 가운데 HUD + 하단 시트. 시작→로딩→보호 중→전달 순간, 그리고 두 가지 실패.', phone) +
+        section('휴대폰 · 라이트', '같은 화면을 라이트로. 밝은 실내에서 사용자가 고른다.', [
+          shot('phone', `${cam()}${top()}${scene()}${reticle('19%', '30%', '58%', '16%')}${hudBottom('0', 'safe', '앱에 반영된 사람 0명 · 보호됨')}${sheet(twoCards)}`, '3 · 보호 중(라이트)', '라이트에서도 의미색은 같은 역할. Sub 글자는 74% 유리 위에만.', 'light'),
+          shot('phone', `${cam(true)}<div class="lines fm-scan"></div>${top()}<div class="abs fm-glass fm-glass--panel" style="left:22px;right:22px;top:250px;border-radius:26px;padding:22px;display:grid;gap:16px"><span class="fm-kicker">preparing on-device models</span><div style="font-size:22px;font-weight:600">판정 모델 받는 중</div><div class="bar"><i style="width:54%"></i></div><div class="fm-readout">보통 10초 안팎 · 아직 아무것도 보내지 않았습니다</div></div>`, '2 · 로딩(라이트)', '라이트는 주사선을 끄고 스캔선만 남긴다.', 'light'),
+        ]) +
+        section('데스크톱 · 발표용 노트북', '왼쪽 카메라+HUD(점선이 600×600 영역), 오른쪽 탭(로그 / 확인 화면 / 매니페스트 / 처리량), 아래 발표자 컨트롤.', desktop) +
+        section('데스크톱 · 단독 패널', '오른쪽 탭과 상태 카드.', panels) +
+        section('글래스 HUD · /hud (600×600)', 'Ray-Ban Display 웹앱 시뮬레이터용. 항상 다크, data-view="hud".', hud) +
+        section('바깥 표시 · /outward', '발표장 외부 화면. BroadcastChannel로 메인 창과 동기화.', out);
+    </script>
+  </body>
+</html>
