@@ -20,6 +20,7 @@ export const PLUGIN_NAME: Record<PluginKind, string> = {
   calorie: '칼로리',
   tamper: '변조',
   hello: '장면 기록',
+  outfit: '코디 스캔',
 };
 
 /** 앱 카드 머리줄의 글자 하나짜리 단색 아이콘(app-structure §3.1). 앱별 강조색은 쓰지 않는다. */
@@ -27,6 +28,7 @@ export const PLUGIN_ICON: Record<PluginKind, string> = {
   calorie: '칼',
   tamper: '변',
   hello: '장',
+  outfit: '코',
 };
 
 /**
