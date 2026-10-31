@@ -1,21 +1,33 @@
-// 휴대폰 하단 시트(배치도 휴대폰 3). 접힌 상태는 최근 1건과 착용자 제어 버튼, 손잡이를 누르면 펼쳐서 전체와 상세를 본다.
-// "앱 켜고 끄기"는 시트를 펼쳐 착용자 제어(F22)를 보인다. 일시 정지는 접힌 상태에서도 바로 누를 수 있다.
+// 휴대폰 하단 시트(배치도 휴대폰 3). 접힌 상태는 최근 1건과 버튼 줄, 손잡이를 누르면 펼쳐서 전체와 상세를 본다.
+// 버튼 줄: 전달 일시 정지(F22) · 사용 기록(F25) · 앱 관리(F22) · 확인 화면(F12). 사용 기록·앱 관리는 시트를 펼쳐 그 화면을 보이고,
+// 한 번 더 누르면 로그로 돌아간다.
 
 import { useState } from 'react';
 import { PauseButton, WearerControls } from '../ui/WearerControls';
 import { DeliveryDetail } from './DeliveryDetail';
 import { LogHeader, LogList } from './ProofLog';
+import { UsageHistory } from './UsageHistory';
 
-type View = 'log' | 'controls';
+type View = 'log' | 'usage' | 'controls';
+
+const TITLE: Record<View, string> = { log: '앱이 받은 것', usage: '사용 기록', controls: '착용자 제어' };
 
 export function LogSheet({ onOpenConfirm }: { onOpenConfirm(): void }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>('log');
   const [detail, setDetail] = useState<string | null>(null);
-  const controls = open && view === 'controls';
+  const shown: View = open ? view : 'log';
+
+  const toggle = (v: View) => {
+    if (shown === v) setView('log');
+    else {
+      setView(v);
+      setOpen(true);
+    }
+  };
 
   return (
-    <section className="fm-sheet fm-glass fm-glass--panel" data-open={open} aria-label="증명 로그와 착용자 제어">
+    <section className="fm-sheet fm-glass fm-glass--panel" data-open={open} aria-label="증명 로그, 사용 기록, 착용자 제어">
       <button
         type="button"
         className="fm-sheet__handle"
@@ -35,30 +47,24 @@ export function LogSheet({ onOpenConfirm }: { onOpenConfirm(): void }) {
         </div>
       ) : (
         <>
-          <LogHeader title={controls ? '착용자 제어' : '앱이 받은 것'} />
+          <LogHeader title={TITLE[shown]} />
           <div className="fm-sheet__actions">
             <PauseButton />
-            <button
-              type="button"
-              className="fm-btn fm-btn--sm fm-glass"
-              aria-pressed={controls}
-              onClick={() => {
-                if (controls) setView('log');
-                else {
-                  setView('controls');
-                  setOpen(true);
-                }
-              }}
-            >
-              {controls ? '로그 보기' : '앱 켜고 끄기'}
+            <button type="button" className="fm-btn fm-btn--sm fm-glass" aria-pressed={shown === 'usage'} onClick={() => toggle('usage')}>
+              사용 기록
+            </button>
+            <button type="button" className="fm-btn fm-btn--sm fm-glass" aria-pressed={shown === 'controls'} onClick={() => toggle('controls')}>
+              앱 관리
             </button>
             <button type="button" className="fm-btn fm-btn--sm fm-glass" onClick={onOpenConfirm}>
               확인 화면
             </button>
           </div>
           <div className="fm-sheet__scroll">
-            {controls ? (
+            {shown === 'controls' ? (
               <WearerControls />
+            ) : shown === 'usage' ? (
+              <UsageHistory />
             ) : (
               <LogList
                 limit={open ? undefined : 1}

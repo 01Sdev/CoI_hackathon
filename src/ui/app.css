@@ -976,6 +976,148 @@ button.fm-logcard:focus-visible,
   font-weight: 600;
 }
 
+/* ── 전송 범위 프레임(F24): 흰 뷰파인더 틀, 틀 밖은 살짝 어둡게. 조절 중에는 네 꼭짓점 손잡이 ── */
+.fm-capture {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.fm-capture__rect {
+  position: absolute;
+  border: 1px solid rgb(255 255 255 / 0.7);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.25),
+    0 0 0 100vmax rgb(0 0 0 / 0.16);
+  transition:
+    left 120ms linear,
+    top 120ms linear,
+    width 120ms linear,
+    height 120ms linear;
+}
+.fm-capture__rect::before {
+  --b: 26px;
+  --w: 4px;
+  content: '';
+  position: absolute;
+  inset: -3px;
+  background:
+    linear-gradient(#fff 0 0) top left / var(--b) var(--w),
+    linear-gradient(#fff 0 0) top left / var(--w) var(--b),
+    linear-gradient(#fff 0 0) top right / var(--b) var(--w),
+    linear-gradient(#fff 0 0) top right / var(--w) var(--b),
+    linear-gradient(#fff 0 0) bottom left / var(--b) var(--w),
+    linear-gradient(#fff 0 0) bottom left / var(--w) var(--b),
+    linear-gradient(#fff 0 0) bottom right / var(--b) var(--w),
+    linear-gradient(#fff 0 0) bottom right / var(--w) var(--b);
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.5));
+}
+.fm-capture[data-editing='true'] .fm-capture__rect {
+  border-style: dashed;
+  transition: none;
+}
+.fm-hud[data-variant='hud'] .fm-capture__rect {
+  box-shadow: none;
+  border-color: rgb(255 255 255 / 0.55);
+}
+.fm-capture__label {
+  position: absolute;
+  min-block-size: 30px;
+  padding: 0 11px;
+  font-size: 12px;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.fm-capture__label[aria-pressed='true'] {
+  background: var(--fm-text);
+  color: var(--fm-on-text);
+}
+.fm-capture__label[aria-pressed='true'] .fm-readout {
+  color: inherit;
+  opacity: 0.75;
+}
+.fm-capture__handle {
+  position: absolute;
+  z-index: 8;
+  inline-size: 48px;
+  block-size: 48px;
+  margin: -24px 0 0 -24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: nwse-resize;
+}
+.fm-capture__handle[data-corner='ne'],
+.fm-capture__handle[data-corner='sw'] {
+  cursor: nesw-resize;
+}
+.fm-capture__handle::after {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 0 3px rgb(0 0 0 / 0.35),
+    0 2px 8px rgb(0 0 0 / 0.4);
+}
+.fm-capture__handle:focus-visible {
+  outline: 2px solid var(--fm-lens);
+  outline-offset: -4px;
+}
+/* 휴대폰: 조절하는 동안 하단 시트를 내려 아래 꼭짓점이 보이게 한다 */
+.fm-phone[data-frame-editing='true'] {
+  --fm-sheet-peek: 0px;
+}
+.fm-phone[data-frame-editing='true'] .fm-sheet {
+  transform: translateY(calc(100% + 16px));
+  pointer-events: none;
+}
+.fm-sheet {
+  transition:
+    max-block-size 320ms var(--fm-ease),
+    transform 320ms var(--fm-ease);
+}
+
+/* ── 사용 기록(F25) ── */
+.fm-usage {
+  display: grid;
+  gap: 8px;
+}
+.fm-usage__head {
+  padding: 6px 4px 0;
+}
+.fm-usage__note {
+  margin: 0 4px;
+  line-height: 1.6;
+}
+.fm-usage__samples {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 4px;
+}
+.fm-usage__samples > .fm-label {
+  inline-size: 72px;
+  flex: none;
+}
+.fm-usage__thumbs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 6px;
+}
+.fm-usage__row {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: var(--fm-r-card);
+}
+
 /* /hud D-pad 선택 */
 .fm-hudpick {
   position: absolute;

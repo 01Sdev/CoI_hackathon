@@ -2,7 +2,9 @@
 // 좌표 변환·시간 창·문구처럼 경계가 있는 함수만 확인한다(AGENTS.md "테스트").
 
 import assert from 'node:assert/strict';
-import { coverBox, faceWindowRemaining } from '../src/ui/geometry';
+import { CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE } from '../src/core/constants';
+import { entryMeta, frameText, usageMeta, wallClock } from '../src/proof/format';
+import { coverBox, coverPointToSource, cornerPoint, dragCorner, faceWindowRemaining } from '../src/ui/geometry';
 import { formatBytes, josa } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 
@@ -89,6 +91,66 @@ check('outwardView: 메시지 없음 pending, 5,000ms까지 live, 넘으면 stal
   assert.equal(outwardView(null, 0).state, 'pending');
   assert.equal(outwardView(m, 10_000 + OUTWARD_STALE_MS).state, 'live');
   assert.equal(outwardView(m, 10_000 + OUTWARD_STALE_MS + 1).state, 'stale');
+});
+
+const near = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+const frame0 = { ...CAPTURE_FRAME_DEFAULT };
+
+check('coverPointToSource: coverBox의 역(잘린 가로 영상에서도 같은 점으로 돌아온다)', () => {
+  const src = { w: 1280, h: 720 };
+  const dst = { w: 360, h: 640 };
+  for (const p of [{ x: 0.5, y: 0.5 }, { x: 0.31, y: 0.12 }, { x: 0.7, y: 0.95 }]) {
+    const r = coverBox({ x: p.x, y: p.y, w: 0, h: 0 }, src, dst);
+    const back = coverPointToSource({ x: r.left, y: r.top }, src, dst);
+    assert.ok(near(back.x, p.x) && near(back.y, p.y), `${p.x},${p.y} → ${back.x},${back.y}`);
+  }
+});
+
+check('dragCorner: 반대 꼭짓점은 그대로, 끈 꼭짓점이 손가락을 따라간다', () => {
+  const f = dragCorner(frame0, 'se', { x: 0.9, y: 0.7 });
+  assert.ok(near(f.x, 0.2) && near(f.y, 0.2) && near(f.w, 0.7) && near(f.h, 0.5));
+  const g = dragCorner(frame0, 'nw', { x: 0.1, y: 0.3 });
+  assert.ok(near(g.x + g.w, 0.8) && near(g.y + g.h, 0.8) && near(g.x, 0.1) && near(g.y, 0.3));
+  const c = cornerPoint(g, 'nw');
+  assert.ok(near(c.x, 0.1) && near(c.y, 0.3));
+});
+
+check('dragCorner: 최소 크기에서 멈추고 뒤집히지 않는다', () => {
+  const f = dragCorner(frame0, 'nw', { x: 0.95, y: 0.95 }); // 반대편 너머로 끌어도
+  assert.ok(near(f.w, CAPTURE_FRAME_MIN_SIDE) && near(f.h, CAPTURE_FRAME_MIN_SIDE));
+  assert.ok(near(f.x + f.w, 0.8) && near(f.y + f.h, 0.8), '반대 꼭짓점(0.8, 0.8) 고정');
+  const g = dragCorner(frame0, 'ne', { x: 0.21, y: 0.79 });
+  assert.ok(near(g.x, 0.2) && near(g.w, CAPTURE_FRAME_MIN_SIDE) && near(g.y + g.h, 0.8) && near(g.h, CAPTURE_FRAME_MIN_SIDE));
+});
+
+check('dragCorner: 화면 밖으로 끌면 0~1 안에서 멈춘다', () => {
+  const f = dragCorner(frame0, 'sw', { x: -0.5, y: 1.7 });
+  assert.ok(near(f.x, 0) && near(f.y, 0.2) && near(f.w, 0.8) && near(f.h, 0.8));
+  const g = dragCorner(frame0, 'ne', { x: Number.NaN, y: 0.1 });
+  assert.ok(Number.isFinite(g.x) && Number.isFinite(g.w), 'NaN이 와도 숫자 틀');
+});
+
+check('frameText·entryMeta: deliver와 "프레임 밖" 줄에 프레임 W×H, 없으면 생략', () => {
+  assert.equal(frameText({ x: 0, y: 0, w: 120, h: 60 }), '프레임 120×60');
+  assert.equal(frameText(null), '');
+  const base = { id: 'l', sessionId: 's', pluginId: 'calorie', sceneDecisionId: null, deliveryId: null, branch: null, enforcedBy: null, at: 0 } as const;
+  assert.equal(
+    entryMeta({ ...base, kind: 'hold', reason: '프레임 밖', frameRect: { x: 10, y: 20, w: 60, h: 30 } }, null),
+    '프레임 밖 · 전달 0 · 프레임 60×30',
+  );
+  assert.equal(entryMeta({ ...base, kind: 'skip', reason: '선언하지 않은 장면(person)' }, null), '선언하지 않은 장면(person) · 전달 0');
+});
+
+check('usageMeta: 시각 · 대상 · 바이트 · 프레임, 프레임이 null이면 생략', () => {
+  const r = { at: 0, pluginId: 'calorie', deliveryId: 'd', objectLabel: 'pizza', bytes: 19_046, frameW: 432, frameH: 768 };
+  assert.equal(usageMeta(r, '21:43:05'), '21:43:05 · 피자 · 18.6KB · 프레임 432×768');
+  assert.equal(usageMeta({ ...r, frameW: null, frameH: null }, '21:43:05'), '21:43:05 · 피자 · 18.6KB');
+});
+
+check('wallClock: performance 시각을 같은 순간의 벽시계로 바꾼다', () => {
+  const dateNow = new Date(2026, 9, 31, 21, 43, 10).getTime();
+  assert.equal(wallClock(5_000, 10_000, dateNow), '21:43:05');
+  assert.equal(wallClock(10_000, 10_000, dateNow), '21:43:10');
 });
 
 console.log(`\n${passed}개 통과`);
