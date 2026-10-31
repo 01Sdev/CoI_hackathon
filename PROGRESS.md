@@ -27,8 +27,11 @@
 
 ## 트랙 B 격리·플러그인 (`src/plugins/`, `api/`)
 
-- [ ] `plugins/host`: srcdoc iframe·CSP nonce·blob Worker·메시지 검증
-- [ ] 전환 공통 절차(게이트·runtimeId·3초 ready)
+- [x] `plugins/host`: srcdoc iframe·CSP nonce·blob Worker·메시지 검증 — 트랙 B PR(plugin-host)
+- [x] 전환 공통 절차(게이트·runtimeId·3초 ready) — 같은 PR
+- [x] SDK 런타임·hello 플러그인·`/dev/m0.html` M0 페이지 — 같은 PR
+- [ ] `main.tsx`에서 `startPluginHost()` 호출(칼로리 코드가 들어오는 PR)
+- [ ] 발표 노트북 Chrome 첫 로드에서 칼로리 iframe이 3초 안에 ready인지(부하가 높을 때 headless Chrome에서 iframe 7개가 모두 stopped인 실행이 있었다)
 - [ ] hello·칼로리·변조 플러그인
 - [ ] `/api/calorie`(Vercel 함수, 413/415/429/502, 받은 본문 헤더)
 
@@ -77,7 +80,7 @@
 | V | 볼 것 | 언제 | 누가 | 상태 |
 | --- | --- | --- | --- | --- |
 | V6 | Vercel 최소 배포(정적 + `/api/calorie` + `/hud`·`/outward` 경로 + 모델·WASM) | 배포 방식이 정해지는 즉시. V1·V9·V10·V11의 Android·배포 시험이 이것을 기다린다 | 사용자 결정 → B | 대기(배포 미정) |
-| V10 | M0: `dev/fixtures/m0-test.jpg`로 match·mismatch·timeout | 트랙 B 첫 PR(`plugins/host` + hello) | B | 대기. iPhone 계약 재현은 통과 |
+| V10 | M0: `dev/fixtures/m0-test.jpg`로 match·mismatch·timeout | 트랙 B 첫 PR(`plugins/host` + hello) | B | 통과(Chrome, 제품 SDK 통합 `/dev/m0.html` 15줄). iPhone·Android 제품 SDK 시험 남음 |
 | V9 | Android Chrome 격리 S1~S6 | 트랙 B 첫 PR 뒤, 배포 주소에서 | B | 대기 |
 | V1 | MediaPipe 속도·GPU→CPU 대체(Android) | 트랙 A 첫 PR(0단계) 뒤, 모델 파일이 정해지고 배포 주소가 생기면 | A | iPhone 통과(첫 추론 11~14초), Android 대기 |
 | V4 | 큰 해상도 요청 시 실제 해상도·포착 시간(Android) | V1과 같이 | A | iPhone 통과, Android 대기 |
@@ -89,5 +92,5 @@
 | V12 | 노트북 Chrome에서 데모 5단계 네트워크 탭 | 2차 통합 뒤 리허설 | C·발표자 | 대기 |
 | V13 | Ray-Ban Display 시뮬레이터에서 `/hud` D-pad | 트랙 C `/hud` PR | C | 대기 |
 | V14 | 메인 창과 `/outward` 동기화(외부 화면) | 트랙 C `/outward` PR 뒤 리허설 | C | 대기 |
-| V15 | 호스트 외부 요청 차단: MediaPipe 로그 요청(`odml.pa.googleapis.com`)이 네트워크 탭에 0건인지. 호스트 `connect-src 'self'`가 srcdoc iframe Worker의 `$ORIGIN` 요청을 막는지(Chrome·iPhone) | 트랙 B 첫 PR(호스트 가드) + 배포 주소에서 | B(iPhone은 x20-codex 도움 가능) | 대기. 독립 데모에서 `connect-src 'self'`로 로그 요청 차단 확인(교집합 문제는 미시험) |
+| V15 | 호스트 외부 요청 차단: MediaPipe 로그 요청(`odml.pa.googleapis.com`)이 네트워크 탭에 0건인지. 호스트 `connect-src 'self'`가 srcdoc iframe Worker의 `$ORIGIN` 요청을 막는지(Chrome·iPhone) | 트랙 B 첫 PR(호스트 가드) + 배포 주소에서 | B(iPhone은 x20-codex 도움 가능) | Chrome: 로그 요청 차단·`$ORIGIN` Worker 요청 통과·M0 그대로(05 V15). iframe 시작 멈춤이 CSP 쪽에서 더 잦았다(6/18 대 1/18, 원인 미확정). iPhone 대기 |
 | V7 | iPhone 효과음·무음 모드 | — | — | 통과 |
