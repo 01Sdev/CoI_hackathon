@@ -43,6 +43,20 @@
 - 카메라 해상도는 `ideal` 1280×720으로 요청한다. K-11이 미정이라 V4 iPhone 실측 값을 시작값으로 썼다. 녹화 파일 기본값은 `/demo/pizza-alone.mp4`이고 `setVideoUrl()`로 바꾼다. mp4의 fps는 브라우저가 알려 주지 않으므로 `InputSource.fps = 0`(모름)으로 둔다.
 - 광각(양옆 휘어짐, 2026-11-01): 기본으로 켜져 있다. vision은 `<video>` 대신 `grabFrame()`의 휜 프레임을 읽고, 미리보기도 그 캔버스를 붙인다. 위치·기본값·한계는 `docs/designs/input-wide-warp.md`.
 
+### 2.2a 코디 스캔 실시간 받아쓰기(2026-11-01, 사용자 결정)
+
+- `src/input/scribe.ts`의 `startScribe({ onPartial, onCommitted, onError })`를 C의 말 막대가 부른다. 마이크를 여는 일이라 A 디렉터리에 둔다(02-SSRD §1).
+- 흐름
+  1. `POST /api/scribe-token`(트랙 B)으로 일회용 토큰 `{ token }`을 받는다.
+  2. 마이크를 `AudioContext(16kHz)`와 `public/pcm-worklet.js`로 16kHz Int16 PCM 4096샘플 조각으로 바꾼다.
+  3. `wss://api.elevenlabs.io/v1/speech-to-text/realtime?token=…`에 연결한다. 파라미터는 `scribe_v2_realtime`, `pcm_16000`, `ko`, `vad`(SAI 검증값)이다.
+  4. `input_audio_chunk { audio_base_64, commit: false, sample_rate: 16000 }`를 보낸다. `session_started` 전 오디오는 쌓아 둔다(5초 넘으면 실패).
+  5. `partial_transcript`는 `onPartial`, `committed_transcript`는 `onCommitted`로 넘긴다.
+- `stop()`: 워크릿 flush → 꼬리 오디오 → 마이크 정지 → 수동 commit(보낸 오디오가 2.1초 미만이면 무음으로 채움) → 확정 응답이나 1.5초 → 닫고 확정 글자 전체를 준다. 30초면 스스로 같은 정지를 한다.
+- `startScribe`는 거부하지 않는다. 토큰·마이크·연결·제공사 오류(공식 문서의 오류 종류)는 `onError`로 한 번만 온다. C는 그때 브라우저 내장 받아쓰기로 넘어간다. 정지 뒤 확정을 기다리는 중의 오류는 조용히 닫는다.
+- 오디오를 저장하지 않는다. 끝나면 마이크 트랙·AudioContext·소켓을 바로 닫는다. 녹음 중 여부(불값)는 `subscribeScribe`로 보고, core에 `setMicRecording`이 생기면 그것도 부른다.
+- 메시지 처리와 워크릿은 사용자의 SAI 프로젝트(`apps/sai/src/server/eleven.ts`, `web/components/microphone.ts`, `web/public/pcm-worklet.js`)에서 옮겼다. SAI는 서버가 키 헤더로 중계했다. 여기서는 Vercel 함수가 웹소켓을 붙들 수 없어 브라우저가 토큰 쿼리로 바로 연결한다. 공식 문서 기준으로 `sample_rate`를 더했다.
+
 ### 2.3 모델과 WASM
 
 - 모델 경로는 `vision/config.ts`의 `MODEL_PATHS` 하나에 모았다. 모델은 사용자가 고른다.

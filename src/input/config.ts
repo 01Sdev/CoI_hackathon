@@ -39,3 +39,37 @@ export const WIDE_WARP = {
   /** 미리보기 다시 그리기 상한(fps). 판정·포착은 읽을 때마다 그 자리에서 다시 그린다. */
   previewFps: 30,
 } as const;
+
+/**
+ * 코디 스캔 실시간 받아쓰기(ElevenLabs Scribe v2 Realtime, src/input/scribe.ts).
+ * 연결 파라미터는 사용자의 SAI 프로젝트에서 실제로 돌던 값이다(apps/sai/src/server/eleven.ts realtimeParameters).
+ */
+export const SCRIBE = {
+  url: 'wss://api.elevenlabs.io/v1/speech-to-text/realtime',
+  /** 일회용 토큰을 주는 서버 함수(트랙 B). POST → { token }. */
+  tokenPath: '/api/scribe-token',
+  params: {
+    model_id: 'scribe_v2_realtime',
+    audio_format: 'pcm_16000',
+    language_code: 'ko',
+    commit_strategy: 'vad',
+    vad_silence_threshold_secs: '2',
+    vad_threshold: '0.3',
+    min_speech_duration_ms: '100',
+    min_silence_duration_ms: '300',
+    include_timestamps: 'false',
+  },
+  sampleRate: 16000,
+  /** 이만큼 지나면 스스로 멈춘다(ms). */
+  maxMs: 30_000,
+  /** stop() 뒤 마지막 확정 글자를 기다리는 시간(ms). */
+  finalWaitMs: 1500,
+  /** 워크릿 flush 응답을 기다리는 시간(ms). */
+  flushWaitMs: 1000,
+  /** session_started 전에 쌓아 둘 오디오 상한(바이트, 16kHz Int16 5초). 넘으면 실패로 본다. */
+  preStartBytes: 160_000,
+  /** 소켓 송신 대기 상한(바이트). 넘으면 연결 지연으로 보고 멈춘다. */
+  maxBufferedBytes: 128_000,
+  /** 마지막 commit 전에 보낸 오디오가 이보다 짧으면 무음으로 채운다(바이트, 2.1초. SAI와 같은 값). */
+  minCommitBytes: Math.ceil(2.1 * 32_000),
+} as const;
