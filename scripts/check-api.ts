@@ -1,4 +1,4 @@
-// api/calorie·api/outfit assertion 스크립트. 실행: npm run check:api
+// api/calorie·api/outfit·api/stt assertion 스크립트. 실행: npm run check:api
 // 실제 @anthropic-ai/sdk를 가짜 상류(로컬 HTTP 서버)에 붙여 판정 순서·요청 모양·시간 제한·재시도 없음·응답 처리·502 로그를 본다(TC-053).
 // 진짜 모델 호출(V5)은 키가 있을 때 scripts/measure-calorie.ts로 따로 잰다.
 
@@ -22,6 +22,7 @@ import {
   SYSTEM_INSTRUCTION as OUTFIT_SYSTEM,
   createOutfitHandler,
 } from '../api/outfit';
+import { DEFAULT_MODEL as STT_DEFAULT_MODEL, MAX_AUDIO_BYTES as STT_MAX_AUDIO_BYTES, createSttHandler } from '../api/stt';
 import { OUTFIT_FALLBACK_TEXT } from '../src/plugins/outfit';
 
 let passed = 0;
@@ -367,6 +368,128 @@ await check('outfit: 생각(thought) 조각은 빼고, 1,000자로 자른다. �
   const small = createOutfitHandler({ baseURL, apiKey: 'test-key-not-real', rateLimit: { count: 2, windowMs: 60_000 } });
   const codes = [];
   for (let i = 0; i < 3; i++) codes.push((await ask({ image: jpegB64, question: '무슨 옷?' }, undefined, small)).status);
+  assert.deepEqual(codes, [200, 200, 429]);
+});
+
+// ── /api/stt(IF-12, ElevenLabs Speech-to-Text) ──
+// 가짜 녹음: 머리만 진짜(webm EBML, mp4 ftyp). 상류는 주입한 fetch로 대신해 multipart 내용을 그대로 본다.
+const webm = (n = 64) => {
+  const b = new Uint8Array(n);
+  b.set([0x1a, 0x45, 0xdf, 0xa3]);
+  return b;
+};
+const mp4 = (n = 64) => {
+  const b = new Uint8Array(n);
+  b.set([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
+  return b;
+};
+interface SttCall {
+  url: string;
+  key: string | null;
+  fields: Record<string, string>;
+  file: { type: string; size: number; name: string } | null;
+}
+const sttCalls: SttCall[] = [];
+let sttReply: () => Promise<Response> = async () => new Response(JSON.stringify({ text: ' 이 옷  어디 거야? ', language_code: 'kor', words: [] }));
+const fakeEleven: typeof fetch = async (input, init) => {
+  const form = init?.body as FormData;
+  const fields: Record<string, string> = {};
+  let file: SttCall['file'] = null;
+  for (const [k, v] of form.entries()) {
+    if (typeof v === 'string') fields[k] = v;
+    else file = { type: v.type, size: v.size, name: (v as File).name };
+  }
+  sttCalls.push({ url: String(input), key: new Headers(init?.headers).get('xi-api-key'), fields, file });
+  const signal = init?.signal;
+  return Promise.race([
+    sttReply(),
+    new Promise<Response>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason))),
+  ]);
+};
+const stt = createSttHandler({ apiKey: 'test-key-not-real', baseURL: 'https://eleven.test', rateLimit: big, timeoutMs: 200, fetch: fakeEleven });
+const speak = (body: BodyInit | null, type = 'audio/webm;codecs=opus', h = stt, extra: Record<string, string> = {}) =>
+  h(new Request('http://localhost/api/stt', { method: 'POST', body, headers: { 'content-type': type, ...extra } }));
+
+await check(`stt: webm → ElevenLabs ${STT_DEFAULT_MODEL}·ko·xi-api-key, 200 {text}만(공백 정리)`, async () => {
+  sttCalls.length = 0;
+  const r = await speak(webm(1_000));
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('cache-control'), 'no-store');
+  assert.equal(r.headers.get('access-control-allow-origin'), null); // 같은 origin에서만 부른다
+  assert.deepEqual(await r.json(), { text: '이 옷 어디 거야?' });
+  const c = sttCalls[0]!;
+  assert.equal(c.url, 'https://eleven.test/v1/speech-to-text');
+  assert.equal(c.key, 'test-key-not-real');
+  assert.deepEqual(c.fields, { model_id: STT_DEFAULT_MODEL, language_code: 'ko', tag_audio_events: 'false', diarize: 'false' });
+  assert.deepEqual(c.file, { type: 'audio/webm', size: 1_000, name: 'speech.webm' });
+});
+await check('stt: 사파리 mp4도, 무보관 모드(ELEVENLABS_ZERO_RETENTION)는 enable_logging=false', async () => {
+  sttCalls.length = 0;
+  assert.equal((await speak(mp4(), 'audio/mp4')).status, 200);
+  assert.deepEqual(sttCalls[0]!.file, { type: 'audio/mp4', size: 64, name: 'speech.mp4' });
+  const zero = createSttHandler({ apiKey: 'test-key-not-real', baseURL: 'https://eleven.test', zeroRetention: true, fetch: fakeEleven });
+  await speak(webm(), 'audio/webm', zero);
+  assert.equal(sttCalls.at(-1)!.url, 'https://eleven.test/v1/speech-to-text?enable_logging=false');
+});
+await check(`stt: 405, 415(형식·머리), 400(빈 녹음), 413(${STT_MAX_AUDIO_BYTES}B 초과: Content-Length·실제) → 상류 0건`, async () => {
+  sttCalls.length = 0;
+  assert.equal((await stt(new Request('http://localhost/api/stt', { method: 'GET' }))).status, 405);
+  assert.equal((await speak(webm(), 'audio/wav')).status, 415);
+  assert.equal((await speak(webm(), 'text/plain')).status, 415);
+  assert.equal((await speak(mp4(), 'audio/webm')).status, 415); // 머리가 webm이 아님
+  assert.equal((await speak(webm(), 'audio/mp4')).status, 415);
+  assert.equal((await speak(new Uint8Array(0))).status, 400);
+  assert.equal((await speak(webm(STT_MAX_AUDIO_BYTES + 1))).status, 413);
+  assert.equal((await speak(webm(16), 'audio/webm', stt, { 'content-length': String(STT_MAX_AUDIO_BYTES + 1) })).status, 413);
+  assert.equal(sttCalls.length, 0);
+  assert.equal((await speak(webm(STT_MAX_AUDIO_BYTES))).status, 200); // 정확히 2MiB는 통과
+});
+await check('stt: 키 없음·상류 401·422·500·시간 초과·JSON 아님·text 없음 → 503(브라우저 받아쓰기로), 로그 한 줄에 내용 없음', async () => {
+  logs.length = 0;
+  sttCalls.length = 0;
+  const prev = process.env.ELEVENLABS_API_KEY;
+  delete process.env.ELEVENLABS_API_KEY;
+  const noKey = createSttHandler({ apiKey: '', fetch: fakeEleven });
+  const nk = await speak(webm(), 'audio/webm', noKey);
+  assert.deepEqual([nk.status, await nk.json()], [503, { error: 'stt unavailable' }]);
+  if (prev !== undefined) process.env.ELEVENLABS_API_KEY = prev;
+  assert.equal(sttCalls.length, 0);
+  for (const reply of [
+    async () => new Response('{"detail":"bad key"}', { status: 401 }),
+    async () => new Response('{"detail":[]}', { status: 422 }),
+    async () => new Response('x', { status: 500 }),
+    () => new Promise<Response>(() => {}), // 끝나지 않음 → 200ms에 끊음
+    async () => new Response('not json'),
+    async () => new Response(JSON.stringify({ language_code: 'kor' })),
+  ]) {
+    sttReply = reply;
+    assert.equal((await speak(webm())).status, 503);
+  }
+  assert.deepEqual(
+    logs.filter((l) => l.startsWith('stt')),
+    [
+      'stt 503 no-key',
+      'stt 503 upstream=401',
+      'stt 503 upstream=422',
+      'stt 503 upstream=500',
+      'stt 503 timeout',
+      'stt 503 format=json',
+      'stt 503 format=no-text',
+    ],
+  );
+  sttReply = async () => new Response(JSON.stringify({ text: '비밀 질문' }));
+  await speak(webm());
+  assert.ok(logs.every((l) => !l.includes('비밀') && !l.includes('test-key')));
+});
+await check('stt: 조용하면 200 빈 글자, 300자로 자름, 고정 창 429', async () => {
+  sttReply = async () => new Response(JSON.stringify({ text: '   ' }));
+  assert.deepEqual(await (await speak(webm())).json(), { text: '' });
+  sttReply = async () => new Response(JSON.stringify({ text: '가'.repeat(500) }));
+  assert.equal(((await (await speak(webm())).json()) as { text: string }).text.length, 300);
+  sttReply = async () => new Response(JSON.stringify({ text: '네' }));
+  const small = createSttHandler({ apiKey: 'test-key-not-real', baseURL: 'https://eleven.test', fetch: fakeEleven, rateLimit: { count: 2, windowMs: 60_000 } });
+  const codes = [];
+  for (let i = 0; i < 3; i++) codes.push((await speak(webm(), 'audio/webm', small)).status);
   assert.deepEqual(codes, [200, 200, 429]);
 });
 
