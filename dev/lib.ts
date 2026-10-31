@@ -71,6 +71,8 @@ export function prepare(store: LensStore, pluginId: string, blob: Blob, sha256: 
   const s = store.getState();
   const p = s.plugins[pluginId];
   if (!p) return null;
+  // 고정 JPEG 전체를 포착 프레임으로 본다(F24). raw는 frameRect = cropRect여야 스토어가 받는다.
+  const frame = { x: 0, y: 0, w: 256, h: 192 };
   return s.prepareDelivery(
     {
       pluginId,
@@ -83,7 +85,8 @@ export function prepare(store: LensStore, pluginId: string, blob: Blob, sha256: 
       width: 256,
       height: 192,
       areaRatio: 1,
-      cropRect: { x: 0, y: 0, w: 256, h: 192 },
+      cropRect: frame,
+      frameRect: frame,
       facesMasked: 0,
       faceCheck: { status: 'checked', detectedFaces: 0 },
       location: 'browser',
