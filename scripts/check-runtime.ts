@@ -14,6 +14,7 @@ import { sha256HexSync } from '../src/broker/sha256';
 import { blendMasked, dilate, dilateRadius, shapeMask } from '../src/vision/shape';
 import { createLensStore } from '../src/core/store';
 import { SCRIBE, WIDE_WARP } from '../src/input/config';
+import { openWithFallback, type OpenIo } from '../src/input/adapter';
 import { runScribe, scribeUrl, type MicPipe, type ScribeDeps, type ScribeError, type SocketLike } from '../src/input/scribe';
 import { applyCpuMap, buildCpuMap, sourceBoxToWarped, sourceUv, warpedBoxToSource, warpedXY, warpOutputSize, warpParams, type WarpSettings } from '../src/input/warp';
 import { gazeHeld, matchBoxes, matchByCenter, pickConsent, pickGazeTarget, stepGaze, stepTracks, type Track } from '../src/vision/track';
@@ -679,12 +680,67 @@ check('uncoveredFaces: 조각 밖 얼굴은 무시, 사각형 하나로 50% 이�
   assert.equal(uncoveredFaces([fc], [{ x: 40, y: 40, w: 8, h: 20 }, { x: 52, y: 40, w: 8, h: 20 }], crop2).length, 1);
 });
 
-// ── 실시간 받아쓰기(src/input/scribe.ts). 토큰·마이크·소켓·타이머를 가짜로 바꿔 상태 전환·자동 정지·실패 경로를 본다 ──
 async function checkAsync(name: string, fn: () => Promise<void>) {
   await fn();
   passed += 1;
   console.log(`ok  ${name}`);
 }
+
+// ── 입력 열기 실패(session.inputError). 카메라 → 대체 녹화 영상까지 실패하면 C가 받을 신호가 남아야 한다 ──
+const io = (o: { camera?: boolean; file?: boolean; current?: () => boolean } = {}): OpenIo & { cleaned: number } => {
+  const x = {
+    cleaned: 0,
+    camera: async () => {
+      if (!o.camera) throw new Error('NotReadableError');
+      return 30;
+    },
+    file: async () => {
+      if (!o.file) throw new Error('영상 오류 4');
+      return 0;
+    },
+    current: o.current ?? (() => true),
+    cleanup: () => {
+      x.cleaned += 1;
+    },
+  };
+  return x;
+};
+const warnOff = console.warn;
+
+await checkAsync('입력 열기: 카메라 실패 → 대체 영상도 실패면 failed { kind: video, fallbackFrom: 카메라 }, 성공·대체 성공·영상 요청 실패도 구분', async () => {
+  console.warn = () => undefined;
+  try {
+    assert.deepEqual(await openWithFallback('rear', io({ camera: true })), { status: 'opened', kind: 'rear', fps: 30, fallbackFrom: null });
+    const fb = io({ file: true });
+    assert.deepEqual(await openWithFallback('webcam', fb), { status: 'opened', kind: 'video', fps: 0, fallbackFrom: 'webcam' });
+    assert.equal(fb.cleaned, 1);
+    assert.deepEqual(await openWithFallback('rear', io()), { status: 'failed', error: { kind: 'video', fallbackFrom: 'rear' } });
+    assert.deepEqual(await openWithFallback('video', io()), { status: 'failed', error: { kind: 'video', fallbackFrom: null } });
+    // 그 사이 다른 요청이 왔으면 실패를 남기지 않는다
+    assert.deepEqual(await openWithFallback('rear', io({ current: () => false })), { status: 'superseded' });
+  } finally {
+    console.warn = warnOff;
+  }
+});
+
+check('session.inputError: setInput(null, 오류)로 남고, 열기 시작(setInput(null))·열림이면 null, 새 세션에도 유지', () => {
+  let t = 5;
+  const st = createLensStore({ clock: () => t, revokeUrl: () => undefined, hostOrigin: 'https://h.test' });
+  assert.equal(st.getState().session.inputError, null);
+  st.getState().setInput(null, { kind: 'video', fallbackFrom: 'rear' });
+  assert.deepEqual(st.getState().session.inputError, { kind: 'video', fallbackFrom: 'rear', at: 5 });
+  assert.equal(st.getState().session.input, null);
+  t = 9;
+  st.getState().startNewSession();
+  assert.deepEqual(st.getState().session.inputError, { kind: 'video', fallbackFrom: 'rear', at: 5 });
+  st.getState().setInput(null);
+  assert.equal(st.getState().session.inputError, null);
+  st.getState().setInput(null, { kind: 'video', fallbackFrom: 'webcam' });
+  st.getState().setInput({ kind: 'webcam', width: 1280, height: 720, fps: 30, fallbackFrom: null }, { kind: 'video', fallbackFrom: 'webcam' });
+  assert.equal(st.getState().session.inputError, null); // 입력이 열리면 오류는 없다
+});
+
+// ── 실시간 받아쓰기(src/input/scribe.ts). 토큰·마이크·소켓·타이머를 가짜로 바꿔 상태 전환·자동 정지·실패 경로를 본다 ──
 const tick = () => new Promise((r) => setTimeout(r, 0));
 function fakeScribe(opts: { token?: boolean; mic?: boolean } = {}) {
   let t = 0;

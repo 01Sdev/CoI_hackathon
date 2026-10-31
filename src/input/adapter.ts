@@ -217,9 +217,55 @@ async function openFile(v: HTMLVideoElement, url: string): Promise<number> {
   return 0;
 }
 
+export type OpenOutcome =
+  | { status: 'opened'; kind: InputKind; fps: number; fallbackFrom: InputKind | null }
+  | { status: 'failed'; error: { kind: InputKind; fallbackFrom: InputKind | null } }
+  | { status: 'superseded' };
+
+export interface OpenIo {
+  camera(kind: 'webcam' | 'rear'): Promise<number>;
+  file(): Promise<number>;
+  /** 이 요청이 아직 최신인가. */
+  current(): boolean;
+  /** 카메라가 실패한 뒤 대체 영상을 열기 전에 스트림을 정리한다. */
+  cleanup(): void;
+}
+
+/**
+ * 열기 순서(FR-004). 녹화 영상 요청은 그 파일만 연다. 카메라가 실패하면 녹화 영상으로 바꾸고 fallbackFrom에 원래 종류를 적는다.
+ * 대체 영상까지 실패하면 failed에 { kind: 'video', fallbackFrom: 원래 카메라 }를 남긴다. 늦게 끝난 요청은 superseded.
+ */
+export async function openWithFallback(kind: InputKind, io: OpenIo): Promise<OpenOutcome> {
+  if (kind === 'video') {
+    try {
+      return { status: 'opened', kind: 'video', fps: await io.file(), fallbackFrom: null };
+    } catch (e) {
+      if (!io.current()) return { status: 'superseded' };
+      console.warn('[input] 녹화 영상을 열지 못함', videoUrl, e);
+      return { status: 'failed', error: { kind: 'video', fallbackFrom: null } };
+    }
+  }
+  try {
+    const fps = await io.camera(kind);
+    if (!io.current()) return { status: 'superseded' }; // 이후 요청이 stopStream으로 이미 정리했다.
+    return { status: 'opened', kind, fps, fallbackFrom: null };
+  } catch (e) {
+    if (e instanceof Superseded || !io.current()) return { status: 'superseded' };
+    console.warn(`[input] ${kind} 실패, 녹화 영상으로 전환`, e);
+    io.cleanup();
+    try {
+      return { status: 'opened', kind: 'video', fps: await io.file(), fallbackFrom: kind };
+    } catch (e2) {
+      if (!io.current()) return { status: 'superseded' };
+      console.warn('[input] 녹화 영상도 열지 못함', videoUrl, e2);
+      return { status: 'failed', error: { kind: 'video', fallbackFrom: kind } };
+    }
+  }
+}
+
 /**
  * 요청한 입력을 연다. 카메라가 실패하면 녹화 영상으로 자동 전환한다(FR-004).
- * 늦게 끝난 이전 요청은 결과를 버린다.
+ * 대체 영상까지 실패하면 session.inputError에 남긴다(C가 "카메라 없이는 볼 수 없어요"를 띄운다). 늦게 끝난 이전 요청은 결과를 버린다.
  */
 export async function openInput(kind: InputKind): Promise<InputSource | null> {
   const mySeq = ++openSeq;
@@ -232,45 +278,20 @@ export async function openInput(kind: InputKind): Promise<InputSource | null> {
   epoch += 1;
   lensStore.getState().setInput(null);
 
-  const finish = (src: InputSource | null) => {
-    if (mySeq !== openSeq) return null;
-    lensStore.getState().setInput(src);
-    return src;
-  };
-  const source = (k: InputKind, fps: number, fallbackFrom: InputKind | null): InputSource => ({
-    kind: k,
-    width: v.videoWidth,
-    height: v.videoHeight,
-    fps,
-    fallbackFrom,
+  const out = await openWithFallback(kind, {
+    camera: (k) => openCamera(v, k, mySeq),
+    file: () => openFile(v, videoUrl),
+    current: () => mySeq === openSeq,
+    cleanup: stopStream,
   });
-
-  if (kind === 'video') {
-    try {
-      const fps = await openFile(v, videoUrl);
-      return finish(source('video', fps, null));
-    } catch (e) {
-      console.warn('[input] 녹화 영상을 열지 못함', videoUrl, e);
-      return finish(null);
-    }
+  if (out.status === 'superseded' || mySeq !== openSeq) return null;
+  if (out.status === 'failed') {
+    lensStore.getState().setInput(null, out.error);
+    return null;
   }
-
-  try {
-    const fps = await openCamera(v, kind, mySeq);
-    if (mySeq !== openSeq) return null; // 이후 요청이 stopStream으로 이미 정리했다.
-    return finish(source(kind, fps, null));
-  } catch (e) {
-    if (e instanceof Superseded || mySeq !== openSeq) return null;
-    console.warn(`[input] ${kind} 실패, 녹화 영상으로 전환`, e);
-    stopStream();
-    try {
-      const fps = await openFile(v, videoUrl);
-      return finish(source('video', fps, kind));
-    } catch (e2) {
-      console.warn('[input] 녹화 영상도 열지 못함', videoUrl, e2);
-      return finish(null);
-    }
-  }
+  const src: InputSource = { kind: out.kind, width: v.videoWidth, height: v.videoHeight, fps: out.fps, fallbackFrom: out.fallbackFrom };
+  lensStore.getState().setInput(src);
+  return src;
 }
 
 /**

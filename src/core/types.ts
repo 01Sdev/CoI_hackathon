@@ -34,6 +34,15 @@ export interface InputSource {
   fallbackFrom: InputKind | null;
 }
 
+/** 입력을 열지 못했다(A가 씀). C는 이것으로 "카메라 없이는 볼 수 없어요" 같은 안내를 띄운다. */
+export interface InputError {
+  /** 마지막으로 열려다 실패한 입력. 카메라가 실패해 대체 녹화 영상으로 갔는데 그것도 실패했으면 'video'. */
+  kind: InputKind;
+  /** 처음 요청한 카메라 종류(webcam|rear). 녹화 영상을 바로 요청해 실패했으면 null. */
+  fallbackFrom: InputKind | null;
+  at: number;
+}
+
 export interface Session {
   id: string;
   startedAt: number;
@@ -42,6 +51,8 @@ export interface Session {
   input: InputSource | null;
   /** C가 요청한 입력. A가 보고 처리한다. seq는 요청마다 오르므로 같은 입력을 다시 요청해도 바뀐다. */
   inputRequest: { kind: InputKind; seq: number } | null;
+  /** 마지막 입력 열기가 실패했으면 그 사실(카메라 → 대체 녹화 영상까지 실패 포함). 입력이 열리거나 새로 열기 시작하면 null. A가 setInput으로 쓴다. */
+  inputError: InputError | null;
   compareMode: boolean;
   /** 전달 일시 정지(F20, 발표자 화면 전용). */
   paused: boolean;
