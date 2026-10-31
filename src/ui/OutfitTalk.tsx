@@ -8,6 +8,7 @@
 //   3) 그것도 없으면 입력창. 묻기는 모두 askPlugin(코디 스캔 id, 질문).
 // 패널: 시야 오른쪽 가장자리. outfitTurns의 질문과 답(묻는 중, 실패 사유, 대체 답변)을 보인다. 답은 플러그인 문자열이라
 //   sanitizeAnswerText를 거쳐 텍스트 노드로만 넣는다. 새 질문이 생기면 열리고, ×로 닫으면 다음 질문까지 닫혀 있다.
+//   패널도 막대처럼 코디 스캔이 켜진 앱에서만 보인다(outfitPanelOpen). 앱을 다시 열면 지난 대화는 닫힌 채로 시작한다(closedOnEnter).
 //   동의가 끝나면 막대만 사라지고 패널은 남는다. 패널은 흰 틀의 사람 수를 덮지 않게 그 위나 아래에 둔다(talkPanelPlacement).
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -17,6 +18,7 @@ import { useLensStore } from '../core/store';
 import type { OutfitTurn } from '../core/types';
 import { sourceToView, talkPanelPlacement, type Size } from './geometry';
 import { isGlassButtonKey } from './glassKeys';
+import { closedOnEnter, outfitPanelOpen } from './outfitView';
 import { fitSelection, selectionLimits } from './selection-frame';
 import { sanitizeAnswerText } from './sanitize';
 import { STT_NOTICE } from './scribe';
@@ -70,7 +72,13 @@ export function OutfitTalk({ size }: { size: Size }) {
     [allTurns, v.pluginId],
   );
   const lastId = turns[turns.length - 1]?.id ?? null;
-  const panelOpen = lastId !== null && closedAt !== lastId;
+  // 코디 스캔이 켜지는 순간(앱을 열 때) 지난 대화를 닫힌 기준으로 둔다. 렌더 중에 바꿔 지난 패널이 한 번도 그려지지 않게 한다.
+  const [enteredOn, setEnteredOn] = useState(false);
+  if (v.enabled !== enteredOn) {
+    setEnteredOn(v.enabled);
+    if (v.enabled) setClosedAt(closedOnEnter(lastId));
+  }
+  const panelOpen = outfitPanelOpen(v.enabled, lastId, closedAt);
   const question = (typing ? draft : engine === 'scribe' ? scribe.text : speech.text).trim().slice(0, QUESTION_MAX);
 
   /** 질문 하나를 묻는다. 보낼 조각이 없으면(askPlugin null) 알림만. */
