@@ -8,9 +8,9 @@ framelet은 1인칭 카메라와 그 위에서 도는 앱 사이에 들어가는
 
 - **유리.** 카메라 화면 위의 모든 패널은 유리다. 진하게 74%(`fm-glass-panel`), 보통 55%(`fm-glass-capsule`), 얇게 32%(`fm-glass-hint`) 세 단계이고, 흐림 `fm-blur` 22px, 외곽선 `fm-line` 1.5px `fm-glass-line`(네 면 모두)을 쓴다.
 - **색은 의미에만.** 초록 `fm-safe` = 아무도 앱에 넘어가지 않음, 주황 `fm-exposed` = 비교 모드·노출, 빨강 `fm-blocked` = 차단. 보류는 색 없이 속이 빈 고리다. 의미 없는 색은 `fm-lens` 파랑 하나뿐이고 브랜드 점·데이터 선·로딩 스캔·키보드 포커스에만 쓴다.
-- **색과 글자를 함께.** 상태는 색 점 + 글자로 보인다("● 앱에 반영된 사람 0명 · 보호됨"). 상태색 글자는 카운터 오브의 큰 숫자에만 쓴다.
+- **색과 글자를 함께.** 기록과 시트의 상태는 색 점 + 글자로 보인다("● 보호됨"). 카메라 위 사람 숫자는 평소 흰색이고, 1 이상일 때만 `fm-exposed`로 바뀐다.
 - **기본은 다크.** 라이트는 사용자가 고르고 브라우저에 남긴다. 글래스 HUD(`/hud`, 600×600)는 늘 다크이고 유리·흐림·그림자가 없다(Glass HUD 테마).
-- **framelet과 앱을 나눈다.** 앱이 보낸 결과는 framelet이 그린 머리줄(글자 아이콘, 앱 이름, "앱이 보낸 결과") 아래의 앱 카드 안쪽 칸에만 나온다. 구분은 색이 아니라 자리와 머리줄로 한다. 앱 문자열은 그림 문자·방향 문자·framelet 문구를 걸러서 넣는다.
+- **framelet과 앱을 나눈다(2026-11-01 갱신, #43).** framelet이 카메라 위에 그리는 것은 흰 프레임(`fm-r-frame`)과 그 오른쪽 위 가장자리의 사람 아이콘·숫자(앱에 반영된 사람 수, 평소 흰색, 1 이상이면 `fm-exposed`)뿐이다. 앱의 결과는 앱마다 정해진 화면 하나가 그린다. 칼로리는 금빛 상태창(`FoodStatusPanel`)과 금빛 연결선을 쓰는데, 이 금색은 칼로리 앱의 모양이지 framelet 토큰이 아니다. 앱끼리 모양이 달라도 된다. 앱 문자열은 그림 문자·방향 문자·framelet 문구를 걸러서 넣는다.
 
 ## 글자 규칙
 
@@ -49,11 +49,12 @@ framelet은 1인칭 카메라와 그 위에서 도는 앱 사이에 들어가는
 | --- | --- | --- |
 | 유리 패널·캡슐 | `fm-glass`, `fm-glass--panel`, `fm-glass--hint`, `fm-capsule` | `fm-glass-*`, `fm-line`, `fm-r-capsule` |
 | 상태 점 | `fm-dot` (`data-tone` safe·exposed·blocked·hold) | 의미색, 22% 후광 |
-| 카운터 오브 | `src/ui/OrbStack.tsx` | `counter` 스타일, 2.5px 고리, 60칸 눈금, 10초 창 호 |
-| 대상 프레임·흰 틀 | `src/ui/CaptureFrame.tsx`, `TargetFrame` | `fm-r-frame`, 모서리 브래킷, 이름표·점수 |
-| 앱 카드 | `src/ui/Hud.tsx` `AppResults`, `.fm-appcard` | 바깥 `fm-r-panel` 유리, 안쪽 `fm-r-card` `fm-text` 바탕에 `fm-on-text` 글자 |
-| 전달 알림 | `.fm-toastcard` | "framelet → 앱" 두 줄, `readout` |
+| 흰 틀 | `src/ui/CaptureFrame.tsx` | `fm-r-frame`, 흰 2px 테두리와 꼭짓점 손잡이. 조절은 위쪽 줄 "전송 범위" 버튼에서 |
+| 사람 아이콘·숫자 | `src/ui/Hud.tsx` `PersonCount` | 선 SVG 아이콘 14px + 숫자 16px(`/hud` 48px), `fm-text` / `fm-exposed` |
+| 플러그인 화면 | `src/ui/PluginViews.tsx` | 앱 종류마다 화면 하나: 칼로리 = `FoodStatusPanel`(금빛, `src/ui/food-status-panel.css`), 장면 기록 = 작은 글자 카드, 변조 = 없음 |
 | 규약 보기 | `src/proof/ProtocolView.tsx` | 보장 카드 `fm-r-card`, 요청/허용 표 |
+
+카운터 오브(`src/ui/OrbStack.tsx`), 장면 캡슐, 대상 프레임 브래킷, 전달 알림 토스트, 앱 카드는 #43에서 카메라 위 화면에서 빠졌다.
 
 부품 미리보기는 레포에서 `npm run dev` 뒤 `/dev/design.html`(부품)과 `/dev/screens.html`(화면별 배치)로 본다.
 

@@ -1,16 +1,79 @@
 {
   "v": 3,
-  "createdOnFiles": { "v": 1, "at": "2026-10-31T16:55:00Z" },
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-31T16:55:00Z"
+  },
   "title": "framelet 앱 화면 설계",
-  "launch": { "view": "canvas" },
+  "launch": {
+    "view": "canvas"
+  },
   "pages": [],
   "boards": {
-    "Apps.dc.html": { "x": 0, "y": 0, "w": 390, "h": 844, "title": "P2 앱 목록", "is_interactive": true },
-    "Consent.dc.html": { "x": 470, "y": 0, "w": 390, "h": 844, "title": "P4 연결 요청(시각 데이터 규약)", "is_interactive": true },
-    "Main.dc.html": { "x": 940, "y": 0, "w": 390, "h": 844, "title": "P1 보기", "is_interactive": true },
-    "Activity.dc.html": { "x": 1410, "y": 0, "w": 390, "h": 844, "title": "P5 전체 기록", "is_interactive": true },
-    "ActivityDetail.dc.html": { "x": 1880, "y": 0, "w": 390, "h": 844, "title": "P6 기록 상세", "is_interactive": true },
-    "AppDetail.dc.html": { "x": 2350, "y": 0, "w": 390, "h": 844, "title": "P3 앱 상세", "is_interactive": true }
+    "Splash.dc.html": {
+      "x": -470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P0 스플래시",
+      "is_interactive": true
+    },
+    "Apps.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P2 앱 목록",
+      "is_interactive": true
+    },
+    "Consent.dc.html": {
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P4 연결 요청(시각 데이터 규약)",
+      "is_interactive": true
+    },
+    "Main.dc.html": {
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P1 보기(스마트 글래스 화면)",
+      "is_interactive": true
+    },
+    "Activity.dc.html": {
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P5 전체 기록",
+      "is_interactive": true
+    },
+    "ActivityDetail.dc.html": {
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P6 기록 상세",
+      "is_interactive": true
+    },
+    "AppDetail.dc.html": {
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P3 앱 상세",
+      "is_interactive": true
+    },
+    "PluginTrace.dc.html": {
+      "x": 2820,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P7 칼로리 처리 과정(앱이 보고한 것)",
+      "is_interactive": true
+    }
   },
   "order": [
     "Main.dc.html",
@@ -18,17 +81,25 @@
     "Consent.dc.html",
     "Activity.dc.html",
     "ActivityDetail.dc.html",
-    "AppDetail.dc.html"
+    "AppDetail.dc.html",
+    "PluginTrace.dc.html",
+    "Splash.dc.html"
   ],
   "notes": {
-    "flowtitle": { "x": 0, "y": -300, "text": "framelet 휴대폰 앱 · 보기 · 앱 · 기록", "kind": "title1", "maxW": 2740 },
+    "flowtitle": {
+      "x": -470,
+      "y": -300,
+      "text": "framelet 휴대폰 앱 · 보기 · 앱 · 기록",
+      "kind": "title1",
+      "maxW": 3680
+    },
     "rule": {
       "x": 0,
       "y": 920,
       "w": 560,
       "size": "m",
       "fill": "gray",
-      "text": "시각 규칙: framelet 기존 디자인 시스템(docs/designs/design-system.md, src/ui/theme.css)을 따른다. 글꼴 Pretendard, 판독값 고정폭, 바탕 #0C0B0A, 유리 패널 74%와 1.5px 외곽선, 의미색 초록·주황·빨강, 브랜드 점 Lens 파랑, 모서리 캡슐·카드 18·흰 틀 14·패널 28. 나누는 규칙: 구별은 색이 아니라 위치와 구조로 한다. 앱이 보낸 결과는 카메라 아래 '앱 결과' 칸의 안쪽 카드에만 나오고, 그 위 머리줄(글자 아이콘, 이름, '앱이 보낸 결과')은 framelet이 그린다. 앱 문자열은 그림 문자·방향 문자·framelet 문구를 걸러서 넣는다. 전달 신호는 'framelet → 앱' 방향으로 쓴다."
+      "text": "나누는 규칙(2026-11-01 갱신): framelet(플랫폼)이 카메라 위에 그리는 것은 흰 프레임 하나와 그 오른쪽 위 가장자리의 사람 아이콘·숫자(앱에 반영된 사람 수)뿐이다. 결과는 각 플러그인이 자기 화면으로 그린다. 칼로리 플러그인은 #41 금빛 상태창과 금빛 연결선을 쓰고, 장면 기록 등 다른 플러그인은 다른 모양이어도 된다. 금빛은 플러그인, 흰 테두리는 framelet이라 색만 보고 구분된다. 플랫폼은 선을 긋지 않는다."
     },
     "story": {
       "x": 640,
@@ -36,7 +107,31 @@
       "w": 560,
       "size": "m",
       "fill": "blue",
-      "text": "시연 순서: 앱 목록에서 칼로리를 켠다 → 연결 요청(바꿀 수 없는 보장 + 요청/허용 두 칸) → 허용 → 보기에서 피자를 흰 틀 안에 → 'framelet → 칼로리' 전달, 앱 카드에 결과 → 기록 → 기록 상세 → 앱 상세(이 앱이 받은 것)."
+      "text": "시연 순서: 스플래시(로고가 맞춰지고 청록 조각이 켜짐) → 앱 목록에서 칼로리를 켠다 → 연결 요청(바꿀 수 없는 보장 + 요청/허용 두 칸) → 허용 → 보기에서 피자를 흰 틀 안에 → 흰 틀 오른쪽 위 사람 0, 피자에서 금빛 선이 칼로리 상태창(피자 약 1,365kcal)으로 이어짐 → 기록 → 기록 상세 → 칼로리가 보고한 처리 과정(P7) → 앱 상세(이 앱이 받은 것)."
+    },
+    "style": {
+      "x": 1920,
+      "y": 920,
+      "w": 560,
+      "size": "m",
+      "fill": "purple",
+      "text": "화면 스타일(2026-11-01, 사용자 결정): v0 앱(Mobbin 캡처)을 따른다. 흰 바탕, 검정 글자, 회색 말풍선(#f2f2f2), 아이콘 + 회색 글자 + 오른쪽 꺾쇠 줄 목록, 떠 있는 알약 탭바. 앱이 그린 것(카메라 위 금빛 상태창, 결과 칸)은 앱의 모양 그대로 둔다. 레포 디자인 시스템(유리, 다크 기본)과 다르므로 실제 앱에 옮기려면 theme.css를 따로 정해야 한다."
+    },
+    "trace": {
+      "x": 2560,
+      "y": 920,
+      "w": 560,
+      "size": "m",
+      "fill": "teal",
+      "text": "P7 규칙: 오른쪽 위 말풍선은 framelet이 보낸 것이다(기록과 같은 조각, framelet이 확인). 그 아래 단계 목록은 칼로리가 보고한 것이라 'framelet은 이 내용이 맞는지 확인하지 않아요'를 함께 적는다. 0.4초, 단계 문구, 설명 문장은 예시다. main의 framelet.result()에는 단계를 받을 자리가 아직 없다."
+    },
+    "logo": {
+      "x": -470,
+      "y": 920,
+      "w": 400,
+      "size": "m",
+      "fill": "orange",
+      "text": "로고(2026-11-01, 사용자 제공): 5×5 격자, 칸과 틈 8:1. 회색·청회색 칸은 화면, 청록(#19ae9f) 세 칸은 흰 틀 안에서 앱으로 나가는 조각. 글자색 #263339. 글꼴은 원본을 몰라 Outfit 600으로 맞췄다. 스플래시 움직임: 회색 칸이 대각선 순서로 0.08~0.44초, 청록 세 칸이 0.62초부터 0.09초 간격, 글자 0.82초, 설명 0.96초, 상태 1.1초. 움직임 줄이기 설정이면 처음부터 멈춘 화면. 누르면 P1로."
     },
     "decision": {
       "x": 1280,
@@ -44,7 +139,7 @@
       "w": 560,
       "size": "m",
       "fill": "green",
-      "text": "결정(2026-11-01): 안 B. 결정 N12('승인 화면 없음')를 유지한다. 실제 앱의 P4는 허용/거절 버튼 없이 닫기만 있는 '규약 보기'이고, 앱은 지금처럼 스위치로 켠다. 이 캔버스의 P4(연결 요청)는 시연 영상에서 '다음 단계'로만 쓴다. 마감 전 구현(트랙 C): 앱 결과 분리, 전달 신호 문구, 앱 문자열 거르기, 규약 보기."
+      "text": "결정(2026-11-01): 안 B(N12 유지, 규약 보기). 이 캔버스의 P4 연결 요청은 영상에서 '다음 단계'로만 쓴다. 칼로리는 calorie-lens 모델을 플러그인 안에서 기기 안으로 돌리고(int8, 94MB), 느리거나 실패하면 Haiku, 그다음 고정표로 넘어간다. 칼로리 양은 음식별 범위의 평균을 쓰고(피자 110~800g → 455g), 모델은 1g당 kcal만 맡아 음식별 범위로 자른다(피자 2.2~3.0). 시안의 약 1,365kcal = 455g × 3.0(모델 값 3.37을 3.0으로 자름)."
     }
   },
   "designSystems": [
