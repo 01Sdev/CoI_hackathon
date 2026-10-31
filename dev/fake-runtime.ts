@@ -267,6 +267,8 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
               runtimeId,
               runtimePolicy: { connect: want.connect, manifestVersion: want.manifestVersion },
               gateOpen: true,
+              // 이 iframe을 만든 값. 그 사이 바뀌었으면 스토어가 게이트를 열지 않는다(cb9fec9).
+              desired: want,
             });
             if (st().plugins[id]?.kind === 'tamper') tamperAttempts(id);
           },
