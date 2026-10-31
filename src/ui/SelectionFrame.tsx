@@ -1,26 +1,26 @@
 // design.html의 범위 선택·인원 수 표시만 추출. 검출 모델·카메라·기존 보호 카운터 M을 호출하지 않는다.
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
 import type { Box } from '../core/types';
-import { countSelectionPeople, fitSelection, moveSelection, resizeSelection, selectionHandlePoint, selectionLimits, type SelectionHandle, type SelectionPoint } from './selection-frame';
+import { fitSelection, moveSelection, resizeSelection, selectionHandlePoint, selectionLimits, type SelectionHandle } from './selection-frame';
 import './selection-frame.css';
 
 export interface SelectionFrameProps {
   /** 부모 시야 영역 기준 0~1. 원본 프레임 좌표와 다를 수 있다. */
   value: Box;
   onChange(value: Box): void;
-  /** 같은 부모 좌표계의 사람 대표점. 검출 결과 없음은 null, 확인된 빈 결과는 []. */
-  people: readonly SelectionPoint[] | null;
+  /** 외부에서 계산한 인원수. 이 컴포넌트는 표시만 한다. null이면 미확인. */
+  peopleCount: number | null;
 }
 const handles: readonly SelectionHandle[] = ['nw', 'ne', 'sw', 'se', 'n', 's', 'w', 'e'];
 const labels: Record<SelectionHandle, string> = { nw: '왼쪽 위 모서리', ne: '오른쪽 위 모서리', sw: '왼쪽 아래 모서리', se: '오른쪽 아래 모서리', n: '위쪽 중간점', s: '아래쪽 중간점', w: '왼쪽 중간점', e: '오른쪽 중간점' };
 const edges = [['n', '위쪽'], ['s', '아래쪽'], ['w', '왼쪽'], ['e', '오른쪽']] as const;
 const same = (a: Box, b: Box) => Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9 && Math.abs(a.w - b.w) < 1e-9 && Math.abs(a.h - b.h) < 1e-9;
 
-export function SelectionFrame({ value, onChange, people }: SelectionFrameProps) {
+export function SelectionFrame({ value, onChange, peopleCount }: SelectionFrameProps) {
   const root = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: number; handle: SelectionHandle | null; x: number; y: number; frame: Box; element: HTMLButtonElement } | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 }), [mode, setMode] = useState<'move' | 'resize' | null>(null);
-  const limit = selectionLimits(size.w, size.h), frame = fitSelection(value, limit), count = countSelectionPeople(frame, people);
+  const limit = selectionLimits(size.w, size.h), frame = fitSelection(value, limit);
   useLayoutEffect(() => {
     const el = root.current; if (!el) return;
     const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
@@ -59,7 +59,7 @@ export function SelectionFrame({ value, onChange, people }: SelectionFrameProps)
       {edges.map(([edge, name]) => <button key={edge} type="button" className="fm-selection__edge" data-edge={edge} aria-label={`선택 범위 이동: ${name} 테두리`} title="테두리를 끌어 범위 이동" onPointerDown={e => start(e, null)} onPointerMove={move} onPointerUp={stop} onPointerCancel={stop} onLostPointerCapture={stop} />)}
       <span className="fm-selection__count">
         <svg className="fm-selection__person" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><circle cx="16" cy="8" r="8" /><path d="M0 32v-1c0-7.7 6.3-14 14-14h4c7.7 0 14 6.3 14 14v1Z" /></svg>
-        <output aria-live="polite" aria-label={count === null ? '선택 범위 인원 미확인' : `선택 범위 안 사람 ${count}명`}>{count ?? '—'}</output>
+        <output aria-live="polite" aria-label={peopleCount === null ? '인원 미확인' : `사람 ${peopleCount}명`}>{peopleCount ?? '—'}</output>
       </span>
       {handles.map(handle => <button key={handle} type="button" className="fm-selection__handle" data-handle={handle} aria-label={`${labels[handle]} 크기 조절`} title="드래그하거나 방향키로 크기 조절" onPointerDown={e => start(e, handle)} onPointerMove={move} onPointerUp={stop} onPointerCancel={stop} onLostPointerCapture={stop} />)}
     </div>}

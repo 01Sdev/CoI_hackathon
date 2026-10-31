@@ -42,10 +42,3 @@ export function resizeSelection(value: Box, handle: SelectionHandle, point: Sele
   if (handle.includes('s')) bottom = clamp(finite(point.y, bottom), top + limit.minHeight, limit.bottom);
   return { x: left, y: top, w: right - left, h: bottom - top };
 }
-
-/** 사람당 하나의 대표점이 프레임 안(경계 포함)에 있으면 1명. null은 미확인, []는 확인된 0명. */
-export function countSelectionPeople(value: Box, people: readonly SelectionPoint[] | null): number | null {
-  if (people === null || ![value.x, value.y, value.w, value.h].every(Number.isFinite) || value.w <= 0 || value.h <= 0) return null;
-  const eps = 1e-9;
-  return people.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1 && p.x >= value.x - eps && p.x <= value.x + value.w + eps && p.y >= value.y - eps && p.y <= value.y + value.h + eps).length;
-}
