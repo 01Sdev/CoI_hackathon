@@ -1110,6 +1110,56 @@ button.fm-logcard:focus-visible,
   block-size: 48px;
 }
 
+/* ── 발표자 컨트롤(F17·F20) ── */
+.fm-presenter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 12px 18px;
+  border-radius: 22px;
+}
+.fm-presenter__meta {
+  margin-inline-start: auto;
+}
+.fm-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.fm-switch.fm-switch--exposed > input:checked + span[aria-hidden] {
+  background: var(--fm-exposed);
+}
+.fm-switch.fm-switch--exposed > input:checked + span[aria-hidden]::after {
+  background: #1a1206;
+}
+.fm-presenter .fm-btn[aria-pressed='true'],
+.fm-presenter .fm-btn[data-armed='true'] {
+  border-color: var(--fm-text);
+}
+.fm-hud__paused {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: calc(env(safe-area-inset-top, 0px) + 114px + var(--fm-band-h, 0px));
+  display: flex;
+  justify-content: center;
+}
+.fm-desk .fm-hud__paused {
+  inset-block-start: calc(128px + var(--fm-band-h, 0px));
+}
+
+/* /outward 상태 */
+.fm-outward[data-tone='safe'] {
+  --fm-tone: var(--fm-safe);
+}
+.fm-outward[data-tone='exposed'] {
+  --fm-tone: var(--fm-exposed);
+}
+.fm-outward[data-state='stale'] {
+  opacity: 0.55;
+}
+
 /* ── 글래스 HUD(/hud) ── */
 [data-view='hud'] body {
   background: #000;
