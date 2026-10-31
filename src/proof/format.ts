@@ -25,8 +25,9 @@ export function entryTone(e: LogEntry, d: Delivery | null): Tone {
   return 'hold';
 }
 
-export function entryTitle(e: LogEntry, d: Delivery | null, kind: PluginKind | undefined): string {
-  const who = kind && kind !== 'calorie' ? `${PLUGIN_NAME[kind]} · ` : '';
+/** multi: 로그에 앱이 둘 이상이면 칼로리 줄에도 앱 이름을 붙인다(두 앱을 나란히 읽게, F21). */
+export function entryTitle(e: LogEntry, d: Delivery | null, kind: PluginKind | undefined, multi = false): string {
+  const who = kind && (multi || kind !== 'calorie') ? `${PLUGIN_NAME[kind]} · ` : '';
   switch (e.kind) {
     case 'deliver': {
       if (!d) return `${who}전달`;

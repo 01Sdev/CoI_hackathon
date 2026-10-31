@@ -45,6 +45,7 @@ export function LogHeader({ title = '앱이 받은 것' }: { title?: string }) {
 
 export function LogList({ limit, onOpen }: { limit?: number; onOpen?: (entryId: string) => void }) {
   const logs = useLensStore((s) => s.logs);
+  const multi = useLensStore((s) => new Set(s.logs.map((l) => l.pluginId)).size > 1);
   const now = useNow();
   if (logs.length === 0) {
     return <p className="fm-empty fm-readout">아직 넘어간 것이 없습니다 · 전달 0건</p>;
@@ -55,7 +56,7 @@ export function LogList({ limit, onOpen }: { limit?: number; onOpen?: (entryId: 
     <ol className="fm-log">
       {shown.map((e) => (
         <li key={e.id}>
-          <LogCard entry={e} now={now} onOpen={onOpen} />
+          <LogCard entry={e} now={now} multi={multi} onOpen={onOpen} />
         </li>
       ))}
     </ol>
@@ -72,7 +73,7 @@ export function Thumb({ entry, delivery }: { entry: LogEntry; delivery: Delivery
   );
 }
 
-function LogCard({ entry, now, onOpen }: { entry: LogEntry; now: number; onOpen?: (entryId: string) => void }) {
+function LogCard({ entry, now, multi, onOpen }: { entry: LogEntry; now: number; multi: boolean; onOpen?: (entryId: string) => void }) {
   const d = useLensStore((s) => (entry.deliveryId ? (s.deliveries[entry.deliveryId] ?? null) : null));
   const kind = useLensStore((s) => s.plugins[entry.pluginId]?.kind);
   const code = entryCode(entry);
@@ -82,7 +83,7 @@ function LogCard({ entry, now, onOpen }: { entry: LogEntry; now: number; onOpen?
       <span className="fm-logcard__main">
         <span className="fm-logcard__title fm-label">
           <span className="fm-dot" aria-hidden="true" />
-          {entryTitle(entry, d, kind)}
+          {entryTitle(entry, d, kind, multi)}
           {code && <span className="fm-tag">{code}</span>}
         </span>
         <span className="fm-readout fm-logcard__meta">{entryMeta(entry, d)}</span>

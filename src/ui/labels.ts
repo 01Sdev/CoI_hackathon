@@ -14,10 +14,16 @@ export const SCENE_LABEL: Record<SceneLabel, string> = {
   none: '대상 없음',
 };
 
+// hello는 M0 관문용이자 발표용 두 번째 앱 "장면 기록"이다(PRD F21).
 export const PLUGIN_NAME: Record<PluginKind, string> = {
   calorie: '칼로리',
   tamper: '변조',
-  hello: 'hello',
+  hello: '장면 기록',
+};
+
+export const MANIFEST_SCENE_LABEL: Record<'food' | 'person', string> = {
+  food: '음식',
+  person: '사람',
 };
 
 // COCO 음식 라벨의 한국어 이름. 없는 라벨은 영문 그대로 보인다.

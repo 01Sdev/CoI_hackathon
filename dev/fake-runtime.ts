@@ -67,7 +67,7 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
   let nextAck: AckMode = 'match';
   let failNext = false;
   let personUntil = 0;
-  let cycle = 0;
+  const cycles = new Map<string, number>();
   let sceneId: string | null = null;
   let sceneSession = '';
   let obsTimer = 0;
@@ -144,31 +144,39 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
       }
       return;
     }
-    const cal = s.plugins.calorie;
-    if (auto && cal && selectCanSend(s, 'calorie') && !cal.busy && now() >= cal.cooldownUntil) capture();
+    // 음식 장면을 선언한 앱마다 각자의 쿨다운으로 포착한다(칼로리, 두 번째 앱 "장면 기록" F21). 변조는 받지 않는다.
+    for (const id of s.pluginOrder) {
+      const p = s.plugins[id];
+      if (!auto || !p || p.kind === 'tamper' || !p.manifest.scenes.includes('food')) continue;
+      if (selectCanSend(s, id) && !p.busy && now() >= p.cooldownUntil) capture(id);
+    }
   }
 
   // ── A: 포착 → 분기 → 중개기 ──
-  function capture(force?: DeliveryBranch | '2d', instant = false) {
+  function capture(pluginId: string, force?: DeliveryBranch | '2d', instant = false) {
     const s = st();
-    const p = s.plugins.calorie;
-    if (!p || !selectCanSend(s, 'calorie') || !p.runtimeId || !p.runtimePolicy) return;
-    const kind: DeliveryBranch | '2d' = force ?? (s.session.compareMode ? 'raw' : NORMAL_CYCLE[cycle++ % NORMAL_CYCLE.length]!);
+    const p = s.plugins[pluginId];
+    if (!p || !selectCanSend(s, pluginId) || !p.runtimeId || !p.runtimePolicy) return;
+    const n = cycles.get(pluginId) ?? 0;
+    cycles.set(pluginId, n + 1);
+    // 원본 전체(raw)는 비교 모드의 칼로리에만 간다. 다른 앱은 같은 장면이라도 보호 모드 분기다.
+    const raw = s.session.compareMode && p.kind === 'calorie';
+    const kind: DeliveryBranch | '2d' = force ?? (raw ? 'raw' : NORMAL_CYCLE[n % NORMAL_CYCLE.length]!);
     const cooldown = now() + 60_000 / p.manifest.maxPerMinute;
     const face: NewDetection = { kind: 'face', box: { x: 0.78, y: 0.06, w: 0.12, h: 0.2 }, score: 0.82, overlap: null, masked: 'face' };
     const person: NewDetection = { kind: 'person', box: { x: 0.7, y: 0, w: 0.3, h: 1 }, score: 0.91, overlap: 0.14, masked: 'none' };
 
     if (kind === '2d') {
       s.addLog(
-        { pluginId: 'calorie', sceneDecisionId: sceneId, kind: 'hold', branch: '2d', reason: '얼굴 위치 불확실', enforcedBy: null },
+        { pluginId, sceneDecisionId: sceneId, kind: 'hold', branch: '2d', reason: '얼굴 위치 불확실', enforcedBy: null },
         [{ ...person, overlap: 0.56 }],
       );
-      s.setPluginBusy('calorie', false, cooldown);
+      s.setPluginBusy(pluginId, false, cooldown);
       return;
     }
-    s.setPluginBusy('calorie', true);
+    s.setPluginBusy(pluginId, true);
     const go = () => {
-      const cur = st().plugins.calorie;
+      const cur = st().plugins[pluginId];
       if (!cur?.runtimeId || !cur.runtimePolicy) return;
       const raw = kind === 'raw';
       const side = raw ? 1280 : cur.manifest.maxSide;
@@ -178,7 +186,7 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
       const bytes = raw ? 212_000 + Math.round(Math.random() * 6000) : Math.round((18_000 + Math.random() * 1500) * scale);
       const res = st().prepareDelivery(
         {
-          pluginId: 'calorie',
+          pluginId,
           manifestVersion: cur.runtimePolicy.manifestVersion,
           runtimeId: cur.runtimeId,
           scene: 'food',
@@ -199,7 +207,7 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
         { sceneDecisionId: sceneId },
         kind === '2b' ? [face, person] : kind === '2c' ? [{ ...face, masked: 'head' }, person] : raw ? [] : [],
       );
-      st().setPluginBusy('calorie', false, cooldown);
+      st().setPluginBusy(pluginId, false, cooldown);
       if (!res) {
         URL.revokeObjectURL(url);
         return;
@@ -213,7 +221,7 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
         const sha = st().deliveries[id]?.sha256 ?? '';
         if (ack === 'timeout') window.setTimeout(() => st().setAck(id, null), 2000);
         else window.setTimeout(() => st().setAck(id, ack === 'match' ? sha : hex(64)), instant ? 0 : 260);
-        window.setTimeout(() => result(id), instant ? 0 : 700);
+        window.setTimeout(() => result(pluginId, id), instant ? 0 : 700);
       };
       if (instant) dispatch();
       else window.setTimeout(dispatch, 90);
@@ -223,11 +231,16 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
   }
 
   // ── B: 결과 줄 ──
-  function result(deliveryId: string) {
+  function result(pluginId: string, deliveryId: string) {
     const s = st();
-    const p = s.plugins.calorie;
+    const p = s.plugins[pluginId];
     if (!p) return;
     const at = now();
+    if (p.kind === 'hello') {
+      // 두 번째 앱 "장면 기록": 통신 없이 고정 문장(FR-059).
+      s.setResult(pluginId, { deliveryId, text: '피자 장면 기록됨', source: 'fallback', at });
+      return;
+    }
     if (s.session.compareMode) {
       s.setResult('calorie', { deliveryId, text: '피자 약 285kcal', source: 'fallback', at });
       return;
@@ -297,7 +310,7 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
   }
 
   return {
-    deliverNow: (kind) => capture(kind),
+    deliverNow: (kind) => capture('calorie', kind),
     personScene: (ms) => {
       personUntil = now() + ms;
     },
@@ -313,7 +326,7 @@ export function startFakeRuntime(store: LensStore, opts: FakeOptions): FakeContr
       failNext = true;
     },
     fill: (n) => {
-      for (let i = 0; i < n; i++) capture('2a', true);
+      for (let i = 0; i < n; i++) capture('calorie', '2a', true);
     },
     setAuto: (on) => {
       auto = on;

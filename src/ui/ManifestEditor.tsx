@@ -8,7 +8,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { validateManifest, type Manifest } from '../core/manifest';
 import { useLensStore } from '../core/store';
 import type { PluginStatus, VersionedManifest } from '../core/types';
-import { PLUGIN_NAME } from './labels';
+import { josa, PLUGIN_NAME } from './labels';
 import type { Tone } from './OrbStack';
 
 const STATUS: Record<PluginStatus, [string, Tone]> = {
@@ -116,7 +116,7 @@ function Editor({ id }: { id: string }) {
         <div className="fm-stopped fm-glass fm-glass--panel" data-tone="hold" role="alert">
           <span className="fm-thumb fm-thumb--empty" />
           <div>
-            <div className="fm-label">{name}가 멈췄어요</div>
+            <div className="fm-label">{josa(name, '이/가')} 멈췄어요</div>
             <div className="fm-readout">새 권한으로 3초 안에 준비되지 않았습니다 · 이전 권한으로 돌아가지 않습니다</div>
           </div>
           <button type="button" className="fm-btn fm-btn--sm fm-btn--primary" onClick={() => setEnabled(id, true)}>

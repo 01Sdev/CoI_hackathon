@@ -33,7 +33,13 @@ export function LoadingPanel() {
           <span className="fm-readout">··</span>
           <span>물체·얼굴 판정 모델</span>
           <span className="fm-readout">
-            {known ? `${formatBytes(engine.loadedBytes!)} / ${formatBytes(engine.totalBytes!)}` : engine.status === 'idle' ? '대기' : `${sec}초`}
+            {known
+              ? `${formatBytes(engine.loadedBytes!)} / ${formatBytes(engine.totalBytes!)}`
+              : engine.status === 'idle'
+                ? '대기'
+                : engine.loadedBytes
+                  ? `${formatBytes(engine.loadedBytes)} 받음 · ${sec}초` // A는 두 파일의 크기를 다 알 때만 totalBytes를 채운다
+                  : `${sec}초`}
           </span>
         </div>
         <div className={known ? 'fm-bar' : 'fm-bar fm-bar--indeterminate'}>
