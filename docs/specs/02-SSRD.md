@@ -137,16 +137,16 @@ type PluginToHost =
 - `setPluginRuntime`에 `gateOpen: true`와 함께 `desired`(그 iframe을 만든 때의 `selectDesiredRuntime` 값)를 주면, 지금 값과 다를 때 게이트를 열지 않는다. B가 `ready` 처리 중에 대조와 쓰기 사이에 await를 끼워도 낡은 정책으로 게이트가 열리지 않게 하는 보험이다. B는 게이트를 열 때 `desired`를 넘긴다.
 
 **전송 범위 프레임 (F24·F24a, 2026-10-31 추가, 사용자 승인):**
-- **상태.** `Session.captureFrame = {x, y, w, h}`이고, 소스 프레임 기준 0\~1이다(`targetBox`와 같은 좌표). 기본값은 가운데 60%(0.2, 0.2, 0.6, 0.6) [제안]이다. C만 `setCaptureFrame(rect)`로 쓴다. 스토어가 0\~1 밖을 잘라 맞추고 한 변을 0.1 [제안] 이상으로 맞춘다. A는 포착을 시작할 때 한 번 읽고, 그 포착이 끝날 때까지 그 값을 쓴다.
+- **상태.** `Session.captureFrame = {x, y, w, h}`이고, 소스 프레임 기준 0\~1이다(`targetBox`와 같은 좌표). 기본값은 가운데 60%(0.2, 0.2, 0.6, 0.6) [제안]이다. C만 `setCaptureFrame(rect)`로 쓴다. 스토어는 0\~1 밖으로 나간 부분을 잘라 내고, 안쪽으로 밀어 넣지 않는다(밀면 사용자가 뺀 픽셀이 들어온다). 잘라 낸 뒤 한 변이 0.1 [제안]보다 작으면 받지 않는다. 꼭짓점 끌기는 `dragCorner`로 맞은편 꼭짓점을 고정하고, 끄는 꼭짓점을 최소값에서 멈춘다. A는 포착을 시작할 때 한 번 읽고, 그 포착이 끝날 때까지 그 값을 쓴다.
 - **처리 순서(A `vision/`).**
   1. 0단계 판정은 지금처럼 전체 화면에서 한다.
   2. 포착 프레임 전체에서 대상과 사람을 다시 찾는다(FR-013).
-  3. 대상 박스를 10% 넓힌 뒤 프레임(원본 px)과의 교집합을 `cropRect`로 삼는다.
+  3. 대상 박스를 10% 넓힌 뒤 `cropToFramePx(넓힌 박스, frameRect)`로 자른다. 결과는 프레임 안쪽 정수 px이다. 이것을 `cropRect`로 삼는다.
   4. 교집합이 비면 `hold`(branch `null`, reason "프레임 밖")로 끝내고 쿨다운을 시작한다. "대상 재검출 실패"와 같은 취급이다.
   5. `cropRect`만 캔버스에 그려 2단계(가림·분기)를 한다. 사람 박스는 전체 프레임 좌표에서 잘린 조각 좌표로 옮겨 O·P를 잰다.
   6. `maxSide` 축소, 인코딩, 출구 재검사를 거쳐 중개기로 넘긴다.
 - 프레임 밖 픽셀은 가림 캔버스에도 그리지 않는다. 기존 인물 가림(2a\~2d)은 프레임과 별개로 그대로 동작한다.
-- **기록.** `Delivery.frameRect`와 LogEntry `frameRect`에 그 포착에 쓴 프레임을 원본 px로 남긴다. "프레임 밖" hold에도 남긴다. 불변식은 `cropRect ⊆ frameRect`다. `areaRatio`는 지금처럼 `cropRect` 면적 / 원본 프레임 면적이다.
+- **기록.** `Delivery.frameRect`와 LogEntry `frameRect`에 그 포착에 쓴 프레임을 원본 px로 남긴다. "프레임 밖" hold에도 남긴다. 불변식은 `cropRect ⊆ frameRect`다(raw는 `cropRect = frameRect`). 스토어 `prepareDelivery`가 이 불변식을 검사한다. `frameRect`가 있는데 `cropRect`가 그 안에 없으면 받지 않고, raw는 `frameRect`가 없거나 `cropRect`와 다르면 받지 않는다(G1 마지막 방어와 같은 자리). `areaRatio`는 지금처럼 `cropRect` 면적 / 원본 프레임 면적이다.
 - **표시(C).** 미리보기 위에 흰색 틀을 그린다(소스 좌표 → 화면 좌표 변환은 `targetBox`와 같다). 꼭짓점 끌기는 터치 이벤트로 받고, 틀 위에서는 페이지 스크롤·확대를 막는다(`touch-action: none`). 플러그인 결과(HUD 카드 등)는 틀과 상관없는 자리에 둔다. `/hud`에는 틀만 그린다.
 - **비교 모드(F17, 사용자 결정 2026-10-31).** raw 전달에도 프레임을 적용한다. raw 조각은 원본 중 프레임 안 전체이고(`cropRect = frameRect`), 가리지 않는다. 프레임은 늘 비어 있지 않으므로 raw에는 "프레임 밖" hold가 없다. 프레임 밖 픽셀은 비교 모드에서도 어떤 플러그인에도 가지 않는다.
 - **F24b 공간 고정 프레임**은 명세만 둔다. 웹 데모 계약에는 없다.
@@ -162,7 +162,7 @@ type PluginToHost =
 - `Session.captureFrame`, `setCaptureFrame`
 - `Delivery.frameRect`, `LogEntry.frameRect`
 - `Counter.usage`, `usageSamples`
-- `src/core/frame.ts`: `clampFrame`, `frameToPx`, `intersectBox`(A의 자르기와 C의 끌기가 같은 좌표 함수를 쓴다)
+- `src/core/frame.ts`: `clampFrame`(잘라 내기), `dragCorner`(C의 끌기), `frameToPx`, `cropToFramePx`(A의 자르기), `intersectBox`, `containsBox`. A·C·스토어가 같은 좌표 함수를 쓴다
 
 ### 플러그인 SDK (Worker 안의 전역 `famelet`, 2026-10-31 추가)
 

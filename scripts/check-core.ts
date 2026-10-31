@@ -15,7 +15,7 @@ import {
 import type { DeliveryBranch, FaceCheck } from '../src/core/types';
 import { adjustKcal, fallbackText, isValidLabel } from '../src/core/calorie';
 import { CAPTURE_FRAME_DEFAULT, CAPTURE_FRAME_MIN_SIDE } from '../src/core/constants';
-import { clampFrame, frameToPx, intersectBox } from '../src/core/frame';
+import { clampFrame, containsBox, cropToFramePx, dragCorner, frameToPx, intersectBox } from '../src/core/frame';
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -184,7 +184,7 @@ function setup() {
     n += 1;
     const p = store.getState().plugins[over.pluginId ?? 'calorie']!;
     const { faces = 0, ...rest } = over;
-    return {
+    const base: NewDelivery = {
       pluginId: 'calorie',
       manifestVersion: p.manifest.version,
       runtimeId: p.runtimeId ?? 'none',
@@ -204,6 +204,8 @@ function setup() {
       blob: new Blob(['abc']),
       ...rest,
     };
+    // raw(비교 모드)는 프레임 전체를 보낸다(F24). 따로 주지 않으면 cropRect를 그 프레임으로 쓴다.
+    return base.branch === 'raw' && !base.frameRect ? { ...base, frameRect: base.cropRect } : base;
   };
   /** prepare + dispatched. */
   const send = (over: Parameters<typeof delivery>[0] = {}) => {
@@ -509,10 +511,47 @@ check('게이트: desired가 지금 값과 다르면 gateOpen: true를 받아도
 });
 
 // ── F24 전송 범위 프레임 · F25 사용 기록 ──
-check('clampFrame: 범위 밖은 0~1 안으로, 한 변은 최소값 이상, 숫자가 아니면 null', () => {
-  assert.deepEqual(clampFrame({ x: -0.2, y: 0.95, w: 0.5, h: 0.5 }), { x: 0, y: 0.5, w: 0.5, h: 0.5 });
-  assert.deepEqual(clampFrame({ x: 0.5, y: 0.5, w: 0.01, h: 2 }), { x: 0.5, y: 0, w: CAPTURE_FRAME_MIN_SIDE, h: 1 });
+check('clampFrame: 0~1 밖은 잘라 낸다(밀어 넣지 않음), 잘라 낸 뒤 최소값 미만·숫자가 아니면 null', () => {
+  // 요청 [−0.25, 0.25] × [0.75, 1.25] → 잘라 낸 [0, 0.25] × [0.75, 1]. 사용자가 뺀 0.25 오른쪽은 들어오지 않는다.
+  assert.deepEqual(clampFrame({ x: -0.25, y: 0.75, w: 0.5, h: 0.5 }), { x: 0, y: 0.75, w: 0.25, h: 0.25 });
+  assert.equal(clampFrame({ x: 0.5, y: 0.5, w: 0.05, h: 0.5 }), null, '한 변 0.05');
+  assert.equal(clampFrame({ x: 0.95, y: 0, w: 0.5, h: 0.5 }), null, '잘라 내니 0.05');
   assert.equal(clampFrame({ x: Number.NaN, y: 0, w: 0.5, h: 0.5 }), null);
+});
+
+check('dragCorner: 맞은편 꼭짓점은 고정, 끄는 꼭짓점은 0~1 안·최소값에서 멈춤', () => {
+  const f = { x: 0.25, y: 0.25, w: 0.5, h: 0.5 }; // [0.25, 0.75]
+  assert.deepEqual(dragCorner(f, 'tl', -0.5, 0.125), { x: 0, y: 0.125, w: 0.75, h: 0.625 }, '오른쪽·아래 변 그대로');
+  const shrunk = dragCorner(f, 'tl', 0.74, 0.74);
+  assert.ok(Math.abs(shrunk.w - CAPTURE_FRAME_MIN_SIDE) < 1e-9 && Math.abs(shrunk.h - CAPTURE_FRAME_MIN_SIDE) < 1e-9);
+  assert.equal(shrunk.x + shrunk.w, 0.75, '최소값에서 멈춰도 오른쪽 변은 움직이지 않는다');
+  assert.deepEqual(dragCorner(f, 'br', 2, Number.NaN), { x: 0.25, y: 0.25, w: 0.75, h: 0.5 }, '숫자가 아닌 축은 그대로');
+  assert.ok(clampFrame(shrunk), '최소값으로 줄인 프레임도 setCaptureFrame이 받는다');
+});
+
+check('cropToFramePx: 결과는 늘 정수 px로 프레임 안, 1px 미만·숫자가 아니면 null', () => {
+  const frame = { x: 144, y: 256, w: 432, h: 768 };
+  assert.deepEqual(cropToFramePx({ x: 100.5, y: 299.4, w: 475.7, h: 200.2 }, frame), { x: 144, y: 300, w: 432, h: 199 });
+  assert.equal(cropToFramePx({ x: 575.7, y: 300, w: 10, h: 10 }, frame), null, '0.3px 겹침');
+  assert.equal(cropToFramePx({ x: Number.NaN, y: 0, w: 10, h: 10 }, frame), null);
+  const c = cropToFramePx({ x: 500.2, y: 1000.6, w: 200, h: 200 }, frame)!;
+  assert.ok(containsBox(frame, c));
+});
+
+check('prepareDelivery: 조각이 프레임 밖으로 나가면, raw가 프레임 전체와 다르면 받지 않는다(F24)', () => {
+  const { store, ready, delivery } = setup();
+  ready();
+  const frameRect = { x: 100, y: 100, w: 200, h: 200 };
+  const outside = delivery({ frameRect, cropRect: { x: 90, y: 100, w: 50, h: 50 } });
+  assert.equal(store.getState().prepareDelivery(outside, { sceneDecisionId: null }), null);
+  assert.ok(store.getState().prepareDelivery(delivery({ frameRect, cropRect: { x: 100, y: 100, w: 50, h: 50 } }), { sceneDecisionId: null }));
+  store.getState().setCompareMode(true);
+  ready('calorie', 'r2', 'none');
+  const rawNoFrame: NewDelivery = { ...delivery({ branch: 'raw' }), frameRect: undefined };
+  assert.equal(store.getState().prepareDelivery(rawNoFrame, { sceneDecisionId: null }), null, '프레임 없는 raw');
+  const rawPart = delivery({ branch: 'raw', frameRect, cropRect: { x: 100, y: 100, w: 50, h: 50 } });
+  assert.equal(store.getState().prepareDelivery(rawPart, { sceneDecisionId: null }), null, '프레임 일부만 담은 raw');
+  assert.ok(store.getState().prepareDelivery(delivery({ branch: 'raw', frameRect, cropRect: { ...frameRect } }), { sceneDecisionId: null }));
 });
 
 check('frameToPx·intersectBox: 넓힌 대상 박스를 프레임으로 자르면 프레임 안, 겹치지 않으면 null', () => {
@@ -526,15 +565,17 @@ check('frameToPx·intersectBox: 넓힌 대상 박스를 프레임으로 자르�
   assert.equal(intersectBox({ x: 0, y: 0, w: 144, h: 300 }, frame), null, '변이 닿기만 하면 넓이 0');
 });
 
-check('setCaptureFrame: 기본값은 가운데 60%, 범위를 맞춰 쓰고, 숫자가 아니면 무시, 새 세션에도 유지', () => {
+check('setCaptureFrame: 기본값은 가운데 60%, 0~1 밖은 잘라 쓰고, 너무 작거나 숫자가 아니면 무시, 새 세션에도 유지', () => {
   const { store } = setup();
   assert.deepEqual(store.getState().session.captureFrame, { ...CAPTURE_FRAME_DEFAULT });
-  store.getState().setCaptureFrame({ x: 0.9, y: 0.1, w: 0.3, h: 0.05 });
-  assert.deepEqual(store.getState().session.captureFrame, { x: 0.7, y: 0.1, w: 0.3, h: CAPTURE_FRAME_MIN_SIDE });
+  store.getState().setCaptureFrame({ x: 0.75, y: -0.25, w: 0.5, h: 0.5 });
+  const trimmed = { x: 0.75, y: 0, w: 0.25, h: 0.25 };
+  assert.deepEqual(store.getState().session.captureFrame, trimmed);
+  store.getState().setCaptureFrame({ x: 0.5, y: 0.5, w: 0.05, h: 0.5 });
   store.getState().setCaptureFrame({ x: 0, y: 0, w: Number.POSITIVE_INFINITY, h: 0.5 });
-  assert.equal(store.getState().session.captureFrame.x, 0.7);
+  assert.deepEqual(store.getState().session.captureFrame, trimmed);
   store.getState().startNewSession();
-  assert.equal(store.getState().session.captureFrame.x, 0.7);
+  assert.deepEqual(store.getState().session.captureFrame, trimmed);
 });
 
 check('사용 기록: dispatched마다 한 줄(프레임 크기 포함), failed는 없음, deliver 로그에 frameRect', () => {

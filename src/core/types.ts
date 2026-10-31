@@ -133,6 +133,7 @@ export interface Delivery {
   /**
    * 포착을 시작할 때 읽은 Session.captureFrame을 원본 px로 바꾼 값(F24). cropRect ⊆ frameRect(raw는 같음).
    * F24를 구현하기 전의 호출과 맞도록 선택 필드로 둔다. A가 구현하면 늘 채운다.
+   * prepareDelivery는 cropRect가 이 안에 없으면, raw는 이 값이 없거나 cropRect와 다르면 받지 않는다.
    */
   frameRect?: Box;
   facesMasked: number;
@@ -142,7 +143,10 @@ export interface Delivery {
   sha256: string;
   ackSha256: string | null;
   ackStatus: AckStatus;
-  /** 보낸 Blob을 줄인 썸네일의 object URL. LogEntry가 밀려날 때 스토어가 해제한다. raw는 비교 모드를 끌 때 null. */
+  /**
+   * 보낸 Blob을 줄인 썸네일의 object URL. LogEntry가 밀려날 때 스토어가 해제한다. 단, 사용 기록 대표 조각(F25)이
+   * 같이 쓰고 있으면 그 조각이 빠질 때 해제한다. raw는 비교 모드를 끌 때 null.
+   */
   thumbnailRef: string | null;
   /** 플러그인에 보낸 것과 같은 Blob 객체(IF-02). raw는 비교 모드를 끌 때 null. */
   blob: Blob | null;
