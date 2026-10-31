@@ -54,6 +54,14 @@
 
 ## 모델 파일 (사용자가 직접 고른다)
 
+**2026-10-31 사용자 실측:** MediaPipe Selfie Multiclass Segmenter(`selfie_multiclass_256x256.tflite`, 16.4MB)와 BlazeFace short-range(`blaze_face_short_range.tflite`, 0.23MB)를 독립 데모(`/Users/Kimdonggyun/Downloads/selfie-multiclass-demo`)에서 iPhone 16 Pro Safari로 돌렸다.
+- 결과: GPU 약 11~28fps, 첫 결과 19.9초, 한 번 최대 추론 11.6초.
+- 같은 데모에서 MediaPipe 로그 요청을 발견했다(→ V15).
+- 미확인: 거리, 옆얼굴, 두 사람, 피자 장면, Android.
+- 상세: `/Users/Kimdonggyun/Documents/Codex/2026-10-31/x20/outputs/Selfie-Multiclass-demo.ko.md`
+- Selfie 모델의 쓰임(2단계 가림에 더할지)은 사용자 결정 대기다.
+
+
 - [ ] 물체 판정 모델: MediaPipe Tasks `ObjectDetector`가 읽는 `.tflite`(메타데이터 포함). COCO `pizza` 클래스가 있어야 한다. 지금 명세 기준은 EfficientDet-Lite0
 - [ ] 얼굴 모델: MediaPipe `FaceDetector`용 `.tflite`. 명세 기준은 BlazeFace short-range(약 2m 안의 얼굴용, V2 참고)
 - [ ] 놓을 곳: `public/models/`. WASM은 `node_modules/@mediapipe/tasks-vision/wasm/`을 `public/wasm/`으로 복사한다(CDN 금지, AGENTS.md)
@@ -78,4 +86,5 @@
 | V12 | 노트북 Chrome에서 데모 5단계 네트워크 탭 | 2차 통합 뒤 리허설 | C·발표자 | 대기 |
 | V13 | Ray-Ban Display 시뮬레이터에서 `/hud` D-pad | 트랙 C `/hud` PR | C | 대기 |
 | V14 | 메인 창과 `/outward` 동기화(외부 화면) | 트랙 C `/outward` PR 뒤 리허설 | C | 대기 |
+| V15 | 호스트 외부 요청 차단: MediaPipe 로그 요청(`odml.pa.googleapis.com`)이 네트워크 탭에 0건인지. 호스트 `connect-src 'self'`가 srcdoc iframe Worker의 `$ORIGIN` 요청을 막는지(Chrome·iPhone) | 트랙 B 첫 PR(호스트 가드) + 배포 주소에서 | B(iPhone은 x20-codex 도움 가능) | 대기. 독립 데모에서 `connect-src 'self'`로 로그 요청 차단 확인(교집합 문제는 미시험) |
 | V7 | iPhone 효과음·무음 모드 | — | — | 통과 |
