@@ -1,10 +1,10 @@
 // 코디 스캔 말 막대의 실시간 받아쓰기: ElevenLabs Scribe(사용자 요청 2026-11-01). A의 startScribe()가 브라우저에서 ElevenLabs에
 // 직접 연결한다(토큰은 B의 /api/scribe-token, 마이크·오디오 처리는 A). C는 글자만 받는다: 말하는 동안 onPartial 글자를 막대에 보이고,
-// 착용자가 멈추면(탭·Enter·Space) stop()의 확정 글자를 질문으로 쓴다. 그다음 질문을 위해 바로 새로 듣는다.
+// 착용자가 멈추면(탭·Enter·Space) stop()의 확정 글자를 질문으로 쓴다. 다시 듣지는 않는다(누를 때만 듣기, 부르는 쪽이 enabled로 정함).
 // A의 scribe.ts(#60)는 preview.ts처럼 glob으로 불러서, 아직 없으면 이 경로를 쓰지 않는다(빌드는 그대로 된다).
 // A의 startScribe는 거부하지 않고 토큰·마이크·연결·제공사 오류를 onError로 한 번 보낸다. 그러면 'error'가 되고, 부르는 쪽이
 // 브라우저 음성 인식, 그것도 없으면 글 입력으로 넘긴다. 버릴 때는 cancel()(바로 닫음, 콜백 없음)을 쓴다.
-// A는 30초가 되면 스스로 멈춘다(subscribeScribe가 false). 그때 받아쓴 글자가 없으면 다시 듣고, 있으면 'paused'로 두어 탭하면 묻는다.
+// A가 스스로 멈추면(subscribeScribe가 false, 30초) 'paused'로 두어 탭하면 묻는다. 부르는 쪽은 그 전에 15초로 닫는다.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { joinScribe, scribeFinalText } from './scribe';
@@ -47,7 +47,7 @@ export function useScribeInput(enabled: boolean): {
   state: ScribeState;
   /** 확정 + 지금 말하는 중인 글자. */
   text: string;
-  /** 멈추고 확정 글자를 돌려준다. 그다음 질문을 위해 다시 듣는다. 듣는 중이 아니면 ''. */
+  /** 멈추고 확정 글자를 돌려준다. 다시 듣지 않는다. 듣는 중이 아니면 ''. */
   finish(): Promise<string>;
 } {
   const [state, setState] = useState<ScribeState>('off');
@@ -62,7 +62,6 @@ export function useScribeInput(enabled: boolean): {
   // 이 세션에서 녹음이 한 번이라도 켜졌는가. 처음 false(등록 때 지금 값)를 스스로 멈춤으로 보지 않는다.
   const sawRecording = useRef(false);
   const unsub = useRef<(() => void) | null>(null);
-  const reopen = useRef<() => void>(() => undefined);
   const stateRef = useRef<ScribeState>('off');
   const setS = (st: ScribeState) => {
     stateRef.current = st;
@@ -121,9 +120,8 @@ export function useScribeInput(enabled: boolean): {
     committed.current = partial.current = '';
     setText('');
   }, []);
-  reopen.current = () => void open();
 
-  // A가 30초에 스스로 멈춤: 받아쓴 글자가 없으면 다시 듣고, 있으면 멈춘 채 두어 탭하면 묻게 한다.
+  // A가 스스로 멈춤: 멈춘 채 두어 탭하면 (받아쓴 만큼) 묻게 한다.
   function onRecording(on: boolean) {
     if (on) {
       sawRecording.current = true;
@@ -131,8 +129,7 @@ export function useScribeInput(enabled: boolean): {
     }
     if (!sawRecording.current || !session.current || stateRef.current !== 'listening') return;
     sawRecording.current = false;
-    if (joinScribe(committed.current, partial.current)) setS('paused');
-    else reopen.current();
+    setS('paused');
   }
   useEffect(
     () => () => {
@@ -165,10 +162,13 @@ export function useScribeInput(enabled: boolean): {
       result = undefined;
     }
     const final = scribeFinalText(result, committed.current, partial.current);
-    // 멈추는 사이에 오류가 나거나 화면이 꺼졌으면 다시 듣지 않는다.
-    if (gen.current === my && want.current) void open();
+    if (gen.current === my) {
+      committed.current = partial.current = '';
+      setText('');
+      setS('off');
+    }
     return final;
-  }, [open]);
+  }, []);
 
   return { state, text, finish };
 }

@@ -24,7 +24,7 @@ import {
 } from '../src/ui/geometry';
 import { cameraFor, enabledKind, glassReduce, HOME_CENTER, HOME_ROWS, homeApps, homeRows, type GlassScreen } from '../src/ui/glassHome';
 import { isGlassButtonKey } from '../src/ui/glassKeys';
-import { closedOnEnter, outfitPanelOpen } from '../src/ui/outfitView';
+import { closedOnEnter, micOpen, outfitPanelOpen, TALK_MAX_MS, talkArmed } from '../src/ui/outfitView';
 import { joinScribe, scribeFinalText, STT_NOTICE } from '../src/ui/scribe';
 import { calorieView, formatBytes, josa, parseCalorieLine } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
@@ -448,6 +448,22 @@ check('outfitPanelOpen·closedOnEnter: 칼로리에서는 코디 스캔 패널�
   assert.equal(outfitPanelOpen(true, 't2', reentered), true);
   // 질문이 하나도 없으면 없음
   assert.equal(outfitPanelOpen(true, null, closedOnEnter(null)), false);
+});
+
+check('micOpen·talkArmed: live만으로는 받아쓰기가 켜지지 않고, 누름 → 켜짐, 보냄·다시 누름·떠남·15초 → 꺼짐', () => {
+  // 코디 스캔이 켜지고 동의가 있어도(live) 누르기 전에는 닫혀 있다
+  assert.equal(micOpen(true, false), false);
+  // 누름 → 켜짐
+  const on = talkArmed(false, 'press');
+  assert.equal(on, true);
+  assert.equal(micOpen(true, on), true);
+  // 다시 누름(멈추고 묻기)·보냄·15초·떠남 → 꺼짐
+  for (const e of ['press', 'sent', 'timeout', 'left'] as const) assert.equal(micOpen(true, talkArmed(on, e)), false, e);
+  // 눌러 둔 채로 동의가 0이 되거나 앱을 떠나면(live 꺼짐) 닫힌다
+  assert.equal(micOpen(false, on), false);
+  // 꺼진 상태에서 보냄·15초·떠남은 켜지 않는다
+  for (const e of ['sent', 'timeout', 'left'] as const) assert.equal(talkArmed(false, e), false, e);
+  assert.equal(TALK_MAX_MS, 15_000);
 });
 
 console.log(`\n${passed}개 통과`);

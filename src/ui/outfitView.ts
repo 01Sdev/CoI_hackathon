@@ -13,3 +13,22 @@ export function outfitPanelOpen(outfitOn: boolean, lastId: string | null, closed
 export function closedOnEnter(lastId: string | null): string | null {
   return lastId;
 }
+
+/** 말하기 한 번의 최대 시간. 지나면 마이크·받아쓰기 연결을 닫는다(사용자 결정 2026-11-01: 누를 때만 듣기). */
+export const TALK_MAX_MS = 15_000;
+
+/** 말하기 버튼(말 막대) 이벤트. press = 누름, sent = 질문을 보냄, timeout = 15초, left = 앱을 떠남·동의 0. */
+export type TalkEvent = 'press' | 'sent' | 'timeout' | 'left';
+
+/** 누를 때만 듣기: press는 꺼져 있으면 켜고 켜져 있으면 끈다(끄면서 묻는다). 보냄·15초·떠남은 끈다. */
+export function talkArmed(armed: boolean, e: TalkEvent): boolean {
+  return e === 'press' ? !armed : false;
+}
+
+/**
+ * 마이크·받아쓰기 토큰·연결을 열지. 코디 스캔이 켜지고 동의가 있어도(live) 착용자가 누르기 전에는 열지 않는다.
+ * 주변 대화가 질문 없이 밖으로 나가지 않게 한다("목적에 필요한 것만 넘긴다").
+ */
+export function micOpen(live: boolean, armed: boolean): boolean {
+  return live && armed;
+}
