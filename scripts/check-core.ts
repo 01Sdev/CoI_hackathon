@@ -13,6 +13,7 @@ import {
   selectThroughput,
 } from '../src/core/selectors';
 import type { DeliveryBranch, FaceCheck } from '../src/core/types';
+import { adjustKcal, fallbackText, isValidLabel } from '../src/core/calorie';
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -125,6 +126,35 @@ check('호스트 origin을 직접 적어도 허용', () => {
   assert.deepEqual(resolveAllowedOrigins(['https://app.test'], 'https://app.test'), ['https://app.test']);
 });
 
+// ── 칼로리 표·라벨 ──
+check('x-label 정규식: COCO 이름은 통과, 주입·변형은 거름', () => {
+  for (const ok of ['pizza', 'hot dog', 'broccoli']) assert.ok(isValidLabel(ok), ok);
+  for (const bad of ['Pizza', 'hot  dog', 'pizza\n', 'pizza, pizza', ' pizza', 'pizza ', '', 'a'.repeat(33), null, undefined]) {
+    assert.equal(isValidLabel(bad), false, JSON.stringify(bad));
+  }
+});
+
+check('고정표 문장: 표에 있으면 "<이름> 약 <kcal>kcal", 없으면 "음식(종류 미상)"', () => {
+  assert.equal(fallbackText('pizza'), '피자 약 285kcal');
+  assert.equal(fallbackText('bowl'), '음식(종류 미상)');
+  assert.equal(fallbackText('Pizza'), '음식(종류 미상)');
+});
+
+check('kcal 보정: 한 판은 8조각 기준이라 2,400은 그대로', () => {
+  assert.deepEqual(adjustKcal(2400, '피자', '한 판', 'pizza'), { kcal: 2400, name: '피자', clamped: false });
+});
+
+check('kcal 보정: 한 조각인데 터무니없으면 표 값과 표 이름으로', () => {
+  assert.deepEqual(adjustKcal(5000, '샌드위치', '한 조각', 'pizza'), { kcal: 285, name: '피자', clamped: true });
+  assert.deepEqual(adjustKcal(30, '피자', '한 조각', 'pizza'), { kcal: 285, name: '피자', clamped: true });
+});
+
+check('kcal 보정: 비율 비교 뒤에 10~3000으로 자른다', () => {
+  assert.deepEqual(adjustKcal(5, '당근', '한 조각', 'carrot'), { kcal: 25, name: '당근', clamped: true });
+  assert.deepEqual(adjustKcal(5, '이상한 것', '알 수 없음', null), { kcal: 10, name: '이상한 것', clamped: false });
+  assert.deepEqual(adjustKcal(9000, '음식', '알 수 없음', 'bowl'), { kcal: 3000, name: '음식', clamped: false });
+});
+
 // ── 스토어 ──
 // 시계와 revoke를 바꿔 끼운 스토어를 케이스마다 새로 만든다.
 function setup() {
@@ -157,7 +187,7 @@ function setup() {
       manifestVersion: p.manifest.version,
       runtimeId: p.runtimeId ?? 'none',
       scene: 'food',
-      objectLabel: 'banana',
+      objectLabel: 'pizza',
       branch: '2a',
       bytes: 3,
       width: 256,
@@ -396,7 +426,7 @@ check('startNewSession: 새 id, 비교 모드·일시 정지 해제, 로그·Cou
   store.getState().applyManifest('calorie', json({ ...calorie, maxSide: 64 }));
   ready('calorie', 'r2');
   const r = send({ faces: 1 });
-  store.getState().setResult('calorie', { deliveryId: r.delivery.id, text: '바나나 약 105kcal', source: 'api', at: 0 });
+  store.getState().setResult('calorie', { deliveryId: r.delivery.id, text: '피자 약 285kcal', source: 'api', at: 0 });
   store.getState().setPaused(true);
   const oldId = store.getState().session.id;
   store.getState().startNewSession();
@@ -415,11 +445,55 @@ check('startNewSession: 새 id, 비교 모드·일시 정지 해제, 로그·Cou
   assert.deepEqual(revoked, [r.delivery.thumbnailRef]);
 });
 
-check('setResult: source api일 때만 apiSends +1', () => {
-  const { store } = setup();
-  store.getState().setResult('calorie', { deliveryId: 'x', text: 'a', source: 'fallback', at: 0 });
-  store.getState().setResult('calorie', { deliveryId: 'y', text: 'b', source: 'api', at: 0 });
+check('setResult: 보낸 전달의 첫 결과만 받고, source api일 때만 apiSends +1', () => {
+  const { store, ready, send } = setup();
+  ready();
+  const a = send();
+  const b = send();
+  const line = (deliveryId: string, source: 'api' | 'fallback') => ({ deliveryId, text: '피자 약 285kcal', source, at: 0 });
+  assert.equal(store.getState().setResult('calorie', line(a.delivery.id, 'fallback')), true);
+  assert.equal(store.getState().setResult('calorie', line(b.delivery.id, 'api')), true);
   assert.equal(store.getState().counter.apiSends, 1);
+  assert.equal(store.getState().setResult('calorie', line(b.delivery.id, 'api')), false, '두 번째 결과는 버린다');
+  assert.equal(store.getState().counter.apiSends, 1);
+});
+
+check('setResult: 없는·보내지 않은·다른 플러그인·새 세션 전 전달의 결과는 버린다', () => {
+  const { store, ready, delivery, send } = setup();
+  ready();
+  const line = (deliveryId: string) => ({ deliveryId, text: 'x', source: 'api' as const, at: 0 });
+  assert.equal(store.getState().setResult('calorie', line('dlv-none')), false);
+  const prepared = store.getState().prepareDelivery(delivery(), { sceneDecisionId: null })!;
+  assert.equal(store.getState().setResult('calorie', line(prepared.delivery.id)), false, 'prepared는 아직 보내지 않음');
+  const sent = send();
+  assert.equal(store.getState().setResult('hello', line(sent.delivery.id)), false, '다른 플러그인');
+  store.getState().startNewSession();
+  assert.equal(store.getState().setResult('calorie', line(sent.delivery.id)), false, '새 세션 전 전달');
+  assert.deepEqual(store.getState().results, {});
+  assert.equal(store.getState().counter.apiSends, 0);
+});
+
+check('게이트: desired가 지금 값과 다르면 gateOpen: true를 받아도 닫아 둔다', () => {
+  const { store } = setup();
+  const before = selectDesiredRuntime(store.getState(), 'calorie')!;
+  store.getState().setCompareMode(true); // 칼로리의 connect가 'none'으로 바뀐다
+  store.getState().setPluginRuntime('calorie', {
+    status: 'ready',
+    runtimeId: 'old',
+    runtimePolicy: { connect: 'network', manifestVersion: 1 },
+    gateOpen: true,
+    desired: before,
+  });
+  assert.equal(store.getState().plugins.calorie!.gateOpen, false);
+  const now = selectDesiredRuntime(store.getState(), 'calorie')!;
+  store.getState().setPluginRuntime('calorie', {
+    status: 'ready',
+    runtimeId: 'new',
+    runtimePolicy: { connect: 'none', manifestVersion: 1 },
+    gateOpen: true,
+    desired: now,
+  });
+  assert.equal(store.getState().plugins.calorie!.gateOpen, true);
 });
 
 console.log(`\n${passed}개 통과`);

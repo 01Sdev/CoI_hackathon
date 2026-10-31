@@ -98,7 +98,7 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | --- | --- | --- |
 | id (PK), sessionId (FK) | string | — |
 | label | `food\|person\|none` 장면 분류(음식 우선) | F2 |
-| objectLabel | string, COCO 영문(`banana` 등). `x-label`·고정표 키 | F2, F7 |
+| objectLabel | string, COCO 영문(`pizza` 등). `x-label`·고정표 키 | F2, F7 |
 | targetBox | {x,y,w,h} 프레임 기준 0~1 | F2, F3 |
 | score | float | F2 |
 | confirmedAt | number | F2 |
