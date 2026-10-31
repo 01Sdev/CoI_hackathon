@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>상태창 미리보기</title>
+    <style>
+      body { margin: 0; padding: 24px; background: #131209; color: #f5ebd0; font-family: 'Pretendard Variable', Pretendard, 'Malgun Gothic', sans-serif; }
+      .food-status-demo__header { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; font-size: 14px; line-height: 20px; }
+      .food-status-demo__header button { padding: 8px 12px; border: 1px solid #dec88d; border-radius: 4px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+      .food-status-demo__canvas { position: relative; height: calc(100svh - 112px); min-height: 400px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./food-status-panel.tsx"></script>
+  </body>
+</html>
