@@ -8,3 +8,5 @@ dist/
 *.log
 # postinstall이 node_modules에서 복사한다(scripts/copy-wasm.mjs)
 public/wasm/
+# postinstall이 node_modules에서 복사한다(scripts/copy-ort.mjs)
+public/ort/

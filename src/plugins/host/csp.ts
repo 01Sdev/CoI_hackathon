@@ -1,5 +1,7 @@
 // iframe 문서 CSP와 srcdoc. docs/specs/02-SSRD.md "iframe 문서 CSP", docs/designs/plugin-host.md §2.2.
 
+import { ORT_PATH } from '../calorie-model';
+
 const NONCE = /^[A-Za-z0-9+/]+={0,2}$/;
 
 /** iframe마다 새로. 16바이트 base64. getRandomValues는 HTTP에서도 있다. */
@@ -27,11 +29,17 @@ export function safeConnectList(origins: readonly string[]): string[] {
   });
 }
 
-export function buildCsp(nonce: string, connect: readonly string[]): string {
+/**
+ * wasmOrigin은 칼로리의 기기 안 모델용이다(호스트가 칼로리에만 넘기고, connect-src 목록에 있을 때만 쓴다).
+ * 있으면 script-src에 'wasm-unsafe-eval'(WASM 컴파일)과 `<origin>/ort/`(onnxruntime-web 스크립트, 경로까지만)를 더한다.
+ * 새 바깥 통로는 열리지 않는다: 같은 origin은 이미 connect-src에 있다.
+ */
+export function buildCsp(nonce: string, connect: readonly string[], wasmOrigin: string | null = null): string {
   if (!NONCE.test(nonce)) throw new Error('nonce 형식 오류');
   const list = safeConnectList(connect);
   const connectSrc = list.length > 0 ? list.join(' ') : "'none'";
-  return `default-src 'none'; script-src 'nonce-${nonce}'; worker-src blob:; connect-src ${connectSrc}`;
+  const wasm = wasmOrigin !== null && list.includes(wasmOrigin) ? ` 'wasm-unsafe-eval' ${wasmOrigin}${ORT_PATH}` : '';
+  return `default-src 'none'; script-src 'nonce-${nonce}'${wasm}; worker-src blob:; connect-src ${connectSrc}`;
 }
 
 export function buildSrcdoc(nonce: string, csp: string, script: string): string {

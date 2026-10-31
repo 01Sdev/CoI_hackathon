@@ -1,7 +1,7 @@
 // 호스트 ↔ 플러그인 메시지(IF-01~06, 코디 스캔 IF-09·10)와 /outward 메시지(IF-07). 02-SSRD §3 그대로.
 
 import type { Manifest } from './manifest';
-import type { SceneLabel, Enforced } from './types';
+import type { SceneLabel, Enforced, ResultSource } from './types';
 
 export type { SceneLabel, Enforced };
 
@@ -25,7 +25,7 @@ export type HostToPlugin =
 export type PluginToHost =
   | { type: 'ready'; pluginId: string } // IF-03
   | { type: 'ack'; deliveryId: string; sha256: string } // IF-04
-  | { type: 'result'; deliveryId: string; text: string; source: 'api' | 'fallback' } // IF-05
+  | { type: 'result'; deliveryId: string; text: string; source: ResultSource } // IF-05
   | { type: 'violation'; attempt: ViolationAttempt; target: string } // IF-06, 플러그인 자기 보고
   // IF-10 코디 스캔 답. 1,000자(PLUGIN_MESSAGE_LIMITS.answerText), 줄바꿈 허용. questionId당 1번.
   | { type: 'answer'; questionId: string; text: string; source: 'api' | 'fallback' };

@@ -1,10 +1,12 @@
 // 칼로리·변조 플러그인 시험 페이지(F7·F13·F14·F17, FR-024·025·031·032·047, TC-006·016). 개발 서버의 /dev/plugins.html.
 // 서버가 없으면(/api/calorie 404) 칼로리는 고정표로 끝난다. 서버가 있으면 source api 한 줄을 받는다.
+// 기기 안 모델은 끄고 본다(94MB 모델을 iframe마다 받지 않게). 기기 안 경로는 /dev/on-device.html.
 
 import { fallbackText } from '../src/core/calorie';
 import { PLUGIN_SEEDS, type PluginSeed } from '../src/core/plugins';
 import { createLensStore } from '../src/core/store';
 import { createPluginHost, sha256Hex } from '../src/plugins/host';
+import { calorieSource, pluginSourceFor } from '../src/plugins/registry';
 import { FIXTURE, createReport, deliver, el, sleep, waitFor } from './lib';
 
 const { record, finish } = createReport('__plugins');
@@ -32,7 +34,11 @@ async function run() {
   const blob = await fetch(FIXTURE).then((r) => r.blob());
   const sha = await sha256Hex(blob);
   const store = createLensStore({ seeds });
-  const host = createPluginHost({ store, container: el('frames') });
+  const host = createPluginHost({
+    store,
+    container: el('frames'),
+    sourceFor: (p) => (p.kind === 'calorie' ? calorieSource(null) : pluginSourceFor(p.kind)),
+  });
   const st = () => store.getState();
   const violations = (pluginId: string) => st().logs.filter((l) => l.pluginId === pluginId && l.kind === 'violation');
   const resultFor = async (pluginId: string, deliveryId: string) => {

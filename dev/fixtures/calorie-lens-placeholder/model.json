@@ -1,0 +1,35 @@
+{
+  "files": [
+    "model.onnx.0",
+    "model.onnx.1"
+  ],
+  "input": {
+    "name": "pixels",
+    "width": 504,
+    "height": 378,
+    "mean": [
+      0,
+      0,
+      0
+    ],
+    "std": [
+      1,
+      1,
+      1
+    ],
+    "resize": "letterbox",
+    "fill": [
+      124,
+      116,
+      104
+    ]
+  },
+  "output": {
+    "name": "totals",
+    "index": 0
+  },
+  "mass": {
+    "name": "mass",
+    "index": 0
+  }
+}

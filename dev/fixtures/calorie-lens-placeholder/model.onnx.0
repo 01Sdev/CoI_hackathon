@@ -1,0 +1,15 @@
+framelet-placeholder:Í
+G
+pixelsmReduceMean_0"
+ReduceMean*
+axes@@@ *
+keepdims 
+
+m
+scalesMul_0"Mul
+
+s
+biastotalsAdd_0"Add
+$
+mass_gmass
+Identi

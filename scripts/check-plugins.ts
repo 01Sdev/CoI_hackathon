@@ -11,14 +11,22 @@ import { buildCsp, buildSrcdoc, safeConnectList } from '../src/plugins/host/csp'
 import { cleanAnswerText, parsePluginMessage, violationReason } from '../src/plugins/host/validate';
 import { CALORIE_TABLE, X_LABEL_MAX, X_LABEL_RE, fallbackText } from '../src/core/calorie';
 import { caloriePlugin } from '../src/plugins/calorie';
+import { buildModelWorkerSource, parseModelSpec, toTensorData, type OnDeviceConfig } from '../src/plugins/calorie-model';
 import { OUTFIT_CLIENT_TIMEOUT_MS, OUTFIT_FALLBACK_TEXT, OUTFIT_KEEP_DELIVERIES, outfitPlugin } from '../src/plugins/outfit';
-import { pluginSourceFor } from '../src/plugins/registry';
+import { PORTION_TABLE, clampApiKcal, portionKcal } from '../src/plugins/portion';
+import { calorieSource, pluginSourceFor } from '../src/plugins/registry';
 import { sha256Pure } from '../src/plugins/sdk/sha256';
 import { buildWorkerSource, pluginCall } from '../src/plugins/sdk/source';
 
 let passed = 0;
 async function check(name: string, fn: () => void | Promise<void>) {
-  await fn();
+  try {
+    await fn();
+  } catch (err) {
+    // 바로 끝낸다: onnxruntime-web(Node)이 붙인 처리기가 놓친 예외를 삼키고 멈추는 일이 있었다.
+    console.error(`FAIL ${name}\n`, err);
+    process.exit(1);
+  }
   passed += 1;
   console.log(`ok  ${name}`);
 }
@@ -279,7 +287,7 @@ async function runCalorie(apiBase: string | null, fetchImpl: (call: FetchCall, s
     return fetchImpl(call, init.signal);
   };
   // 시간 제한은 50ms로 줄여 넣는다(제품은 CALORIE_CLIENT_TIMEOUT_MS = 3초).
-  const src = buildWorkerSource(pluginCall(caloriePlugin, CALORIE_TABLE, X_LABEL_RE.source, X_LABEL_MAX, 50, fallbackText('')));
+  const src = buildWorkerSource(pluginCall(caloriePlugin, CALORIE_TABLE, X_LABEL_RE.source, X_LABEL_MAX, 50, fallbackText(''), null, PORTION_TABLE, portionKcal, clampApiKcal));
   const w = runWorker(src, true, { fetch: fetchMock, AbortController, Response });
   w.dispatch({ ...init, apiBase });
   await tick();
@@ -335,7 +343,442 @@ await check('칼로리: Worker 고정표 문구 = core fallbackText(표 10종·�
   }
 });
 
-// ── 변조 플러그인(Worker처럼 document·navigator·importScripts가 없는 vm) ──
+// ── 칼로리 기기 안 모델(§2.10) ──
+await check('CSP: 칼로리 wasm은 connect-src 안 origin일 때만, script-src는 그 origin의 /ort/까지만', () => {
+  const o = 'https://framelet-demo.vercel.app';
+  assert.equal(
+    buildCsp('bm9uY2U=', [o], o),
+    `default-src 'none'; script-src 'nonce-bm9uY2U=' 'wasm-unsafe-eval' ${o}/ort/; worker-src blob:; connect-src ${o}`,
+  );
+  assert.equal(buildCsp('bm9uY2U=', [], o), "default-src 'none'; script-src 'nonce-bm9uY2U='; worker-src blob:; connect-src 'none'");
+  assert.equal(buildCsp('bm9uY2U=', [o], 'https://other.example'), `default-src 'none'; script-src 'nonce-bm9uY2U='; worker-src blob:; connect-src ${o}`);
+  assert.equal(buildCsp('bm9uY2U=', [o]), `default-src 'none'; script-src 'nonce-bm9uY2U='; worker-src blob:; connect-src ${o}`);
+});
+
+const placeholderDir = new URL('../dev/fixtures/calorie-lens-placeholder/', import.meta.url);
+const placeholderSpec = JSON.parse(readFileSync(new URL('model.json', placeholderDir), 'utf8')) as unknown;
+const realSpec = JSON.parse(readFileSync(new URL('../public/models/calorie-lens/model.json', import.meta.url), 'utf8')) as unknown;
+await check('model.json: 실제 모델·자리표시 명세 통과, 경로·잘못된 값 거부', () => {
+  const r = parseModelSpec(realSpec);
+  assert.deepEqual(r.files, ['calorie-lens-378x504.int8.onnx.part0', 'calorie-lens-378x504.int8.onnx.part1']);
+  assert.deepEqual([r.input.name, r.input.width, r.input.height, r.input.resize, r.input.fill], ['pixels', 504, 378, 'letterbox', [124, 116, 104]]);
+  assert.deepEqual([r.input.mean, r.input.std], [[0, 0, 0], [1, 1, 1]]); // 정규화는 그래프 안
+  assert.deepEqual([r.output, r.mass], [{ name: 'totals', index: 0 }, { name: 'mass', index: 0 }]);
+  const s = parseModelSpec(placeholderSpec);
+  assert.deepEqual([s.input.name, s.output.name, s.mass?.name], ['pixels', 'totals', 'mass']);
+  const base = placeholderSpec as { files: string[]; input: Record<string, unknown>; output: Record<string, unknown> };
+  for (const files of [[], ['../x.onnx'], ['a/b.onnx'], ['.hidden'], Array(9).fill('p')]) {
+    assert.throws(() => parseModelSpec({ ...base, files }), /model\.json/, JSON.stringify(files));
+  }
+  for (const input of [
+    { std: [0.2, 0, 0.2] },
+    { std: [58, 57, 57] },
+    { mean: [124, 116, 104] },
+    { mean: [0, 0] },
+    { width: 0 },
+    { width: 2000 },
+    { resize: 'center-crop' },
+    { fill: [256, 0, 0] },
+    { fill: [1.5, 0, 0] },
+    { name: 'a b' },
+  ]) {
+    assert.throws(() => parseModelSpec({ ...base, input: { ...base.input, ...input } }), /model\.json/, JSON.stringify(input));
+  }
+  assert.throws(() => parseModelSpec({ ...base, output: { name: 'kcal', index: -1 } }), /model\.json/);
+  assert.throws(() => parseModelSpec({ ...base, mass: 'mass' }), /model\.json/);
+  // 생략 가능: resize(stretch)·fill(0,0,0)·index(0)·mass(없음).
+  const min = parseModelSpec({ files: ['m'], input: { name: 'x', width: 4, height: 4, mean: [0, 0, 0], std: [1, 1, 1] }, output: { name: 'y' } });
+  assert.deepEqual([min.input.resize, min.input.fill, min.output.index, min.mass], ['stretch', [0, 0, 0], 0, null]);
+});
+
+await check('toTensorData: RGBA → NCHW, (v/255 − mean)/std', () => {
+  const rgba = [255, 0, 51, 9, 0, 255, 102, 9]; // 2×1
+  const t = toTensorData(rgba, 2, 1, [0.5, 0.5, 0.2], [0.5, 0.25, 0.1]);
+  assert.deepEqual([...t].map((x) => Math.round(x * 1000) / 1000), [1, -1, -2, 2, 0, 2]);
+});
+
+await check('양 규칙: 피자 3.37kcal/g → 3.0 → 455g × 3.0 = 1365, 1.5 → 2.2 → 1001, 표 밖은 모델 값', () => {
+  const pizza = PORTION_TABLE.pizza;
+  assert.deepEqual(pizza, { minG: 110, maxG: 800, densMin: 2.2, densMax: 3.0 });
+  assert.equal(portionKcal(pizza, 728.9, 216.2), 1365); // 허브 예: 카페 피자 조각, int8
+  assert.equal(portionKcal(pizza, 1.5 * 216.2, 216.2), 1001);
+  assert.equal(portionKcal(pizza, 600, 240), 1138); // 2.5는 범위 안
+  assert.equal(portionKcal(PORTION_TABLE['hot dog'], 350, 100), 432); // 3.5 → 3.2, 135g
+  assert.equal(portionKcal(undefined, 412.4, null), 412);
+  assert.equal(portionKcal(undefined, 7, null), 10);
+  assert.equal(portionKcal(undefined, 4_200, 1), 3000);
+  // 계산할 수 없음: 표에 있는데 mass 없음·0 이하, kcal이 5~5000 밖.
+  for (const [p, k, m] of [
+    [pizza, 700, null],
+    [pizza, 700, 0],
+    [pizza, 700, -3],
+    [pizza, 700, Number.NaN],
+    [pizza, 4.9, 2],
+    [undefined, 5_001, 1],
+    [undefined, null, 100],
+  ] as const) {
+    assert.equal(portionKcal(p, k, m), null, `${String(k)}/${String(m)}`);
+  }
+});
+await check('양 규칙: API(Haiku) kcal은 [minG×densMin, maxG×densMax]로, 표 밖은 그대로', () => {
+  const pizza = PORTION_TABLE.pizza;
+  assert.deepEqual([clampApiKcal(pizza, 100), clampApiKcal(pizza, 5_000), clampApiKcal(pizza, 1365)], [242, 2400, 1365]);
+  assert.equal(clampApiKcal(undefined, 9_000), 9_000);
+  // 고정표 10종 모두 표가 있고, 범위가 바르다.
+  assert.deepEqual(Object.keys(PORTION_TABLE).sort(), Object.keys(CALORIE_TABLE).sort());
+  for (const [label, p] of Object.entries(PORTION_TABLE)) {
+    assert.ok(p.minG > 0 && p.minG < p.maxG && p.densMin > 0 && p.densMin < p.densMax, label);
+  }
+});
+
+/** 칼로리 플러그인 안에서 만든 하위 Worker 대역. */
+class FakeModel {
+  static made: FakeModel[] = [];
+  sent: Record<string, unknown>[] = [];
+  terminated = false;
+  private ls: ((e: { data: unknown }) => void)[] = [];
+  constructor(public url: string) {
+    FakeModel.made.push(this);
+  }
+  addEventListener(t: string, l: (e: { data: unknown }) => void) {
+    if (t === 'message') this.ls.push(l);
+  }
+  postMessage(m: Record<string, unknown>) {
+    // vm 쪽 객체를 이 realm 객체로(deepEqual은 프로토타입까지 본다).
+    this.sent.push({ ...m });
+  }
+  terminate() {
+    this.terminated = true;
+  }
+  emit(data: unknown) {
+    for (const l of this.ls) l({ data });
+  }
+  runs() {
+    return this.sent.filter((m) => m.type === 'run');
+  }
+}
+async function onDeviceWorker(
+  apiBase: string | null,
+  fetchImpl = async () => new Response('피자 약 300kcal', { status: 200 }),
+  network: string[] = ['$ORIGIN'],
+  make: (onDevice: OnDeviceConfig) => string = (onDevice) =>
+    buildWorkerSource(
+      pluginCall(
+        caloriePlugin,
+        CALORIE_TABLE,
+        X_LABEL_RE.source,
+        X_LABEL_MAX,
+        50,
+        fallbackText(''),
+        onDevice,
+        PORTION_TABLE,
+        portionKcal,
+        clampApiKcal,
+      ),
+    ),
+) {
+  FakeModel.made = [];
+  const calls: string[] = [];
+  const onDevice = { workerSource: '/*model*/', ortPath: '/ort/', modelPath: '/models/calorie-lens/', timeoutMs: 50 };
+  const src = make(onDevice);
+  const w = runWorker(src, true, {
+    fetch: (url: string) => (calls.push(url), fetchImpl()),
+    AbortController,
+    Response,
+    Worker: FakeModel,
+    URL: { createObjectURL: () => 'blob:model' },
+    console: { warn: () => {} },
+  });
+  w.dispatch({ ...init, apiBase, manifest: { ...manifest, network } });
+  await tick();
+  const results = () => w.posted.filter((m) => m.type === 'result');
+  const send = async (id: string, label = 'pizza', ms = 30) => {
+    w.dispatch({ ...delivery(id), objectLabel: label });
+    await tick(ms);
+  };
+  return { w, calls, results, send, model: FakeModel.made[0] };
+}
+const answer = (m: FakeModel, kcal: unknown, mass: unknown = 200) => m.emit({ type: 'out', id: m.runs().at(-1)!.id, kcal, mass });
+const ask = async (r: Awaited<ReturnType<typeof onDeviceWorker>>, id: string, label: string, kcal: unknown, mass?: unknown) => {
+  r.w.dispatch({ ...delivery(id), objectLabel: label });
+  await tick();
+  answer(r.model!, kcal, mass);
+  await tick();
+  return r.results().at(-1)!;
+};
+
+await check('기기 안: 준비되면 on-device(피자 728.9kcal·216.2g → "피자 약 1365kcal"), API 요청 0, /ort/·/models/', async () => {
+  const r = await onDeviceWorker('https://h.example');
+  assert.ok(r.model);
+  assert.deepEqual(r.model.sent[0], {
+    type: 'load',
+    ortBase: 'https://h.example/ort/',
+    modelBase: 'https://h.example/models/calorie-lens/',
+    budgetMs: 50,
+  });
+  r.model.emit({ type: 'loaded', ep: 'wasm' });
+  r.w.dispatch(delivery('d1'));
+  await tick();
+  assert.equal(r.model.runs().length, 1);
+  assert.ok(r.model.runs()[0]!.blob instanceof Blob);
+  answer(r.model, 728.9, 216.2);
+  await tick();
+  assert.deepEqual(r.results(), [{ type: 'result', deliveryId: 'd1', text: '피자 약 1365kcal', source: 'on-device' }]);
+  assert.equal(r.calls.length, 0);
+});
+await check('기기 안: 준비 전 → API, 이름은 0단계 라벨, 표 밖 라벨은 모델 kcal 그대로("음식")', async () => {
+  const r = await onDeviceWorker('https://h.example');
+  await r.send('d1');
+  assert.deepEqual(r.results()[0], { type: 'result', deliveryId: 'd1', text: '피자 약 300kcal', source: 'api' });
+  assert.equal(r.model!.runs().length, 0);
+  r.model!.emit({ type: 'loaded', ep: 'wasm' });
+  assert.deepEqual(await ask(r, 'd2', 'bowl', 412.4, null), { type: 'result', deliveryId: 'd2', text: '음식 약 412kcal', source: 'on-device' });
+  assert.equal((await ask(r, 'd3', 'hot dog', 350, 100)).text, '핫도그 약 432kcal');
+  assert.equal((await ask(r, 'd4', 'pizza', 1.5 * 216.2, 216.2)).text, '피자 약 1001kcal');
+});
+await check('기기 안: 계산할 수 없는 출력(mass 없음·0 이하, kcal 5~5000 밖·없음) → API, 연달아 2번이면 끈다', async () => {
+  for (const [kcal, mass] of [
+    [728.9, null],
+    [728.9, 0],
+    [null, 200],
+    [Number.NaN, 200],
+    [4.9, 2],
+    [5_001, 2_000],
+    ['x', 200],
+  ] as const) {
+    const r = await onDeviceWorker('https://h.example');
+    r.model!.emit({ type: 'loaded', ep: 'wasm' });
+    assert.equal((await ask(r, 'd1', 'pizza', kcal, mass)).source, 'api', `${String(kcal)}/${String(mass)}`);
+    assert.equal(r.model!.terminated, false);
+  }
+  // 성공이 끼면 다시 센다. 실패가 연달아 2번이면 끈다.
+  const r = await onDeviceWorker('https://h.example');
+  r.model!.emit({ type: 'loaded', ep: 'wasm' });
+  const seq = [await ask(r, 'd1', 'pizza', 0.4), await ask(r, 'd2', 'pizza', 600, 240), await ask(r, 'd3', 'pizza', 0.4)];
+  assert.deepEqual(seq.map((m) => m.source), ['api', 'on-device', 'api']);
+  assert.equal(r.model!.terminated, false);
+  await ask(r, 'd4', 'pizza', 600, null);
+  assert.equal(r.model!.terminated, true);
+  await r.send('d5');
+  assert.equal(r.model!.runs().length, 4);
+  assert.equal(r.results().at(-1)!.source, 'api');
+});
+await check('기기 안: API 숫자도 같은 표 범위로(피자 5000 → 2400, 100 → 242), "음식 아님"·표 밖은 그대로', async () => {
+  for (const [body, label, text] of [
+    ['피자 약 5000kcal', 'pizza', '피자 약 2400kcal'],
+    ['페퍼로니 피자 약 100kcal', 'pizza', '페퍼로니 피자 약 242kcal'],
+    ['피자 약 1365kcal', 'pizza', '피자 약 1365kcal'],
+    ['음식 아님', 'pizza', '음식 아님'],
+    ['음식 약 9000kcal', 'bowl', '음식 약 9000kcal'],
+  ] as const) {
+    const r = await onDeviceWorker('https://h.example', async () => new Response(body, { status: 200 }));
+    await r.send('d1', label);
+    assert.deepEqual(r.results()[0], { type: 'result', deliveryId: 'd1', text, source: 'api' }, body);
+  }
+});
+await check('기기 안: 시간 초과 → API, 실행 중 전달은 바로 API, 연달아 2번 넘으면 끈다', async () => {
+  const r = await onDeviceWorker('https://h.example');
+  r.model!.emit({ type: 'loaded', ep: 'wasm' });
+  r.w.dispatch(delivery('d1'));
+  await tick(5);
+  r.w.dispatch(delivery('d2')); // d1이 아직 실행 중
+  await tick(120);
+  assert.equal(r.model!.runs().length, 1);
+  assert.deepEqual(r.results().map((m) => [m.deliveryId, m.source]), [['d2', 'api'], ['d1', 'api']]);
+  answer(r.model!, 500); // 늦은 답: busy만 풀린다
+  await r.send('d3', 'pizza', 120);
+  assert.equal(r.model!.runs().length, 2);
+  assert.equal(r.results().at(-1)!.source, 'api');
+  assert.equal(r.model!.terminated, true);
+  await r.send('d4');
+  assert.equal(r.model!.runs().length, 2);
+});
+await check('기기 안: 한 실행이 제한의 2배를 넘게 안 끝나면 끈다', async () => {
+  const r = await onDeviceWorker('https://h.example');
+  r.model!.emit({ type: 'loaded', ep: 'wasm' });
+  await r.send('d1', 'pizza', 60); // 답 없음 → 50ms 뒤 API, 실행 중 표시는 남는다
+  await r.send('d2', 'pizza', 60); // 아직 2배(100ms) 전: 바로 API
+  assert.equal(r.model!.terminated, false);
+  await tick(20);
+  await r.send('d3');
+  assert.equal(r.model!.terminated, true);
+  assert.deepEqual(r.results().map((m) => m.source), ['api', 'api', 'api']);
+});
+await check('기기 안: failed면 끄고 API, 비교 모드(apiBase null)·network에 $ORIGIN 없음(F14)은 하위 Worker 없음', async () => {
+  const r = await onDeviceWorker('https://h.example');
+  r.model!.emit({ type: 'failed', reason: '404' });
+  assert.equal(r.model!.terminated, true);
+  await r.send('d1');
+  assert.equal(r.results()[0]!.source, 'api');
+  const c = await onDeviceWorker(null);
+  assert.equal(c.model, undefined);
+  await c.send('d1');
+  assert.deepEqual(c.results()[0], { type: 'result', deliveryId: 'd1', text: '피자 약 285kcal', source: 'fallback' });
+  assert.equal(c.calls.length, 0);
+  const f14 = await onDeviceWorker('https://h.example', undefined, []);
+  assert.equal(f14.model, undefined);
+  await f14.send('d1');
+  assert.equal(f14.results()[0]!.source, 'api');
+});
+await check('기기 안: 제품 calorie 소스에 하위 Worker·경로·8초·양 표가 들어 있다', () => {
+  const src = pluginSourceFor('calorie')!;
+  assert.match(src, /"ortPath":"\/ort\/","modelPath":"\/models\/calorie-lens\/","timeoutMs":8000/);
+  assert.ok(src.includes(JSON.stringify(buildModelWorkerSource())));
+  assert.ok(src.includes(JSON.stringify(PORTION_TABLE)));
+  assert.ok(src.includes(portionKcal.toString()) && src.includes(clampApiKcal.toString()));
+});
+
+/** 하위 Worker 본문을 vm에서(가짜 ort·fetch·디코드). */
+async function runModelWorker(
+  opts: { specStatus?: number; outIndex?: number; runMs?: number; budgetMs?: number; noMass?: boolean },
+  source = buildModelWorkerSource(),
+) {
+  const posted: Record<string, unknown>[] = [];
+  const listeners: ((e: { data: unknown }) => void)[] = [];
+  const imported: string[] = [];
+  const created: { bytes: Uint8Array; eps: string[] }[] = [];
+  const draws: unknown[][] = [];
+  const fetches: { url: string; cache: string | undefined }[] = [];
+  const feeds: { name: string; dims: number[]; data: Float32Array }[] = [];
+  const parts: Record<string, Uint8Array> = { 'a.0': new Uint8Array([1, 2, 3]), 'a.1': new Uint8Array([4, 5]) };
+  const spec = {
+    files: ['a.0', 'a.1'],
+    input: { name: 'pixels', width: 4, height: 4, mean: [0, 0, 0], std: [1, 1, 1], resize: 'letterbox', fill: [124, 116, 104] },
+    output: { name: 'totals', index: opts.outIndex ?? 1 },
+    ...(opts.noMass ? {} : { mass: { name: 'mass', index: 0 } }),
+  };
+  const ort = {
+    env: { wasm: { numThreads: 4, proxy: true, wasmPaths: null as unknown } },
+    Tensor: class {
+      constructor(
+        public type: string,
+        public data: Float32Array,
+        public dims: number[],
+      ) {}
+    },
+    InferenceSession: {
+      create: async (bytes: Uint8Array, o: { executionProviders: string[] }) => {
+        created.push({ bytes, eps: o.executionProviders });
+        return {
+          run: async (f: Record<string, { data: Float32Array; dims: number[] }>) => {
+            if (opts.runMs) await new Promise((r) => setTimeout(r, opts.runMs));
+            for (const [name, t] of Object.entries(f)) feeds.push({ name, dims: t.dims, data: t.data });
+            return { totals: { data: new Float32Array([1, 777.25]) }, mass: { data: new Float32Array([210.5]) } };
+          },
+        };
+      },
+    },
+  };
+  const ctx: Record<string, unknown> = {
+    postMessage: (m: unknown) => posted.push(m as Record<string, unknown>),
+    addEventListener: (_t: string, l: (e: { data: unknown }) => void) => listeners.push(l),
+    importScripts: (u: string) => {
+      imported.push(u);
+      ctx.ort = ort;
+    },
+    fetch: async (url: string, init?: { cache?: string }) => {
+      fetches.push({ url, cache: init?.cache });
+      if (url.endsWith('model.json')) return new Response(JSON.stringify(spec), { status: opts.specStatus ?? 200 });
+      const name = url.slice(url.lastIndexOf('/') + 1);
+      const part = parts[name];
+      return part ? new Response(new Blob([part.slice()])) : new Response('x', { status: 404 });
+    },
+    createImageBitmap: async () => ({ width: 8, height: 6, close() {} }),
+    OffscreenCanvas: class {
+      constructor(
+        public w: number,
+        public h: number,
+      ) {}
+      getContext() {
+        const { w, h } = this;
+        const ctx2d: Record<string, unknown> = {
+          fillRect: (...a: number[]) => draws.push(['fillRect', ctx2d.fillStyle, ...a]),
+          drawImage: (_b: unknown, ...a: number[]) => draws.push(['drawImage', ...a]),
+          getImageData: () => ({ data: new Uint8ClampedArray(w * h * 4).fill(255) }),
+        };
+        return ctx2d;
+      }
+    },
+    performance,
+    Blob,
+    Uint8Array,
+    Float32Array,
+    Response,
+  };
+  ctx.self = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(source, ctx);
+  const send = (data: unknown) => listeners.forEach((l) => l({ data }));
+  send({ type: 'load', ortBase: 'https://h.example/ort/', modelBase: 'https://h.example/models/calorie-lens/', budgetMs: opts.budgetMs ?? 8_000 });
+  await tick(30 + 2 * (opts.runMs ?? 0));
+  return { posted, imported, created, draws, feeds, fetches, ort, send };
+}
+await check('하위 Worker: wasm 판만, model.json no-cache, 단일 스레드, 조각 이어 붙이기, 준비 실행 뒤 loaded', async () => {
+  const m = await runModelWorker({});
+  assert.deepEqual(m.imported, ['https://h.example/ort/ort.wasm.min.js']);
+  // model.json만 다시 확인(/models/*는 immutable 캐시), 조각은 캐시 그대로.
+  assert.deepEqual(m.fetches.map((f) => [f.url.slice(f.url.lastIndexOf('/') + 1), f.cache]), [
+    ['model.json', 'no-cache'],
+    ['a.0', undefined],
+    ['a.1', undefined],
+  ]);
+  assert.equal(m.ort.env.wasm.numThreads, 1);
+  assert.equal(m.ort.env.wasm.proxy, false);
+  assert.deepEqual({ ...(m.ort.env.wasm.wasmPaths as object) }, {
+    mjs: 'https://h.example/ort/ort-wasm-simd-threaded.mjs',
+    wasm: 'https://h.example/ort/ort-wasm-simd-threaded.wasm',
+  });
+  assert.deepEqual([...m.created[0]!.bytes], [1, 2, 3, 4, 5]);
+  assert.deepEqual([...m.created[0]!.eps], ['wasm']);
+  assert.equal(m.feeds.length, 1); // 빠른 기기는 준비 실행 1번
+  assert.deepEqual([m.posted[0]!.type, m.posted[0]!.ep, m.posted[0]!.bytes], ['loaded', 'wasm', 5]);
+});
+await check('하위 Worker: 비율 유지·가운데·빈 곳 RGB(124,116,104), 캔버스 크기 그대로, 출력 kcal·mass', async () => {
+  const m = await runModelWorker({});
+  m.send({ type: 'run', id: 7, blob: new Blob([fixture], { type: 'image/jpeg' }) });
+  await tick(30);
+  // 8×6을 4×4에: k = 0.5 → 4×3을 (0, 0)에. 먼저 채우고 그린다.
+  assert.deepEqual(m.draws.slice(-2), [
+    ['fillRect', 'rgb(124, 116, 104)', 0, 0, 4, 4],
+    ['drawImage', 0, 0, 4, 3],
+  ]);
+  const f = m.feeds.at(-1)!;
+  assert.deepEqual([f.name, [...f.dims], f.data.length, f.data[0], f.data[47]], ['pixels', [1, 3, 4, 4], 48, 1, 1]);
+  assert.deepEqual([m.posted.at(-1)!.type, m.posted.at(-1)!.id, m.posted.at(-1)!.kcal, m.posted.at(-1)!.mass], ['out', 7, 777.25, 210.5]);
+  const n = await runModelWorker({ noMass: true });
+  n.send({ type: 'run', id: 1, blob: new Blob([fixture]) });
+  await tick(30);
+  assert.deepEqual([n.posted.at(-1)!.kcal, n.posted.at(-1)!.mass], [777.25, null]);
+});
+await check('하위 Worker: 준비 실행이 제한의 90%를 두 번 넘는 기기는 failed(느림)', async () => {
+  const m = await runModelWorker({ runMs: 40, budgetMs: 20 });
+  assert.equal(m.posted[0]!.type, 'failed');
+  assert.match(String(m.posted[0]!.reason), /느림: 실행 \d+ms > 18ms/); // 제한의 90%
+  assert.equal(m.feeds.length, 2);
+});
+await check('하위 Worker: model.json 404 → failed, 출력 index 밖 → 준비 실행에서 failed', async () => {
+  const m = await runModelWorker({ specStatus: 404 });
+  assert.equal(m.posted[0]!.type, 'failed');
+  assert.equal(m.imported.length, 0);
+  const o = await runModelWorker({ outIndex: 5 });
+  assert.equal(o.posted[0]!.type, 'failed');
+  assert.match(String(o.posted[0]!.reason), /숫자가 아님/);
+});
+await check('자리표시 모델: 실제 onnxruntime-web(Node, wasm)으로 totals = 300 + 100·평균, mass = 150', async () => {
+  const ortNode = await import('onnxruntime-web');
+  ortNode.env.wasm.numThreads = 1;
+  const s = parseModelSpec(placeholderSpec);
+  const bytes = Buffer.concat(s.files.map((f) => readFileSync(new URL(f, placeholderDir))));
+  const session = await ortNode.InferenceSession.create(new Uint8Array(bytes), { executionProviders: ['wasm'] });
+  const { width: W, height: H, mean, std } = s.input;
+  const rgba = new Uint8ClampedArray(W * H * 4).fill(128);
+  const out = await session.run({ [s.input.name]: new ortNode.Tensor('float32', toTensorData(rgba, W, H, mean, std), [1, 3, H, W]) });
+  // float32 합이라 57만 값 평균에서 0.13쯤 어긋난다(350.07 대 350.20). 표시는 반올림한 정수다.
+  assert.ok(Math.abs(Number(out[s.output.name]!.data[s.output.index]) - (300 + (100 * 128) / 255)) < 0.5);
+  assert.equal(Number(out[s.mass!.name]!.data[s.mass!.index]), 150);
+  await session.release();
+});
+
 // ── 코디 스캔(IF-09·IF-10) ──
 await check('answer 거르기: 줄바꿈은 남기고(CRLF → LF) 제어·방향·보이지 않는 문자는 지움, 1,000자', () => {
   assert.equal(cleanAnswerText('니트예요.\r\n잘 어울려요.\n'), '니트예요.\n잘 어울려요.\n');
@@ -410,9 +853,11 @@ await check('코디 스캔: 서버가 준 대체 문구는 fallback, 비 200·�
 });
 await check('코디 스캔: 최근 조각 2개만 들고 있다, 비교 모드(apiBase null)는 요청 0, 받지 않은 조각의 질문은 SDK가 버린다', async () => {
   const r = await runOutfit('https://h.example', geminiOk);
-  for (const id of ['d1', 'd2', 'd3']) r.w.dispatch(delivery(id));
-  // 해시 → ack → onDelivery가 셋 다 끝날 때까지(부하가 있으면 20ms로 모자랐다).
-  await waitUntil(() => r.w.posted.filter((m) => m.type === 'ack').length === 3);
+  // 하나씩 보낸다: crypto.subtle 해시는 끝나는 순서가 정해져 있지 않아, 한꺼번에 보내면 onDelivery 순서가 바뀐다.
+  for (const [i, id] of ['d1', 'd2', 'd3'].entries()) {
+    r.w.dispatch(delivery(id));
+    await waitUntil(() => r.w.posted.filter((m) => m.type === 'ack').length === i + 1);
+  }
   await tick();
   await r.ask('q1', 'd1'); // 밀려난 조각 → 요청 없이 대체 문구
   await r.ask('q3', 'd3');
@@ -442,6 +887,7 @@ await check('코디 스캔: 제품 outfit 소스(18초·4개·대체 문구)와 
   assert.deepEqual(w.posted.at(-1), { type: 'answer', questionId: 'q1', text: '데님 재킷이에요.', source: 'api' });
 });
 
+// ── 변조 플러그인(Worker처럼 document·navigator·importScripts가 없는 vm) ──
 await check('변조: 켜면 4종 자기 보고, 차단 실패 없음', async () => {
   const w = runWorker(buildWorkerSource(pluginSourceFor('tamper')!), true, {
     fetch: async () => {
@@ -468,7 +914,7 @@ const VITE_BASELINE_TARGET = ['chrome107', 'edge107', 'firefox104', 'safari16'];
 const bundled = await build({
   stdin: {
     contents:
-      "export { buildWorkerSource } from './src/plugins/sdk/source';\nexport { pluginSourceFor } from './src/plugins/registry';",
+      "export { buildWorkerSource } from './src/plugins/sdk/source';\nexport { pluginSourceFor, calorieSource } from './src/plugins/registry';\nexport { buildModelWorkerSource } from './src/plugins/calorie-model';",
     resolveDir: new URL('..', import.meta.url).pathname,
     loader: 'ts',
   },
@@ -480,7 +926,12 @@ const bundled = await build({
 });
 const minified = (await import(
   `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0]!.text).toString('base64')}`
-)) as { buildWorkerSource: typeof buildWorkerSource; pluginSourceFor: typeof pluginSourceFor };
+)) as {
+  buildWorkerSource: typeof buildWorkerSource;
+  pluginSourceFor: typeof pluginSourceFor;
+  calorieSource: typeof calorieSource;
+  buildModelWorkerSource: typeof buildModelWorkerSource;
+};
 await check('축소판: Worker 소스가 원본과 다르다(실제로 축소됨)', () => {
   assert.notEqual(minified.buildWorkerSource(''), buildWorkerSource(''));
 });
@@ -492,6 +943,20 @@ await check('축소판: hello 플러그인 결과 줄', async () => {
   w.dispatch(delivery('d1'));
   await tick(50);
   assert.match(w.posted[2]!.text as string, /document:undefined/);
+});
+
+await check('축소판: 칼로리 기기 안 경로(on-device 결과)와 하위 Worker 본문', async () => {
+  const r = await onDeviceWorker('https://h.example', undefined, ['$ORIGIN'], (onDevice) =>
+    minified.buildWorkerSource(minified.calorieSource({ ...onDevice, workerSource: minified.buildModelWorkerSource() })),
+  );
+  r.model!.emit({ type: 'loaded', ep: 'wasm' });
+  assert.deepEqual(await ask(r, 'd1', 'pizza', 728.9, 216.2), { type: 'result', deliveryId: 'd1', text: '피자 약 1365kcal', source: 'on-device' });
+  assert.notEqual(minified.buildModelWorkerSource(), buildModelWorkerSource());
+  const m = await runModelWorker({}, minified.buildModelWorkerSource());
+  assert.equal(m.posted[0]!.type, 'loaded');
+  m.send({ type: 'run', id: 3, blob: new Blob([fixture], { type: 'image/jpeg' }) });
+  await tick(30);
+  assert.deepEqual([m.posted.at(-1)!.id, m.posted.at(-1)!.kcal], [3, 777.25]);
 });
 
 console.log(`\n${passed}개 통과`);

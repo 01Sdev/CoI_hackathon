@@ -6,6 +6,28 @@ import react from '@vitejs/plugin-react';
 const DEV_API_ROUTES = { '/api/calorie': '/api/calorie.ts', '/api/outfit': '/api/outfit.ts' } as const;
 
 /**
+ * 플러그인 Worker(origin null)가 받는 정적 파일(public/models/, public/ort/)에 CORS를 붙인다.
+ * 배포에서는 같은 헤더를 vercel.json이 붙인다. /dev/fixtures/는 개발 서버에만 있다(자리표시 모델).
+ * Vite의 CORS·정적 미들웨어보다 먼저 둔다(devApi와 같은 이유).
+ */
+function pluginStaticCors(): Plugin {
+  const PREFIXES = ['/ort/', '/models/', '/dev/fixtures/'];
+  const handle: Connect.NextHandleFunction = (req, res, next) => {
+    if (PREFIXES.some((p) => (req.url ?? '').startsWith(p))) res.setHeader('Access-Control-Allow-Origin', '*');
+    next();
+  };
+  return {
+    name: 'framelet-plugin-static-cors',
+    configureServer(server) {
+      server.middlewares.stack.unshift({ route: '', handle });
+    },
+    configurePreviewServer(server) {
+      server.middlewares.stack.unshift({ route: '', handle });
+    },
+  };
+}
+
+/**
  * 개발 서버에서만 /api/calorie·/api/outfit을 같은 함수(api/*.ts)로 연다. 배포에서는 Vercel 함수가 같은 파일을 쓴다.
  * Vite 7은 CORS 미들웨어를 플러그인 미들웨어보다 먼저 붙여 Origin null 사전 요청에 직접 답한다(허용 안 함).
  * 그래서 이 경로 하나만 스택 맨 앞에 넣어 함수의 CORS가 답하게 한다. 다른 경로의 CORS는 그대로다.
@@ -51,7 +73,7 @@ export default defineConfig(({ mode }) => {
   // 서버 쪽에서만 쓰는 값. 이미 셸에 있으면 그대로 둔다.
   for (const [k, v] of Object.entries(loadEnv(mode, process.cwd(), ['ANTHROPIC_', 'CALORIE_', 'GEMINI_', 'OUTFIT_']))) process.env[k] ??= v;
   return {
-    plugins: [react(), devApi()],
+    plugins: [react(), devApi(), pluginStaticCors()],
     server: { host: true },
   };
 });
