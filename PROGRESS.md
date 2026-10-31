@@ -92,5 +92,5 @@
 | V12 | 노트북 Chrome에서 데모 5단계 네트워크 탭 | 2차 통합 뒤 리허설 | C·발표자 | 대기 |
 | V13 | Ray-Ban Display 시뮬레이터에서 `/hud` D-pad | 트랙 C `/hud` PR | C | 대기 |
 | V14 | 메인 창과 `/outward` 동기화(외부 화면) | 트랙 C `/outward` PR 뒤 리허설 | C | 대기 |
-| V15 | 호스트 외부 요청 차단: MediaPipe 로그 요청(`odml.pa.googleapis.com`)이 네트워크 탭에 0건인지. 호스트 `connect-src 'self'`가 srcdoc iframe Worker의 `$ORIGIN` 요청을 막는지(Chrome·iPhone) | 트랙 B 첫 PR(호스트 가드) + 배포 주소에서 | B(iPhone은 x20-codex 도움 가능) | 대기. 독립 데모에서 `connect-src 'self'`로 로그 요청 차단 확인(교집합 문제는 미시험) |
+| V15 | 호스트 외부 요청 차단: MediaPipe 로그 요청(`odml.pa.googleapis.com`)이 네트워크 탭에 0건인지. 호스트 `connect-src 'self'`가 srcdoc iframe Worker의 `$ORIGIN` 요청을 막는지(Chrome·iPhone) | 트랙 B 첫 PR(호스트 가드) + 배포 주소에서 | B(iPhone은 x20-codex 도움 가능) | Chrome: 로그 요청 차단·`$ORIGIN` Worker 요청 통과·M0 그대로(05 V15). iframe 시작 멈춤이 CSP 쪽에서 더 잦았다(6/18 대 1/18, 원인 미확정). iPhone 대기 |
 | V7 | iPhone 효과음·무음 모드 | — | — | 통과 |
