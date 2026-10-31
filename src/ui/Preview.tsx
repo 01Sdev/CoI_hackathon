@@ -8,7 +8,8 @@ type PreviewModule = { mountPreview?: (container: HTMLElement) => void | (() => 
 
 const previewModules = import.meta.glob<PreviewModule>('/src/input/preview.ts');
 
-export function Preview() {
+/** hidden: /hud는 영상을 보이지 않는다(검은색 = 투명). 재생은 계속되도록 opacity만 0. */
+export function Preview({ hidden = false }: { hidden?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,5 +27,5 @@ export function Preview() {
     };
   }, []);
 
-  return <div ref={ref} className="fm-preview" data-preview-slot="" />;
+  return <div ref={ref} className={hidden ? 'fm-preview fm-preview--hidden' : 'fm-preview'} data-preview-slot="" />;
 }

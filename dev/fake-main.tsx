@@ -3,11 +3,12 @@
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+// main.tsx와 같은 순서: 토큰(theme.css)을 먼저, 배치(app.css, App이 불러옴)를 나중에.
+import '../src/ui/theme.css';
 import { App } from '../src/App';
 import { APP_NAME } from '../src/core/constants';
 import { lensStore } from '../src/core/store';
 import { applyTheme, storedTheme } from '../src/ui/theme';
-import '../src/ui/theme.css';
 import { startFakeRuntime } from './fake-runtime';
 import { FakePanel } from './FakePanel';
 
@@ -24,6 +25,8 @@ const controls = startFakeRuntime(lensStore, {
   loadMs: Number(q.get('load') ?? 2500),
   auto: q.get('auto') !== '0',
 });
+// 콘솔·자동 확인용(개발 페이지에서만).
+(window as unknown as { __lensStore: typeof lensStore }).__lensStore = lensStore;
 if (autostart) lensStore.getState().selectInput(route === 'hud' ? 'video' : innerWidth >= 768 ? 'webcam' : 'rear');
 
 createRoot(document.getElementById('root')!).render(

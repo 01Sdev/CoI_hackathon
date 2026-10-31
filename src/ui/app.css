@@ -160,11 +160,11 @@ button.fm-capsule:focus-visible,
 }
 
 /* ── 버튼 크기 ── */
-.fm-btn--lg {
+.fm-btn.fm-btn--lg {
   min-block-size: 56px;
   font-size: 17px;
 }
-.fm-btn--sm {
+.fm-btn.fm-btn--sm {
   min-block-size: 36px;
   padding: 0 14px;
   font-size: 13px;
@@ -395,6 +395,176 @@ button.fm-capsule:focus-visible,
   border-radius: 24px;
   outline: 1px dashed var(--fm-hairline);
   pointer-events: none;
+}
+
+/* ── HUD(F8): 무대를 꽉 채우는 위층. 버튼만 누를 수 있다 ── */
+.fm-preview--hidden {
+  opacity: 0;
+}
+.fm-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.fm-hud button {
+  pointer-events: auto;
+}
+.fm-stage[data-compare='true'] {
+  --fm-band-h: 34px;
+}
+.fm-stage[data-compare='true'] .fm-topbar,
+.fm-stage[data-compare='true'] .fm-notice {
+  translate: 0 var(--fm-band-h);
+}
+.fm-hud__band {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  z-index: 5;
+}
+.fm-hud__scene {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: calc(env(safe-area-inset-top, 0px) + 66px + var(--fm-band-h, 0px));
+  display: flex;
+  justify-content: center;
+}
+.fm-hud__scenecap {
+  max-inline-size: calc(100% - 2 * var(--fm-gutter));
+}
+.fm-hud__scenecap .fm-readout {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fm-hud__frame {
+  transition:
+    left var(--fm-dur-state) linear,
+    top var(--fm-dur-state) linear,
+    width var(--fm-dur-state) linear,
+    height var(--fm-dur-state) linear;
+}
+.fm-hud__bottom {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: var(--fm-bottom-gap, 48px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.fm-hud__flash {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 6;
+}
+.fm-badge {
+  position: absolute;
+  inset-inline-start: calc(100% + 18px);
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  min-block-size: 30px;
+  padding: 0 11px;
+  border-color: color-mix(in srgb, var(--fm-blocked) 70%, transparent);
+}
+/* 전달 알림(보조): 위쪽 줄 아래에서 내려온다 */
+.fm-hud__toast {
+  position: absolute;
+  inset-inline: 14px;
+  inset-block-start: calc(env(safe-area-inset-top, 0px) + 60px + var(--fm-band-h, 0px));
+  display: flex;
+  justify-content: center;
+  z-index: 7;
+}
+.fm-toastcard {
+  inline-size: min(100%, 460px);
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 22px;
+}
+.fm-toastcard__pill {
+  min-block-size: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+.fm-thumb {
+  position: relative;
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--fm-text) 10%, transparent);
+  flex: none;
+}
+.fm-thumb > img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 휴대폰·데스크톱 배치 */
+.fm-desk .fm-hud__scene {
+  inset-block-start: calc(80px + var(--fm-band-h, 0px));
+}
+.fm-desk .fm-hud__toast {
+  inset-block-start: calc(72px + var(--fm-band-h, 0px));
+}
+.fm-desk .fm-stage {
+  --fm-bottom-gap: 56px;
+}
+
+/* /hud 배치: 600×600, 글자 24px 이상, 유리 없음(theme.css [data-view='hud']) */
+.fm-hud[data-variant='hud'] {
+  --fm-orb-size: 132px;
+  --fm-band-h: 0px;
+  --fm-bottom-gap: 34px;
+}
+.fm-hud[data-variant='hud']:has(.fm-hud__band) {
+  --fm-band-h: 46px;
+}
+.fm-hud[data-variant='hud'] .fm-hud__scene {
+  inset-block-start: calc(30px + var(--fm-band-h));
+}
+.fm-hud[data-variant='hud'] .fm-hud__scenecap {
+  min-block-size: 52px;
+  padding: 0 22px;
+}
+.fm-hud__input {
+  position: absolute;
+  inset-inline-end: 28px;
+  inset-block-start: calc(42px + var(--fm-band-h, 0px));
+  color: var(--fm-sub);
+}
+/* 오브 묶음 바로 위. 대상 프레임은 위쪽에 있을 때가 많아 겹치지 않게 아래에 둔다 */
+.fm-hud__delivered {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 250px;
+  text-align: center;
+}
+.fm-hud__hold {
+  min-block-size: 32px;
+  font-size: var(--fm-size-label);
+}
+.fm-band.fm-band--line {
+  min-block-size: 44px;
+  font-size: 24px;
+  background: transparent;
+  color: var(--fm-exposed);
+  border-block-end: 2px solid var(--fm-exposed);
+}
+.fm-hud[data-variant='hud'] .fm-badge {
+  min-block-size: 0;
+  padding: 0;
+  border: 0;
+  color: var(--fm-text);
 }
 
 /* ── 글래스 HUD(/hud) ── */
