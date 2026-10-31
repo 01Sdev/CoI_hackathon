@@ -84,7 +84,7 @@ export interface SceneDecision {
   id: string;
   sessionId: string;
   label: SceneLabel;
-  /** COCO 영문 물체 라벨(banana 등). x-label·고정표 키. */
+  /** COCO 영문 물체 라벨(pizza 등). x-label·고정표 키. */
   objectLabel: string;
   /** 소스 프레임 기준 0~1. */
   targetBox: Box;

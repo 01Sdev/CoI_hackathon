@@ -157,7 +157,7 @@ function setup() {
       manifestVersion: p.manifest.version,
       runtimeId: p.runtimeId ?? 'none',
       scene: 'food',
-      objectLabel: 'banana',
+      objectLabel: 'pizza',
       branch: '2a',
       bytes: 3,
       width: 256,
@@ -396,7 +396,7 @@ check('startNewSession: 새 id, 비교 모드·일시 정지 해제, 로그·Cou
   store.getState().applyManifest('calorie', json({ ...calorie, maxSide: 64 }));
   ready('calorie', 'r2');
   const r = send({ faces: 1 });
-  store.getState().setResult('calorie', { deliveryId: r.delivery.id, text: '바나나 약 105kcal', source: 'api', at: 0 });
+  store.getState().setResult('calorie', { deliveryId: r.delivery.id, text: '피자 약 285kcal', source: 'api', at: 0 });
   store.getState().setPaused(true);
   const oldId = store.getState().session.id;
   store.getState().startNewSession();
