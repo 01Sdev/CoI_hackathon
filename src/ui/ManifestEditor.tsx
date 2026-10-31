@@ -7,16 +7,8 @@ import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { validateManifest, type Manifest } from '../core/manifest';
 import { useLensStore } from '../core/store';
-import type { PluginStatus, VersionedManifest } from '../core/types';
-import { josa, PLUGIN_NAME } from './labels';
-import type { Tone } from './OrbStack';
-
-const STATUS: Record<PluginStatus, [string, Tone]> = {
-  loading: ['적용 중', 'hold'],
-  ready: ['준비됨', 'safe'],
-  stopped: ['멈춤', 'hold'],
-  terminated: ['꺼짐', 'hold'],
-};
+import type { VersionedManifest } from '../core/types';
+import { josa, PLUGIN_NAME, PLUGIN_STATUS } from './labels';
 
 function manifestJson(m: VersionedManifest): string {
   const { version: _version, ...rest } = m;
@@ -49,7 +41,7 @@ function PluginRow({ id, picked, onPick }: { id: string; picked: boolean; onPick
   );
   const blocked = useLensStore((s) => s.logs.reduce((n, l) => n + (l.kind === 'violation' && l.pluginId === id ? 1 : 0), 0));
   const setEnabled = useLensStore((s) => s.setPluginEnabled);
-  const [label, tone] = STATUS[p.status];
+  const [label, tone] = PLUGIN_STATUS[p.status];
   const name = p.kind ? PLUGIN_NAME[p.kind] : id;
   return (
     <li className="fm-plugin fm-glass" data-picked={picked} data-tone={blocked > 0 ? 'blocked' : tone}>
@@ -93,7 +85,7 @@ function Editor({ id }: { id: string }) {
 
   const check = validateManifest(text, id);
   const name = PLUGIN_NAME[p.kind];
-  const [label, tone] = STATUS[p.status];
+  const [label, tone] = PLUGIN_STATUS[p.status];
 
   const apply = () => {
     const r = applyManifest(id, text);

@@ -48,6 +48,8 @@
 - [ ] B: `stopped`가 된 뒤 `enabled: false` 구독에서 `terminated`로 덮어쓰지 않기(덮으면 "다시 켜기" 카드가 안 보임)
 - [x] 전달 신호(테두리 점멸·효과음) — `track-c/hud`
 - [x] `/outward`(IF-07 1초 재발행·5초 연결 끊김), 비교 모드·일시 정지·새 세션 발표자 컨트롤 — `track-c/presenter`
+- [x] 확인 화면 "요청한 것 / 허용된 것"(FR-030), 두 앱 나란히(F21 UI) — `track-c/request-grant`
+- [x] 착용자 제어: 휴대폰 시트의 전달 일시 정지·앱별 끄기·회수 안 함 안내(F22, FR-058) — `track-c/wearer`
 
 ## 외부 봇 작업 (그록봇, 허브가 관리)
 
