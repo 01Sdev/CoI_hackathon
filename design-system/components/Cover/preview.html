@@ -1,0 +1,42 @@
+<!-- @dsCard height=288 -->
+<style>
+  html, body { margin: 0; background: var(--fm-bg, #0c0b0a); }
+  .cover { position: relative; width: 960px; height: 288px; overflow: hidden; background: var(--fm-bg, #0c0b0a); font-family: Pretendard, 'Pretendard Variable', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+  .cover svg { position: absolute; inset: 0; }
+  .lens { fill: var(--fm-lens, #71bfff); }
+  .safe { fill: var(--fm-safe, #4ade80); }
+  .exposed { fill: var(--fm-exposed, #f2b45a); }
+  .blocked { fill: var(--fm-blocked, #f87171); }
+  .ink { fill: var(--fm-text, #ffffff); }
+  .bracket { fill: none; stroke: var(--fm-bg, #0c0b0a); stroke-width: 4; stroke-linecap: round; }
+  .r-panel { rx: var(--fm-r-panel, 28px); }
+  .r-card { rx: var(--fm-r-card, 18px); }
+  .r-frame { rx: var(--fm-r-frame, 14px); }
+  .r-pill { rx: 28px; }
+  .text { position: absolute; left: 40px; bottom: 40px; max-width: 440px; display: flex; flex-direction: column; gap: 12px; }
+  .name { margin: 0; font-size: 88px; line-height: 0.95; font-weight: 600; letter-spacing: -0.02em; color: var(--fm-text, #ffffff); }
+  .tagline { margin: 0; font-size: 14px; line-height: 20px; color: var(--fm-sub, #cfc3b4); }
+</style>
+<div class="cover">
+  <svg width="960" height="288" viewBox="0 0 960 288" aria-hidden="true">
+    <!--
+      blocks: fm-lens 216×240 r=fm-r-panel(28) · fm-safe 200×96 r=fm-r-card(18) · fm-exposed 96×128 r=fm-r-card · fm-blocked 88×56 r=fm-r-frame(14), small because it only ever means a state · fm-text 88×56 pill (r=28, half the short side)
+      arrangement: one tall lens slab with satellites in a flush grid, 16px gaps, right of x=480
+      pattern: literal motif → the white capture frame's four corner brackets, bent at fm-r-frame and cut out in fm-bg over the lens slab; framelet's one shape is that frame (app sees only what is inside it)
+      steps and radii: 16px gaps and 24px insets; fm-r-panel 28, fm-r-card 18, fm-r-frame 14
+    -->
+    <rect class="lens r-panel" x="504" y="24" width="216" height="240"></rect>
+    <rect class="safe r-card" x="736" y="24" width="200" height="96"></rect>
+    <rect class="exposed r-card" x="736" y="136" width="96" height="128"></rect>
+    <rect class="blocked r-frame" x="848" y="136" width="88" height="56"></rect>
+    <rect class="ink r-pill" x="848" y="208" width="88" height="56"></rect>
+    <path class="bracket" d="M528 90 V62 A14 14 0 0 1 542 48 H570"></path>
+    <path class="bracket" d="M654 48 H682 A14 14 0 0 1 696 62 V90"></path>
+    <path class="bracket" d="M528 198 V226 A14 14 0 0 0 542 240 H570"></path>
+    <path class="bracket" d="M654 240 H682 A14 14 0 0 0 696 226 V198"></path>
+  </svg>
+  <div class="text">
+    <h1 class="name">framelet</h1>
+    <p class="tagline">앱에는 흰 틀 안 조각만 넘기고, 넘어간 것은 기록으로 보여 준다.</p>
+  </div>
+</div>

@@ -2,11 +2,13 @@
 // Worker 소스에 toString()으로 들어가므로 인자와 Worker 전역(setTimeout, Blob, Uint8Array…)만 쓴다. import는 타입만.
 
 import type { ViolationAttempt } from '../../core/messages';
-import type { FrameletDelivery, FrameletInit, FrameletSdk } from '../../core/sdk';
+import type { FrameletDelivery, FrameletInit, FrameletQuestion, FrameletSdk } from '../../core/sdk';
 
 export interface SdkOptions {
   initTimeoutMs: number;
   textLimit: number;
+  /** IF-10 answer 글자 수. 빠지면 1,000(PLUGIN_MESSAGE_LIMITS.answerText). */
+  answerLimit?: number;
   targetLimit: number;
   /** crypto.subtle이 있어도 순수 JS 해시를 쓴다(V10·TC-059). */
   forcePureHash: boolean;
@@ -36,6 +38,9 @@ export function installFrameletSdk(
   const received = new Set<string>();
   const resulted = new Set<string>();
   const reported = new Set<string>();
+  let questionHandler: ((q: FrameletQuestion) => void | Promise<void>) | null = null;
+  const asked = new Set<string>();
+  const answered = new Set<string>();
 
   // 호스트 검사와 같은 기준(UTF-16 길이)으로 자른다.
   const clip = (s: string, max: number) => s.slice(0, max);
@@ -116,6 +121,21 @@ export function installFrameletSdk(
     }
   };
 
+  // IF-09. 이 Worker가 받은 적 있는 조각에 대한 질문만, questionId당 한 번 핸들러에 넘긴다.
+  const handleQuestion = async (m: Record<string, unknown>) => {
+    const questionId = typeof m.questionId === 'string' ? m.questionId : '';
+    const deliveryId = typeof m.deliveryId === 'string' ? m.deliveryId : '';
+    if (!questionId || !received.has(deliveryId) || asked.has(questionId)) return;
+    asked.add(questionId);
+    const handler = questionHandler;
+    if (!handler) return;
+    try {
+      await handler({ questionId, deliveryId, text: String(m.text ?? '') });
+    } catch {
+      // 답 없음. 호스트가 시간이 지나면 failTurn.
+    }
+  };
+
   scope.addEventListener('message', (e) => {
     const m = e.data;
     if (typeof m !== 'object' || m === null) return;
@@ -126,6 +146,8 @@ export function installFrameletSdk(
       void handleInit(msg);
     } else if (msg.type === 'delivery') {
       void handleDelivery(msg);
+    } else if (msg.type === 'question') {
+      void handleQuestion(msg);
     }
   });
 
@@ -149,6 +171,15 @@ export function installFrameletSdk(
       if (reported.has(key)) return;
       reported.add(key);
       post({ type: 'violation', attempt, target: t });
+    },
+    onQuestion(handler) {
+      questionHandler = typeof handler === 'function' ? handler : null;
+    },
+    answer(questionId, text, source) {
+      if (typeof questionId !== 'string' || !asked.has(questionId) || answered.has(questionId)) return;
+      if (source !== 'api' && source !== 'fallback') return;
+      answered.add(questionId);
+      post({ type: 'answer', questionId, text: clip(String(text), options.answerLimit ?? 1000), source });
     },
   };
   Object.defineProperty(scope, 'framelet', { value: Object.freeze(sdk), enumerable: true });

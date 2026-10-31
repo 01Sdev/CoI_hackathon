@@ -190,6 +190,41 @@ framelet.reportViolation(attempt: 'camera' | 'hostDom' | 'fetch' | 'script', tar
 | 네트워크 | 플러그인은 `fetch`를 직접 쓴다. CSP `connect-src`가 허용 목록 밖을 막는다. 칼로리 플러그인의 규칙은 다음과 같다. `apiBase`가 null이면 요청하지 않고 고정표를 쓴다. 아니면 먼저 기기 안 모델(IF-08 "기기 안 모델")을 쓰고, 준비 전·실행 중·실패·시간 초과면 서버로 간다. 서버 요청은 `fetch` 바로 전에 3초 타이머를 시작하고, 같은 `AbortSignal`로 `res.text()`까지 덮는다. `objectLabel`이 `X_LABEL_RE`를 통과할 때만 `x-label`을 붙인다. 실패(중단·네트워크 오류·비 200)는 고정표로 처리하고 **`reportViolation`을 부르지 않는다**(서버 장애가 HUD 빨강으로 보이지 않게) |
 | 지킬 수 없는 것 | 플러그인 코드는 같은 Worker에 있어서 `self.postMessage`를 직접 부르거나 SDK 함수를 바꿀 수 있다. 그래서 SDK가 보낸 값도 플러그인 자기 보고로 취급한다(IF-04·06과 같은 전제). 호스트의 메시지 검증과 한도가 실제 방어선이다 |
 
+### 코디 스캔: 응시 동의와 IF-09·IF-10·IF-11 (2026-11-01 추가)
+
+설계: `docs/designs/outfit-pipelines.md`. 두 번째 앱 코디 스캔(`kind: 'outfit'`, `scenes: ['person']`)에만 쓴다. 영향: A·B·C.
+
+**응시 동의(스토어).** 얼굴은 늘 가린다(보장 2 그대로). 동의는 그 사람의 몸을 코디 스캔에 보내도 된다는 착용자의 허락이다.
+
+| 상태·액션 | 쓰는 쪽 | 규칙 |
+| --- | --- | --- |
+| `gaze`, `setGazeCandidate` | A | 시야 가운데 원(짧은 변 × `GAZE_CENTER_RADIUS`)에 `GAZE_DWELL_MS` 머문 사람. 이미 동의한 trackId는 null로 넣는다 |
+| `grantConsent(trackId)` | C(칩·Enter) | 지금 `gaze.trackId`일 때만 동의를 만들고 `gaze`를 비운다 |
+| `touchConsent(trackId, box)` | A | 동의한 사람이 보인 틱마다 상자·`lastSeenAt` 갱신 |
+| `revokeConsent(trackId)` | C(사람 수 누르기) | 동의 끄기 |
+| `consents`, `selectConsentCount`, `selectActiveConsents` | 모두 | 살아 있음 = `now < expiresAt`(허락 + `CONSENT_MAX_MS`) ∧ `now − lastSeenAt ≤ CONSENT_LOST_MS`. 흰 틀의 사람 수 = `selectConsentCount` |
+
+A는 코디 스캔 조각을 동의한 사람 상자 ∩ 흰 틀로 자르고, 그 안의 다른 사람 상자는 `MaskKind 'body'`로 모자이크한다. 살아 있는 동의가 없으면 보류(사유 "동의한 사람 없음").
+
+**IF-09 `question` (호스트 → 플러그인), IF-10 `answer` (플러그인 → 호스트).**
+
+```ts
+{ type: 'question'; questionId: string; deliveryId: string; text: string } // text ≤ OUTFIT_QUESTION_MAX(300)
+{ type: 'answer'; questionId: string; text: string; source: 'api' | 'fallback' } // text ≤ 1,000(줄바꿈 허용)
+framelet.onQuestion(handler: (q: FrameletQuestion) => void | Promise<void>): void
+framelet.answer(questionId: string, text: string, source: 'api' | 'fallback'): void
+```
+
+| 규칙 | 내용 |
+| --- | --- |
+| 묻기 | C가 `askPlugin(pluginId, 질문)`을 부르면 스토어가 그 플러그인에 dispatched된 가장 최근 전달로 `OutfitTurn`(asking)을 만든다. 보낸 조각이 없거나 질문이 비면 null |
+| 보내기 | B가 asking turn을 IF-09로 보낸다. 새 픽셀은 싣지 않는다. 플러그인은 이미 받은 조각만 쓴다 |
+| SDK | 받은 적 없는 `deliveryId`의 질문은 핸들러에 넘기지 않는다. `questionId`당 한 번. `answer`는 받은 질문에만, 한 번, `String(text).slice(0, 1000)` |
+| 호스트 검증 | `answer` 키는 `type·questionId·text·source`, `text` ≤ `PLUGIN_MESSAGE_LIMITS.answerText`. 화면에 넣기 전 제어·방향 문자를 거르고 줄바꿈은 남긴다. `textContent`로만 넣는다 |
+| 기록 | B가 `recordAnswer(turnId, text, source)`. `OUTFIT_ANSWER_TIMEOUT_MS`(20초) 안에 답이 없으면 `failTurn` |
+
+**IF-11 `/api/outfit`.** `POST`, 본문 JSON `{ image: string /* base64 JPEG */, question: string }` → `200 { answer: string }`. 서버 환경 변수 `GEMINI_API_KEY`(Google Gemini). 15초 안에 답이 없거나 키가 없으면 대체 문구. 사람의 신원·나이·인종·건강은 추측하지 않고, 브랜드는 로고·글자가 보일 때만 말한다. 받는 곳은 framelet 서버 → Google이므로 규약 보기에 적는다.
+
 ### IF-07 `/outward` BroadcastChannel
 
 ```ts

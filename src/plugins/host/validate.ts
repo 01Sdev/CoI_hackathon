@@ -14,6 +14,7 @@ const KEYS: Record<PluginToHost['type'], readonly string[]> = {
   ack: ['type', 'deliveryId', 'sha256'],
   result: ['type', 'deliveryId', 'text', 'source'],
   violation: ['type', 'attempt', 'target'],
+  answer: ['type', 'questionId', 'text', 'source'],
 };
 const ATTEMPTS: readonly string[] = ['camera', 'hostDom', 'fetch', 'script'] satisfies ViolationAttempt[];
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
@@ -41,14 +42,16 @@ export function parsePluginMessage(data: unknown, limits: Limits = PLUGIN_MESSAG
   if (keys.length !== allowed.length || !allowed.every((k) => keys.includes(k))) return format(`${type} 필드 구성이 다름`);
   if (type === 'ack' && !SHA256_HEX.test(rec.sha256 as string)) return format('ack sha256 형식');
   if (type === 'result' && !['on-device', 'api', 'fallback'].includes(rec.source as string)) return format('result source 값');
+  if (type === 'answer' && rec.source !== 'api' && rec.source !== 'fallback') return format('answer source 값');
   if (type === 'violation' && !ATTEMPTS.includes(rec.attempt as string)) return format('violation attempt 값');
 
   const size = new TextEncoder().encode(JSON.stringify(rec)).length;
   if (size > limits.maxSerializedBytes) return limit(`크기 ${size}B`);
-  for (const k of ['pluginId', 'deliveryId'] as const) {
+  for (const k of ['pluginId', 'deliveryId', 'questionId'] as const) {
     if (typeof rec[k] === 'string' && len(rec[k]) > limits.id) return limit(`ID ${limits.id}자`);
   }
   if (type === 'result' && len(rec.text as string) > limits.text) return limit(`text ${limits.text}자`);
+  if (type === 'answer' && len(rec.text as string) > limits.answerText) return limit(`answer ${limits.answerText}자`);
   if (type === 'violation' && len(rec.target as string) > limits.target) return limit(`target ${limits.target}자`);
   return { ok: true, msg: rec as unknown as PluginToHost };
 }

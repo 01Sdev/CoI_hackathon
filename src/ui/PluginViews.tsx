@@ -24,6 +24,8 @@ const PLUGIN_VIEW: Record<PluginKind, ComponentType<PluginViewProps> | null> = {
   calorie: CalorieView,
   hello: SceneNoteView,
   tamper: null,
+  // 코디 스캔 화면(대화 막대·오른쪽 대화창)은 C가 track-c/outfit-ui에서 붙인다.
+  outfit: null,
 };
 
 /** 켜져 있는 앱마다 그 앱의 화면을 그린다(pluginOrder 순). */
