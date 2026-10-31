@@ -72,6 +72,7 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | startedAt | number | — |
 | viewMode | `phone\|desktop\|hud\|outward` | F8, F15 |
 | input | {kind: `webcam\|rear\|video`, width, height, fps, fallbackFrom: kind\|null} | F1, F10 |
+| inputRequest | {kind, seq} \| null (C의 요청, 같은 입력도 seq가 오름. A가 보고 `input`을 씀) | F1, F10 |
 | compareMode | bool | F17 |
 | paused | bool (전달 일시 정지, 발표자 화면 전용) | F20 |
 
@@ -82,7 +83,9 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | id (PK), sessionId (FK) | string | — |
 | runtimeId | string (iframe을 새로 만들 때마다 바뀜) | F5, F11 |
 | kind | `calorie\|tamper\|hello`(개발용). `reader`는 F18 이번 제출 제외 | F7, F13 |
-| status / gateOpen | `loading\|ready\|stopped\|terminated` (`stopped` = 전환 실패, 사용자가 다시 켜야 풀림) / bool (전달 게이트) | F5 |
+| status / gateOpen | `loading\|ready\|stopped\|terminated` (`loading` = 생성·전환 중, `stopped` = 전환 실패, `terminated` = 꺼짐) / bool (전달 게이트, 일시 정지와 따로) | F5 |
+| enabled | bool (사용자 의도. `stopped`·`terminated`가 되면 false) | F5, F13 |
+| runtimePolicy | {connect: `none\|network`, manifestVersion} \| null (지금 iframe을 만든 정책) | F5, F17 |
 | cooldownUntil / busy | number / bool (포착 진행 중) | F3 |
 | manifest.version | int | F11 |
 | manifest.purpose / scenes / region | string ≤40자 / (`food\|person`)[] / `target`만 | F2, F11 |
@@ -108,7 +111,7 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | sceneDecisionId (FK) / deliveryId (FK) | string \| null | F3 / F6 |
 | kind | `deliver\|hold\|skip\|violation` | F4, F5, F6 |
 | branch | `2a\|2b\|2c\|2d\|raw` \| null (`raw` = 비교 모드, `2d` = hold) | F4, F17 |
-| reason | string (예: "주기 제한", "출구 재검사", "검사 실패", "카메라 요청"; `fetch`·`script` violation은 호스트가 대상 origin을 `network`와 대조해 "허용 목록 밖" 또는 "허용 목록 안인데 실패"를 붙임). `skip`은 같은 사유 10초에 1번만 | F3, F13, F14 |
+| reason | string (예: "주기 제한", "출구 재검사", "검사 실패", "카메라 요청"; `fetch`·`script` violation은 호스트가 대상 origin을 `network`와 대조해 "허용 목록 밖" 또는 "허용 목록 안인데 실패"를 붙임). `skip`은 같은 플러그인·같은 사유 10초에 1번만 | F3, F13, F14 |
 | enforcedBy | `plugin-report`(변조 4종) \| `host`(iframe 재로드·해시 불일치) \| null | F5, F13 |
 | at | number | F6 |
 
@@ -127,7 +130,9 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | faceCheck | `{status:'checked', detectedFaces:int} \| {status:'error', detectedFaces:null}` | F4, F8 | 출구 재검사(P0, JPEG 후 BlazeFace), 두 모드 공통. 보호 모드에서 ≥1이면 hold("출구 재검사"), error면 hold("검사 실패")라 Delivery 없음. `raw`는 전체 프레임 얼굴 수 |
 | processedAt, location | number, `browser` (처리 위치, GPS 아님) | F6 | `phone\|glasses\|enterprise`는 발표 그림용, 데모에서는 안 씀 |
 | sha256 / ackSha256 / ackStatus | hex / hex / `pending\|match\|mismatch\|timeout` | F6 | 호스트 값 / 플러그인 `ack` 값 / 2초 안 ack 없으면 timeout(IF-04). 무결성 확인용일 뿐 |
-| thumbnailRef | object URL | F6, F12 | 보낸 Blob을 줄인 것 |
+| thumbnailRef | object URL \| null | F6, F12 | 보낸 Blob을 줄인 것. raw는 비교 모드를 끌 때 null |
+| runtimeId / scene / width·height | string / `food\|person\|none` / int | F5, F6 | 포착 시작 때의 `Plugin.runtimeId`(다르면 거부) / IF-02 `scene` / 보낸 이미지 픽셀 크기 |
+| blob | Blob \| null | F6 | `delivery` 메시지로 보낸 것과 같은 객체. `markDelivery` 뒤 null |
 
 **Detection**. 조각 안의 사람·얼굴 박스(FaceMask 흡수, 좌표·점수만). `person`은 0단계가 아니라 1단계 포착 프레임에서 다시 검출한 것이다.
 
@@ -146,7 +151,7 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | --- | --- | --- |
 | sessionId (PK·FK) | string | — |
 | recent10s | {at, pluginId, detectedFaces}[] (10초 지나면 빠짐. 비교 모드를 꺼도 빼지 않는다) | F8, F15 |
-| window60s | {stage0Runs, faceDetectRuns, sourceFrames, deliveries, holds} 직전 60초 (얼굴 검출 = 전달당 가림 1 + 재검사 1) | F3, F16 |
+| window60s | {at, stage0Runs, faceDetectRuns, sourceFrames, deliveries, holds}[] 증가분 기록. 직전 60초 합은 selector가 구한다 (얼굴 검출 = 전달당 가림 1 + 재검사 1) | F3, F16 |
 | perPlugin | {pluginId: {deliveries, faceDeliveries}} 증가 전용 | F6, F12 |
 | rawServerSends | int (원본 서버 전송, 항상 0) | F16, F17 |
 | apiSends | int (가린 조각의 허용 API 전송 수) | F7, F16 |
