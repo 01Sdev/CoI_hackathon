@@ -60,7 +60,7 @@ flowchart LR
 | `drawImage(video…)`·`getImageData`·`getUserMedia`·`srcObject`·`captureStream`·`createImageBitmap`·`toBlob` | `input/`, `vision/` (`toBlob`은 `vision/`·`broker/`). 이 표는 호스트 코드 규칙이다. 칼로리 플러그인의 하위 Worker가 받은 가린 조각 JPEG를 `createImageBitmap`·`OffscreenCanvas`로 디코드하는 것은 격리 안의 일이다(IF-08 "기기 안 모델") |
 | `sendDelivery()` 호출(플러그인에 바이트를 보내는 유일한 함수) | `broker/` 한 곳 |
 | iframe으로의 `postMessage` | `plugins/host` 안 `sendInit`·`sendDelivery`·`sendQuestions`(코디 스캔 IF-09)만 |
-| 호스트 코드의 `fetch`·`XMLHttpRequest`·`WebSocket` | 없음(모델·WASM 정적 로드 제외. 코디 스캔 실시간 받아쓰기의 같은 origin `POST /api/scribe-token`(본문 없음, IF-12)과 그 토큰으로 여는 ElevenLabs 웹소켓(A)도 제외, 2026-11-01 [허브 확인 필요]). **라이브러리가 몰래 보내는 요청도 막는다(P0, 2026-10-31 추가):** MediaPipe tasks-vision 1.2.0이 `https://odml.pa.googleapis.com/v1/log`로 POST를 시도한다(독립 데모 실측, 본문 미확인). 막는 방법은 아래 "호스트 페이지 CSP"와 V15 |
+| 호스트 코드의 `fetch`·`XMLHttpRequest`·`WebSocket` | 없음(모델·WASM 정적 로드 제외. 코디 스캔 실시간 받아쓰기도 제외: 같은 origin `POST /api/scribe-token`(본문 없음, IF-12)과, 그 일회용 토큰으로 브라우저(A)가 여는 ElevenLabs 실시간 받아쓰기 웹소켓(말소리만 보내고 글자만 받는다). 사용자 승인(2026-11-01)). **라이브러리가 몰래 보내는 요청도 막는다(P0, 2026-10-31 추가):** MediaPipe tasks-vision 1.2.0이 `https://odml.pa.googleapis.com/v1/log`로 POST를 시도한다(독립 데모 실측, 본문 미확인). 막는 방법은 아래 "호스트 페이지 CSP"와 V15 |
 | 플러그인이 보낸 문자열 렌더링 | `textContent`만(`innerHTML` 금지. 호스트 XSS는 곧 원본 접근이다) |
 | 카메라 미리보기 | A가 `mountPreview(container)`를 export하고 C는 컨테이너만 넘긴다. `<video>`·MediaStream 참조는 스토어에 넣지 않는다. 미리보기는 좌우 반전하지 않는다 [제안]. HUD 대상 위치(`liveObservation.targetBox`, 소스 프레임 기준 0~1. 확정 전 후보도 따라 움직인다)를 그대로 겹치기 위해서다. HUD "장면"은 `liveObservation.label`(확정 장면)이다. C는 `src/input/preview.ts`의 `mountPreview`를 쓰며, 처음 붙일 때 A 런타임이 시작된다 |
 | `/dev/*` 테스트 페이지(목 호출 포함) | 프로덕션 빌드에서 제외 |
