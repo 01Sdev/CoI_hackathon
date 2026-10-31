@@ -3,7 +3,7 @@
 
 import type { HostToPlugin } from '../core/messages';
 import { lensStore, type NewDelivery, type NewDetection } from '../core/store';
-import type { Branch, Delivery } from '../core/types';
+import type { Box, Branch, Delivery } from '../core/types';
 import { sha256Hex } from './sha256';
 
 export type DeliveryMessage = Extract<HostToPlugin, { type: 'delivery' }>;
@@ -37,9 +37,21 @@ export function isPluginHostConnected(): boolean {
   return host !== null;
 }
 
-/** 보류(2d, 대상 재검출 실패, 출구 재검사, 검사 실패). Delivery를 만들지 않고 로그만 남긴다. */
-export function hold(pluginId: string, sceneDecisionId: string | null, branch: Branch | null, reason: string, detections?: readonly NewDetection[]): void {
-  lensStore.getState().addLog({ pluginId, sceneDecisionId, kind: 'hold', branch, reason, enforcedBy: null }, detections);
+/**
+ * 보류(2d, 대상 재검출 실패, 프레임 밖, 출구 재검사, 검사 실패). Delivery를 만들지 않고 로그만 남긴다.
+ * frameRect는 "프레임 밖"에만 넘긴다(02-SSRD: deliver와 "프레임 밖" 외의 줄에는 없다).
+ */
+export function hold(
+  pluginId: string,
+  sceneDecisionId: string | null,
+  branch: Branch | null,
+  reason: string,
+  detections?: readonly NewDetection[],
+  frameRect?: Box,
+): void {
+  lensStore
+    .getState()
+    .addLog({ pluginId, sceneDecisionId, kind: 'hold', branch, reason, enforcedBy: null, ...(frameRect ? { frameRect } : {}) }, detections);
 }
 
 /** 선언하지 않은 장면 등. 같은 플러그인·같은 사유는 스토어가 10초에 1번만 남긴다. */

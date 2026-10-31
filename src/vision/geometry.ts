@@ -117,3 +117,4 @@ export function matchTarget(found: readonly Found[], objectLabel: string, hint: 
   }
   return best;
 }
+

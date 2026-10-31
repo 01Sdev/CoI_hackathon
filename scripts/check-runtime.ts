@@ -4,6 +4,8 @@
 import assert from 'node:assert/strict';
 import { VISION_CONFIG } from '../src/vision/config';
 import { area, clampToFrame, classifyScene, expand, fitLongSide, inCenterRegion, intersect, matchTarget, type Found } from '../src/vision/geometry';
+import { containsBox, cropToFramePx, frameToPx } from '../src/core/frame';
+import { CAPTURE_FRAME_DEFAULT } from '../src/core/constants';
 import { SCENE_NONE, stepScene, type SceneState } from '../src/vision/scene';
 import { cooldownUntil, decideBranch, headRegion } from '../src/vision/branch';
 import { planCapture } from '../src/vision/plan';
@@ -338,6 +340,63 @@ check('blendMasked: 마스크 1인 픽셀만 픽셀화 결과로 바뀐다', () 
   const src = new Uint8ClampedArray([9, 9, 9, 255, 8, 8, 8, 255]);
   blendMasked(dst, src, new Uint8Array([0, 1]));
   assert.deepEqual([...dst], [1, 1, 1, 255, 8, 8, 8, 255]);
+});
+
+// ── F24 전송 범위 프레임(TC-065·066의 경계 부분) ──
+// capture.protect와 같은 계산: core cropToFramePx(넓힌 박스, frameRect), 한 변 2px 미만이면 "프레임 밖".
+const cropInFrame = (target: { x: number; y: number; w: number; h: number }, frameRect: { x: number; y: number; w: number; h: number }, ratio: number) => {
+  const c = cropToFramePx(expand(target, ratio), frameRect);
+  return c && c.w >= 2 && c.h >= 2 ? c : null;
+};
+const within = containsBox;
+
+check('frameToPx: 기본 프레임(가운데 60%)을 720×1280 원본 px로', () => {
+  assert.deepEqual(frameToPx(CAPTURE_FRAME_DEFAULT, 720, 1280), { x: 144, y: 256, w: 432, h: 768 });
+});
+
+check('TC-065: 프레임 왼쪽 경계가 피자 박스 가운데면 조각은 프레임 경계에서 시작하고 cropRect ⊆ frameRect', () => {
+  const frameRect = { x: 300, y: 0, w: 420, h: 1280 };
+  const pizza = { x: 200, y: 500, w: 200, h: 200 }; // 가운데 x=300
+  const c = cropInFrame(pizza, frameRect, 0.1);
+  assert.ok(c);
+  assert.equal(c.x, 300); // 프레임 밖(왼쪽 절반과 +10% 여유)은 들어가지 않는다
+  assert.equal(c.x + c.w, 420); // 오른쪽은 +10%(20px)
+  assert.deepEqual([c.y, c.h], [480, 240]);
+  assert.ok(within(frameRect, c));
+  // 소수 좌표는 안쪽으로 맞춘다(프레임 경계 안)
+  const f = cropInFrame({ x: 200.4, y: 500.6, w: 199.3, h: 199.1 }, frameRect, 0.1);
+  assert.ok(f && Number.isInteger(f.x) && Number.isInteger(f.w) && within(frameRect, f));
+});
+
+check('TC-066: 프레임과 겹치지 않으면 null("프레임 밖"), 2px 미만 띠도 null', () => {
+  const frameRect = { x: 0, y: 0, w: 200, h: 200 };
+  assert.equal(cropInFrame({ x: 400, y: 400, w: 100, h: 100 }, frameRect, 0.1), null);
+  // +10% 넓혀도 x 210부터라 안 겹친다
+  assert.equal(cropInFrame({ x: 220, y: 50, w: 100, h: 100 }, frameRect, 0.1), null);
+  // 넓힌 박스가 1px만 걸침(x 199~200)
+  assert.equal(cropInFrame({ x: 209, y: 50, w: 100, h: 100 }, frameRect, 0.1), null);
+});
+
+check('cropToFramePx: 무작위 500회 모두 cropRect ⊆ frameRect이고 넓힌 박스 안(정수 px)', () => {
+  let rnd = 12345;
+  const r = () => ((rnd = (rnd * 1103515245 + 12345) % 2147483648) / 2147483648);
+  for (let i = 0; i < 500; i++) {
+    const W = 720, H = 1280;
+    const frameRect = frameToPx({ x: r() * 0.9, y: r() * 0.9, w: 0.1 + r() * 0.9, h: 0.1 + r() * 0.9 }, W, H);
+    frameRect.w = Math.min(frameRect.w, W - frameRect.x);
+    frameRect.h = Math.min(frameRect.h, H - frameRect.y);
+    const t = { x: r() * W, y: r() * H, w: 1 + r() * 300, h: 1 + r() * 300 };
+    const c = cropInFrame(t, frameRect, 0.1);
+    if (!c) continue;
+    assert.ok(within(frameRect, c), `반복 ${i}`);
+    assert.ok(within(expand(t, 0.1), c), `반복 ${i}`);
+    assert.ok(Number.isInteger(c.x) && Number.isInteger(c.w));
+  }
+});
+
+check('프레임 밖 보류도 쿨다운: 포착 시작 기준 간격(maxPerMinute 6 → 10초에 1건)', () => {
+  // runCapture는 "프레임 밖"을 cooled에 넣어 끝난 시각 + 간격으로 쿨다운을 확정한다. 간격 계산은 같은 함수다.
+  assert.equal(Math.max(cooldownUntil(0, 6), cooldownUntil(120, 6)), 10_120);
 });
 
 console.log(`\n${passed}개 통과`);

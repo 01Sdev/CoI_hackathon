@@ -121,6 +121,16 @@
    - `facesMasked`는 `masked ≠ none`인 수다(ERD).
 8. 모든 작업 캔버스(원본 프레임, 조각, 확대 사본, 축소본, 디코딩 캔버스)는 보류·예외 경로를 포함해 `finally`에서 비운다(`width = 0`).
 
+### 2.6a 전송 범위 프레임(F24, 03-SRS FR-060·063, 02-SSRD "전송 범위 프레임")
+
+- 포착을 시작할 때 `session.captureFrame`(0~1)을 한 번 읽는다. 원본 크기를 안 뒤 `frameRect = frameToPx(captureFrame, W, H)`(core `frame.ts`)로 바꿔 그 포착 끝까지 쓴다.
+- 대상과 사람은 포착 프레임 **전체**에서 다시 찾는다(FR-013). 그다음 대상 박스를 10% 넓혀 core `cropToFramePx`(C의 끌기·스토어와 같은 좌표 함수)로 `frameRect`와의 교집합을 안쪽 정수 px로 맞춘다. 늘 `cropRect ⊆ frameRect`이고, 스토어 `prepareDelivery`도 이 조건을 다시 본다(어기면 거부).
+- 겹치지 않거나 한 변이 2px 미만이면(core는 1px 미만만 null, A가 2px 미만 띠도 보낼 조각이 아니라고 본다) `hold`(branch 없음, "프레임 밖", `frameRect` 포함)로 끝내고 쿨다운을 시작한다. "대상 재검출 실패"와 같은 취급이다.
+- 조각 캔버스에는 `cropRect`만 그린다. 그래서 프레임 밖 픽셀은 얼굴 검출, Selfie, 가림, 인코딩 어디에도 들어가지 않는다. O·P는 잘린 조각과 원본 좌표 사람 박스의 교집합으로 잰다(`decideBranch`가 원래 그렇게 잰다).
+- `Delivery.frameRect`를 늘 채운다. 스토어가 deliver 로그에 복사한다. "프레임 밖" hold에도 `frameRect`를 넣고, 다른 hold·skip에는 넣지 않는다.
+- 비교 모드: raw는 `cropRect = frameRect`다(스토어가 raw인데 `frameRect`가 없거나 다르면 거부한다). 프레임 안 전체를 원본 해상도로, 가리지 않고 보낸다. `areaRatio`는 프레임 면적 / 원본 면적이다.
+- 0단계 장면 판정은 지금처럼 전체 화면(가운데 60% 규칙)에서 한다. 프레임은 포착부터 적용한다.
+
 ### 2.7 비교 모드(F17)
 
 - `compareMode`이고, 칼로리 플러그인이고, iframe이 `connect: 'none'`으로 ready면 분기표를 건너뛴다. 원본 프레임 전체를 **원본 해상도**로 `raw`로 보낸다(05 결정 30).
