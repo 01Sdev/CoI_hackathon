@@ -66,6 +66,40 @@ export function gazeChipPoint(box: Box, src: Size | null, dst: Size, edge = 72, 
   return { x: clamp(r.left + r.width / 2, edge, dst.w - edge), y: clamp(r.top - 8, top, dst.h - edge) };
 }
 
+/** 흰 틀 오른쪽 위 사람 수(#44 .fm-selection__count): 틀 안쪽 8px, 줄 높이 24px. 폭은 두 자리 숫자까지 넉넉히 잡는다. */
+const COUNT_INSET = 8;
+const COUNT_H = 24;
+const COUNT_W = 48;
+/** 코디 답 패널(outfit-talk.css)과 같은 값. 아래쪽은 말 막대(24 + 56)와 여백을 비운다. */
+const PANEL_GUTTER = 16;
+const PANEL_BOTTOM_RESERVE = 104;
+/** 이보다 좁으면 숫자 위에 두지 않고 숫자 아래로 내린다. 머리줄 + 말풍선 한두 개가 보이는 높이. */
+export const PANEL_MIN_H = 120;
+
+/** 코디 답 패널 폭. outfit-talk.css의 inline-size와 같은 식이다(480px 이하는 좁게). */
+export function talkPanelWidth(dst: Size): number {
+  return dst.w <= 480 ? Math.min(260, dst.w * 0.68) : Math.min(320, dst.w - 2 * PANEL_GUTTER);
+}
+
+/**
+ * 코디 답 패널의 위치(시야 오른쪽 가장자리). 패널이 흰 틀의 사람 수와 가로로 겹치면 숫자를 덮지 않게
+ * 숫자 위 공간이 PANEL_MIN_H 이상일 때는 그 높이로 줄이고, 아니면 숫자 바로 아래로 내린다. frame은 화면 px.
+ */
+export function talkPanelPlacement(frame: { top: number; right: number }, dst: Size, top = PANEL_GUTTER): { top: number; maxHeight: number } {
+  const width = talkPanelWidth(dst);
+  const cap = Math.min(520, dst.h * (dst.w <= 480 ? 0.44 : 0.5));
+  const left = dst.w - PANEL_GUTTER - width;
+  const countRight = frame.right - COUNT_INSET;
+  const countTop = frame.top + COUNT_INSET;
+  const overlapsX = left < countRight && dst.w - PANEL_GUTTER > countRight - COUNT_W;
+  const overlapsY = countTop + COUNT_H > top;
+  if (!overlapsX || !overlapsY) return { top, maxHeight: cap };
+  const above = countTop - COUNT_INSET - top;
+  if (above >= PANEL_MIN_H) return { top, maxHeight: Math.min(cap, above) };
+  const below = countTop + COUNT_H + COUNT_INSET;
+  return { top: below, maxHeight: Math.max(PANEL_MIN_H, Math.min(cap, dst.h - below - PANEL_BOTTOM_RESERVE)) };
+}
+
 /**
  * 카운터 바깥 호(--fm-window)의 남은 비율 1 → 0. M이 0으로 돌아가는 시각은 얼굴이 담긴 마지막 기록 + 10초다.
  * M 자체는 selectFaceM이 계산하고, 여기는 그 기록이 언제 빠지는지만 본다.

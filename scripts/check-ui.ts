@@ -15,6 +15,9 @@ import {
   faceWindowRemaining,
   gazeChipPoint,
   nudgeCorner,
+  PANEL_MIN_H,
+  talkPanelPlacement,
+  talkPanelWidth,
   sameBox as sameFrame,
   sourceToView,
   viewToSource,
@@ -355,6 +358,22 @@ check('sanitizeAnswerText: 줄바꿈은 남기고 제어·방향 문자와 보�
   const long = sanitizeAnswerText('가'.repeat(ANSWER_TEXT_MAX + 5));
   assert.equal(Array.from(long).length, ANSWER_TEXT_MAX);
   assert.ok(long.endsWith('…'));
+});
+
+check('talkPanelPlacement: 답 패널은 흰 틀의 사람 수를 덮지 않는다(위 공간이 넉넉하면 위, 아니면 숫자 아래)', () => {
+  const phone = { w: 390, h: 844 };
+  assert.equal(talkPanelWidth(phone), 260);
+  // 틀 위쪽 169px: 숫자(177~201) 위에 154px이 남아 그 높이로 줄인다.
+  assert.deepEqual(talkPanelPlacement({ top: 169, right: 337 }, phone), { top: 16, maxHeight: 153 });
+  // 틀이 위에 붙으면 숫자 아래(60 + 8 + 24 + 8 = 100)로 내린다.
+  const low = talkPanelPlacement({ top: 60, right: 337 }, phone);
+  assert.equal(low.top, 100);
+  assert.ok(low.maxHeight >= PANEL_MIN_H);
+  // 숫자가 패널 왼쪽 밖이면(넓은 화면, 좁은 틀) 그대로 위에 둔다.
+  const wide = { w: 1280, h: 800 };
+  assert.deepEqual(talkPanelPlacement({ top: 100, right: 700 }, wide), { top: 16, maxHeight: 400 });
+  // 숫자가 패널보다 아래에 있어 세로로 안 겹치면 그대로.
+  assert.equal(talkPanelPlacement({ top: 900, right: 337 }, { w: 390, h: 1400 }).top, 16);
 });
 
 console.log(`\n${passed}개 통과`);

@@ -5,14 +5,16 @@
 //   막대를 탭하거나 Enter·Space(글래스 버튼 대용) → askPlugin(코디 스캔 id, 질문). 음성 인식이 없거나 막히면 입력창으로 대신한다.
 // 패널: 시야 오른쪽 가장자리. outfitTurns의 질문과 답(묻는 중, 실패 사유, 대체 답변)을 보인다. 답은 플러그인 문자열이라
 //   sanitizeAnswerText를 거쳐 텍스트 노드로만 넣는다. 새 질문이 생기면 열리고, ×로 닫으면 다음 질문까지 닫혀 있다.
-//   동의가 끝나면 막대만 사라지고 패널은 남는다.
+//   동의가 끝나면 막대만 사라지고 패널은 남는다. 패널은 흰 틀의 사람 수를 덮지 않게 그 위나 아래에 둔다(talkPanelPlacement).
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { selectConsentCount } from '../core/selectors';
 import { useLensStore } from '../core/store';
 import type { OutfitTurn } from '../core/types';
+import { sourceToView, talkPanelPlacement, type Size } from './geometry';
 import { isGlassButtonKey } from './glassKeys';
+import { fitSelection, selectionLimits } from './selection-frame';
 import { sanitizeAnswerText } from './sanitize';
 import { useSpeechInput } from './useSpeechInput';
 import './outfit-assistant.css';
@@ -23,11 +25,18 @@ const QUESTION_MAX = 300;
 /** 막대에 보이는 받아쓰기 글자 수. 길면 앞을 줄이고 최근 말을 보인다. */
 const BAR_TAIL = 48;
 
-export function OutfitTalk() {
+export function OutfitTalk({ size }: { size: Size }) {
   const v = useLensStore(
     useShallow((s) => {
       const id = s.pluginOrder.find((x) => s.plugins[x]?.kind === 'outfit') ?? null;
-      return { pluginId: id, enabled: id !== null && !!s.plugins[id]?.enabled, consents: selectConsentCount(s) };
+      return {
+        pluginId: id,
+        enabled: id !== null && !!s.plugins[id]?.enabled,
+        consents: selectConsentCount(s),
+        frame: s.session.captureFrame,
+        srcW: s.session.input?.width ?? 0,
+        srcH: s.session.input?.height ?? 0,
+      };
     }),
   );
   const allTurns = useLensStore((s) => s.outfitTurns);
@@ -82,13 +91,16 @@ export function OutfitTalk() {
     if (log.current) log.current.scrollTop = log.current.scrollHeight;
   }, [turns, panelOpen]);
 
+  // 흰 틀은 SelectionFrame이 화면에 맞춰 그린 자리에 있다(CaptureFrame과 같은 변환).
+  const view = fitSelection(sourceToView(v.frame, v.srcW > 0 ? { w: v.srcW, h: v.srcH } : null, size), selectionLimits(size.w, size.h));
+  const place = talkPanelPlacement({ top: view.y * size.h, right: (view.x + view.w) * size.w }, size);
   const shown = question.length > BAR_TAIL ? `…${question.slice(-BAR_TAIL)}` : question;
   const note = hint || (live && speech.state === 'error' ? speech.error : '');
 
   return (
     <>
       {panelOpen && (
-        <section className="fm-talk fm-talkpanel" aria-label="코디 스캔 질문과 답">
+        <section className="fm-talk fm-talkpanel" aria-label="코디 스캔 질문과 답" style={{ top: place.top, maxHeight: place.maxHeight }}>
           <div className="fm-talk__glow" aria-hidden="true" />
           <div className="fm-talk__ring">
             <div className="fm-talk__inner">

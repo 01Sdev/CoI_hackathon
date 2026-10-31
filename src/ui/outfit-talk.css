@@ -179,6 +179,7 @@
 }
 
 /* 질문·답 패널: 시야 오른쪽 가장자리(22px). 글이 적으면 짧고, 많으면 시야 절반까지 자라고 안에서 스크롤한다.
+   폭은 geometry.ts talkPanelWidth와 같은 식이다. top·max-height는 흰 틀의 사람 수를 피하도록 OutfitTalk가 정한다.
    답은 앱 화면이라 금빛 상태창처럼 플랫폼 흰 틀·사람 수(z 5) 아래에 둔다. 앱 화면이 플랫폼 표시를 덮지 않게 */
 .fm-talkpanel {
   --fm-talk-r: 22px;

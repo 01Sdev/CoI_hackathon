@@ -28,7 +28,7 @@ export function Hud({ variant }: { variant: HudVariant }) {
       <CaptureFrame size={size} adjustable={glass} />
       <PluginViews size={size} />
       {glass && <GazeChip size={size} />}
-      {glass && <OutfitTalk />}
+      {glass && <OutfitTalk size={size} />}
       {compare && (
         <div className={glass ? 'fm-band fm-hud__band' : 'fm-band fm-band--line fm-hud__band'} role="status">
           {glass ? '비교 모드 · 원본 전체가 칼로리에 갑니다 · 통신은 막혀 있음' : '비교 모드'}
