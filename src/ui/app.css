@@ -889,6 +889,56 @@ button.fm-logcard:focus-visible,
   gap: 8px;
 }
 
+/* 확인 화면: 앱마다 한 묶음, 넓으면 나란히(F21) + 요청한 것 / 허용된 것(FR-030) */
+.fm-confirm__apps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+.fm-confirm__app {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.fm-confirm__app + .fm-confirm__app {
+  border-block-start: 1px solid var(--fm-hairline);
+  padding-block-start: 14px;
+}
+.fm-grant {
+  display: grid;
+  gap: 6px;
+}
+.fm-grant__table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+.fm-grant__table th,
+.fm-grant__table td {
+  padding: 6px 8px;
+  text-align: start;
+  vertical-align: top;
+  border-block-end: 1px solid var(--fm-hairline);
+}
+.fm-grant__table thead th {
+  padding-block: 4px;
+}
+.fm-grant__table thead th:first-child,
+.fm-grant__table tbody th {
+  inline-size: 72px;
+  padding-inline-start: 0;
+}
+.fm-grant__v {
+  font-family: var(--fm-font-mono);
+  font-size: 12px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.fm-grant__table tr[data-diff='true'] td:last-child {
+  font-weight: 600;
+}
+
 /* /hud D-pad 선택 */
 .fm-hudpick {
   position: absolute;
