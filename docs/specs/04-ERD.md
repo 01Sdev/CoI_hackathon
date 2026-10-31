@@ -78,6 +78,7 @@ enum은 `a|b`, 시간은 `performance.now()` 기준 ms.
 | viewMode | `phone\|desktop\|hud\|outward` | F8, F15 |
 | input | {kind: `webcam\|rear\|video`, width, height, fps, fallbackFrom: kind\|null} | F1, F10 |
 | inputRequest | {kind, seq} \| null (C의 요청, 같은 입력도 seq가 오름. A가 보고 `input`을 씀) | F1, F10 |
+| inputError | {kind, fallbackFrom: kind\|null, at} \| null (마지막 입력 열기 실패. 카메라 → 대체 녹화 영상까지 실패하면 `{kind: 'video', fallbackFrom: 카메라}`, 녹화 영상만 요청해 실패하면 `fallbackFrom: null`. 입력이 열리거나 새로 열기 시작하면 null. A가 `setInput(null, error)`로 씀) | F1, F10 |
 | compareMode | bool | F17 |
 | paused | bool (전달 일시 정지, 발표자 화면 전용) | F20 |
 | captureFrame | {x,y,w,h} 소스 프레임 기준 0\~1 (전송 범위 프레임. 기본 가운데 60% [제안], 한 변 최소 0.1 [제안]. C만 `setCaptureFrame`으로 씀) | F24, F24a |

@@ -34,6 +34,7 @@ import type {
   EngineState,
   GazeCandidate,
   InputKind,
+  InputError,
   InputSource,
   LiveObservation,
   LogEntry,
@@ -114,7 +115,11 @@ export interface LensState {
   askPlugin(pluginId: string, question: string): string | null;
 
   // ── A(런타임) ──
-  setInput(input: InputSource | null): void;
+  /**
+   * 열린 입력을 쓴다. input이 있으면 inputError는 null. input이 null이면 error(없으면 null)를 inputError로 남긴다.
+   * A는 열기를 시작할 때 setInput(null), 카메라와 대체 녹화 영상까지 실패하면 setInput(null, { kind: 'video', fallbackFrom: 카메라 })를 쓴다.
+   */
+  setInput(input: InputSource | null, error?: Omit<InputError, 'at'> | null): void;
   /** cooldownUntil을 생략하면 기존 값 유지. */
   setPluginBusy(pluginId: string, busy: boolean, cooldownUntil?: number): void;
   setLiveObservation(obs: LiveObservation | null): void;
@@ -245,6 +250,7 @@ export function createLensStore(opts: LensStoreOptions = {}) {
     viewMode: prev?.viewMode ?? 'phone',
     input: prev?.input ?? null,
     inputRequest: prev?.inputRequest ?? null,
+    inputError: prev?.inputError ?? null,
     compareMode: false,
     paused: false,
     captureFrame: prev?.captureFrame ?? { ...CAPTURE_FRAME_DEFAULT },
@@ -486,7 +492,8 @@ export function createLensStore(opts: LensStoreOptions = {}) {
         },
 
         // ── A ──
-        setInput: (input) => set((s) => ({ session: { ...s.session, input } })),
+        setInput: (input, error = null) =>
+          set((s) => ({ session: { ...s.session, input, inputError: !input && error ? { ...error, at: clock() } : null } })),
 
         setPluginBusy: (pluginId, busy, cooldownUntil) =>
           set((s) => {

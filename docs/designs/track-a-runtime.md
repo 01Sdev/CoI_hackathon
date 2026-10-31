@@ -39,6 +39,7 @@
 - 입력을 열기 시작하면 이전 소스를 바로 끊고(`srcObject = null`) `setInput(null)`을 쓴다. 0단계는 `session.input`이 null이면 쉰다. 그래서 옛 입력의 멈춘 프레임은 판정하지도 포착하지도 않는다.
 - `getUserMedia`가 끝나면 그 사이에 다른 요청이 왔는지부터 본다. 왔으면 그 스트림을 멈추고 `<video>`에 붙이지 않는다. 권한 창이 떠 있는 동안에는 시간 제한을 두지 않는다. 8초 제한은 스트림이 열린 뒤 첫 프레임이 나오기까지에만 건다.
 - 카메라가 실패하면(권한 거부, 장치 없음, HTTP, 첫 프레임 8초 초과) 녹화 영상으로 바꾸고 `InputSource.fallbackFrom`에 원래 종류를 적는다(FR-004).
+- 대체 녹화 영상까지 못 열면(배포본처럼 `/demo` 영상이 없을 때) `setInput(null, { kind: 'video', fallbackFrom: 원래 카메라 })`로 `session.inputError`를 남긴다. 녹화 영상만 요청해 실패하면 `fallbackFrom: null`이다. 열기 순서는 `openWithFallback`(`input/adapter.ts`)이고 `scripts/check-runtime.ts`가 가짜 열기로 확인한다.
 - 입력을 열 때마다 `inputEpoch`가 오른다. 포착은 이 값을 세대 토큰에 넣는다(2.5).
 - 카메라 해상도는 `ideal` 1280×720으로 요청한다. K-11이 미정이라 V4 iPhone 실측 값을 시작값으로 썼다. 녹화 파일 기본값은 `/demo/pizza-alone.mp4`이고 `setVideoUrl()`로 바꾼다. mp4의 fps는 브라우저가 알려 주지 않으므로 `InputSource.fps = 0`(모름)으로 둔다.
 - 광각(양옆 휘어짐, 2026-11-01): 기본으로 켜져 있다. vision은 `<video>` 대신 `grabFrame()`의 휜 프레임을 읽고, 미리보기도 그 캔버스를 붙인다. 위치·기본값·한계는 `docs/designs/input-wide-warp.md`.

@@ -78,7 +78,7 @@ flowchart LR
 
 | 상태 (ERD) | 쓰는 쪽 | C의 접근 |
 | --- | --- | --- |
-| `Session.input` | A (`selectInput` 처리) | 액션 호출 |
+| `Session.input` · `Session.inputError` | A (`selectInput` 처리. 카메라와 대체 녹화 영상까지 못 열면 `setInput(null, { kind: 'video', fallbackFrom })`로 `inputError`를 남긴다. C는 이것과 `input.fallbackFrom`·권한 거부로 "카메라 없이는 볼 수 없어요" 안내를 띄운다) | 액션 호출 |
 | `Session.compareMode` · `Session.paused` | C(발표자 화면에서만) | 쓰기. A는 포착마다 읽는다. F19는 비활성 안내라 상태가 없다 |
 | `Plugin.manifest` | A (`applyManifest(pluginId, json)` → `validateManifest` 통과 시만, 실패 시 기존 값 유지·오류 반환) | 액션 호출 |
 | `Plugin.status` (`loading/ready/stopped/terminated`) · `Plugin.runtimeId` · `Plugin.runtimePolicy` · 전달 게이트(`Plugin.gateOpen`) | B(`setPluginRuntime`). `runtimeId`는 iframe을 새로 만들 때마다 바뀐다. `stopped`는 전환 실패, `terminated`는 꺼짐이며 둘 다 `enabled = false`가 되어 사용자가 다시 켜야 풀린다. 전환 중에는 `loading`. 전환을 일으키는 C 액션은 같은 set에서 게이트를 닫는다(`docs/designs/core-store.md` §2.1) | 읽기. 다시 켜기는 액션 `setPluginEnabled` |
