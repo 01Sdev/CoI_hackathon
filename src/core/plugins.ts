@@ -44,7 +44,8 @@ export const PLUGIN_SEEDS: readonly PluginSeed[] = [
       maxPerMinute: 6,
       network: ['$ORIGIN'],
     }),
-    enabledByDefault: false,
+    // 켜 둔다: 글래스 시야 화면에는 앱 관리가 없다(?tools일 때만). 동의가 없으면 사람 조각을 보내지 않으므로 켜 둬도 나가는 것은 없다.
+    enabledByDefault: true,
   },
   {
     id: 'tamper',
