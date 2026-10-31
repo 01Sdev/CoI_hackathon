@@ -86,6 +86,7 @@ flowchart LR
 | Counter(최근 10초·60초 숫자 창, 세션 누적) | 스토어 액션이 쌓는다: `markDelivery(dispatched)`(B가 부름), `addLog(hold)`·`recordRuns`(A가 부름), `setResult(source api)`(B). Delivery 행에서 다시 세지 않는다. 이미지는 없다 | 읽기 |
 | LogEntry | A(`deliver/hold/skip`), B(`violation`). 화면 표시용 최근 100건, 같은 플러그인·같은 사유 `skip`은 10초에 1번. 밀려나도 Counter는 줄지 않는다 | 읽기. 밀려난 썸네일 해제는 스토어가 한다 |
 | 결과 줄(UI 상태) | B | 읽기 |
+| 판정 엔진 상태 `engine`(`idle`/`loading`/`ready`/`failed`, 받은 바이트·전체 바이트, 실패 사유 한 줄) | A(`setEngine`). 모델을 받기 시작하면 `loading`, 첫 판정이 돌면 `ready`, GPU·CPU 모두 실패하면 `failed`(NFR-022, 전달 정지). 새 세션에도 유지. 2026-10-31 C가 시작·로딩·실패 화면용으로 추가 | 읽기. `ready`가 아니어도 `liveObservation`이 들어오면 판정 중으로 본다 |
 | 플러그인 목록(calorie, tamper, hello)과 시작 매니페스트 | `core/plugins.ts`의 `PLUGIN_SEEDS`. 스토어가 만들어질 때 Plugin 행을 채운다. Worker 코드는 B가 `plugins/`에 두고 다른 트랙은 import하지 않는다 | 읽기(편집기·변조 토글). 켜기/끄기는 액션 `setPluginEnabled` |
 
 ## 3. 인터페이스 계약
