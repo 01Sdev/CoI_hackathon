@@ -28,7 +28,7 @@ function devCalorieApi(): Plugin {
               body: method === 'GET' || method === 'HEAD' ? undefined : Buffer.concat(chunks),
             });
             const response =
-              method === 'POST' ? await POST(request) : method === 'OPTIONS' ? await OPTIONS(request) : new Response(null, { status: 405 });
+              method === 'POST' ? await POST(request) : method === 'OPTIONS' ? OPTIONS() : new Response(null, { status: 405 });
             res.statusCode = response.status;
             response.headers.forEach((v, k) => res.setHeader(k, v));
             res.end(Buffer.from(await response.arrayBuffer()));

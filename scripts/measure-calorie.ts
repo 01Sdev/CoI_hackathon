@@ -1,7 +1,7 @@
 // V5 실측: 피자 JPEG(긴 변 256px)를 /api/calorie와 같은 인자로 모델에 N번 보내 응답 시간(p50·p95)·토큰·비용을 잰다.
 // 실행: ANTHROPIC_API_KEY가 서버 쪽 환경 변수에 있을 때만. 키 값은 출력하지 않는다.
 //   npx tsx scripts/measure-calorie.ts <피자.jpg> [횟수=10] [x-label=pizza]
-// 시간 제한·재시도는 함수와 같다(2.7초, 재시도 없음). 시간 초과도 한 번으로 센다.
+// 시간 제한·재시도는 함수와 같다(2.2초, 재시도 없음). 시간 초과도 한 번으로 센다. p95가 2.2초를 넘으면 IF-08 시간 제한 행을 다시 본다.
 
 import Anthropic from '@anthropic-ai/sdk';
 import { readFileSync } from 'node:fs';
@@ -32,7 +32,7 @@ for (let i = 0; i < count; i++) {
     const m = await client.messages.create(calorieRequest(body, label, model));
     const ms = performance.now() - t0;
     const out = answerFromMessage(m, label);
-    rows.push({ ms, ok: !!out, text: out?.text ?? `502(${m.stop_reason})`, input: m.usage.input_tokens, output: m.usage.output_tokens });
+    rows.push({ ms, ok: out.ok, text: out.ok ? out.text : `502(${out.reason})`, input: m.usage.input_tokens, output: m.usage.output_tokens });
   } catch (err) {
     rows.push({ ms: performance.now() - t0, ok: false, text: `502(${(err as Error).constructor.name})`, input: 0, output: 0 });
   }
