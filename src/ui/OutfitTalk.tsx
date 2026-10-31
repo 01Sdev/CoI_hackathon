@@ -87,7 +87,7 @@ export function OutfitTalk({ size }: { size: Size }) {
   function submit() {
     if (engine === 'scribe') {
       // 멈추고 확정 글자로 묻는다. 받아쓰기는 바로 다시 듣는다.
-      if (scribe.state !== 'listening') return;
+      if (scribe.state !== 'listening' && scribe.state !== 'paused') return;
       void scribe.finish().then((t) => (t ? send(t) : setHint('못 알아들었어요 · 다시 말해 주세요')));
       return;
     }
@@ -186,7 +186,7 @@ export function OutfitTalk({ size }: { size: Size }) {
                 >
                   <span className="fm-talkbar__dot" data-state={finishing ? 'transcribing' : liveState} aria-hidden="true" />
                   <span className="fm-talkbar__text" data-empty={!question || finishing}>
-                    {finishing ? '받아쓰는 중…' : shown || (liveState === 'listening' ? '듣는 중 · 말한 뒤 탭하세요' : '마이크 켜는 중…')}
+                    {finishing ? '받아쓰는 중…' : shown || (liveState === 'listening' ? '듣는 중 · 말한 뒤 탭하세요' : liveState === 'paused' ? '멈췄어요 · 탭하면 보내요' : '마이크 켜는 중…')}
                   </span>
                 </button>
               )}
