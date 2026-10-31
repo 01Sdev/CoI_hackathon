@@ -9,9 +9,11 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
     "check:core": "tsx scripts/check-core.ts",
-    "check:plugins": "tsx scripts/check-plugins.ts"
+    "check:plugins": "tsx scripts/check-plugins.ts",
+    "check:api": "tsx scripts/check-api.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.135.0",
     "@mediapipe/tasks-vision": "1.2.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",

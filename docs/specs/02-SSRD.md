@@ -166,14 +166,14 @@ type OutwardMessage = { type: 'outward'; apps: number; compareMode: boolean; at:
 | 항목 | 계약 |
 | --- | --- |
 | 요청 | `POST {apiBase}/api/calorie`, `Content-Type: image/jpeg`, 본문 = `delivery.blob` **그대로**(base64·multipart·재인코딩 금지 → `Delivery.bytes` = 네트워크 탭 요청 본문 크기, F6), 선택 헤더 `x-label: <objectLabel>`(COCO 영문 물체 라벨. 장면 분류 `food`를 넣지 않는다) |
-| 응답 200 | 본문 한 줄 `<음식> 약 <숫자>kcal`(예: `피자 약 285kcal`) 또는 `음식 아님`. `Content-Type: text/plain; charset=utf-8` [제안] |
+| 응답 200 | 본문 한 줄 `<음식> 약 <숫자>kcal`(예: `피자 약 285kcal`) 또는 `음식 아님`. `Content-Type: text/plain; charset=utf-8`(트랙 B 결정, `api/calorie.ts`). `Cache-Control: no-store` |
 | 받은 본문 확인 (P1) | 서버가 실제로 읽은 요청 본문의 바이트 수와 SHA-256을 응답 헤더 `X-Famelet-Body-Bytes`, `X-Famelet-Body-SHA256`으로 돌려준다. 이미지는 저장하지 않는다. 데모 5단계에서 "서버가 받은 바이트 = 로그 바이트"를 보여 주는 근거로 쓴다. 네트워크 탭의 `Content-Length`는 HTTP/2에서 생략될 수 있어 보조 값으로만 쓴다. 이 대조는 브라우저→`/api/calorie` 구간까지이며, 서버가 AI 공급자로 보내는 요청까지 같다는 뜻은 아니다 |
-| 오류 | 600KB 초과 413, 이미지 아님 415, 요청 수 한도 초과 429, 2.7초 안에 상류 응답 없음 502. 오류 본문 형식 미정 |
-| 요청 제한 | CORS가 `*`라 아무 사이트나 직접 호출해 AI 비용을 쓸 수 있다. 실제 상한은 **Anthropic 콘솔의 지출 한도**로 건다. 서버 함수 안의 요청 수 제한(초과 시 429)은 인스턴스마다 따로 세므로 배포 전체의 제한이 아니며, 보조 수단으로만 둔다. Vercel WAF 요청 제한은 팀 계정에서 쉽게 켤 수 있을 때만 추가한다 |
-| CORS | 모든 응답 `Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: X-Famelet-Body-Bytes, X-Famelet-Body-SHA256`. `OPTIONS` → 204 + `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: content-type, x-label`. iPhone Safari 실측(S12): HTTPS Worker에서 `Origin: null`, `image/jpeg`, `x-label: banana`로 OPTIONS 뒤 POST가 도달해 200을 받았다(시험 서버는 Allow-Methods에 `GET, OPTIONS`도 넣었다. 실제 API·오류·요청 제한은 미검증). 전달 수는 POST만 센다 |
+| 오류 | 600KB(600×1024바이트) 초과 413(`Content-Length`를 먼저 보고, 실제 본문도 본다), 이미지 아님 415(`Content-Type`이 `image/jpeg`가 아니거나 본문이 `FF D8 FF`로 시작하지 않음), 요청 수 한도 초과 429(`Retry-After: 10`), 2.7초 안에 상류 응답 없음·상류 오류·키 없음·`stop_reason ≠ end_turn`·JSON/스키마 위반 502. 오류 본문은 짧은 영문 한 줄(`text/plain`). GET 등 다른 메서드는 405. 본문을 읽은 뒤의 응답(413·415·502·200)에는 받은 본문 헤더를 붙인다 |
+| 요청 제한 | CORS가 `*`라 아무 사이트나 직접 호출해 AI 비용을 쓸 수 있다. 실제 상한은 **Anthropic 콘솔의 지출 한도**로 건다. 서버 함수 안의 요청 수 제한(초과 시 429)은 인스턴스마다 따로 세므로 배포 전체의 제한이 아니며, 보조 수단으로만 둔다. Vercel WAF 요청 제한은 팀 계정에서 쉽게 켤 수 있을 때만 추가한다 값은 인스턴스당 분당 60건(트랙 B 결정, FR-053의 "30 이상") |
+| CORS | 모든 응답 `Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: X-Famelet-Body-Bytes, X-Famelet-Body-SHA256, X-Famelet-Kcal-Clamped`. `OPTIONS` → 204 + `Access-Control-Max-Age: 600` + `Access-Control-Allow-Methods: POST`, `Access-Control-Allow-Headers: content-type, x-label`. iPhone Safari 실측(S12): HTTPS Worker에서 `Origin: null`, `image/jpeg`, `x-label: banana`로 OPTIONS 뒤 POST가 도달해 200을 받았다(시험 서버는 Allow-Methods에 `GET, OPTIONS`도 넣었다. 실제 API·오류·요청 제한은 미검증). 전달 수는 POST만 센다 |
 | 서버 | 이미지 저장·로깅 안 함. `ANTHROPIC_API_KEY`(클라이언트에 두지 않음), `CALORIE_MODEL`(기본 `claude-haiku-5-5`). 모델 호출 방식은 아래 "서버의 모델 호출" |
 | 시간 제한 | 플러그인은 3초 안에 응답이 없으면 요청을 중단하고 고정표로 넘어간다 [팀원 D7]. 서버는 상류(모델) 응답을 **2.7초**까지만 기다리고 502를 준다(2026-10-31, 8초에서 줄임). 플러그인이 3초에 포기한 뒤까지 서버가 기다리면 비용만 들고 결과는 버려지기 때문이다. SDK 재시도는 끈다(`maxRetries: 0`) |
-| 플러그인 폴백 | `apiBase: null`(비교 모드), 네트워크 오류·CSP 차단·3초 초과·413·415·429·502 등 비 200 → `objectLabel`로 고정표에서 `text` 생성, `source: 'fallback'`. 표(kcal): banana 바나나 105, apple 사과 95, orange 오렌지 62, donut 도넛 250, pizza 피자 285, sandwich 샌드위치 300, cake 케이크 350, hot dog 핫도그 290, broccoli 브로콜리 30, carrot 당근 25. 표에 없는 음식 라벨(`bowl`·`cup`)은 "음식(종류 미상)" [제안] |
+| 플러그인 폴백 | `apiBase: null`(비교 모드), 네트워크 오류·CSP 차단·3초 초과·413·415·429·502 등 비 200 → `objectLabel`로 고정표에서 `text` 생성, `source: 'fallback'`. 표(kcal): banana 바나나 105, apple 사과 95, orange 오렌지 62, donut 도넛 250, pizza 피자 285, sandwich 샌드위치 300, cake 케이크 350, hot dog 핫도그 290, broccoli 브로콜리 30, carrot 당근 25. 표에 없는 음식 라벨(`bowl`·`cup`)은 "음식(칼로리 정보 없음)"(03-SRS FR-032 결정에 맞춤) |
 
 #### 서버의 모델 호출 (2026-10-31 추가)
 
