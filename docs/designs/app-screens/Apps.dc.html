@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>S2 앱 목록</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face{font-family:'Pretendard Variable';src:url(../../../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2) format('woff2-variations'),url(../../../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2) format('woff2');font-weight:45 920;font-style:normal;font-display:swap}
+body{margin:0}
+a{color:#ffffff;text-decoration:none}a:hover{color:#cfc3b4}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0c0b0a; color: #ffffff; font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <header style="padding: 24px 16px 16px; display: flex; flex-direction: column; gap: 8px">
+    <h1 style="margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.4px">앱</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #cfc3b4">앱은 framelet이 흰 틀 안에서 잘라 낸 조각만 받아요. 연결하기 전에 무엇을 받는지 확인하세요.</p>
+  </header>
+
+  <div style="padding: 0 16px 12px; display: flex; gap: 8px; font-size: 13px; color: #cfc3b4">
+    <span>앱 3개</span><span aria-hidden="true">·</span><span>연결된 앱 0개</span>
+  </div>
+
+  <ul style="list-style: none; margin: 0; padding: 0 16px; display: flex; flex-direction: column; gap: 12px">
+    <li style="padding: 16px; border-radius: 18px; background: rgb(30 26 22 / 0.74); border: 1.5px solid rgb(255 255 255 / 0.18); display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="width: 40px; height: 40px; border-radius: 9999px; background: rgb(255 255 255 / 0.1); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">칼</span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 16px; font-weight: 600">칼로리</span>
+          <span style="font-size: 13px; color: #cfc3b4">음식 칼로리 추정</span>
+        </div>
+        <a href="Consent.dc.html" style="height: 44px; padding: 0 16px; border-radius: 9999px; background: #ffffff; color: #0c0b0a; font-size: 14px; font-weight: 600; display: flex; align-items: center">연결</a>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #cfc3b4">
+        <span style="padding: 4px 8px; border-radius: 8px; background: rgb(36 31 27 / 0.55)">음식 앞에서만</span>
+        <span style="padding: 4px 8px; border-radius: 8px; background: rgb(36 31 27 / 0.55)">긴 변 256px</span>
+        <span style="padding: 4px 8px; border-radius: 8px; background: rgb(36 31 27 / 0.55)">분당 6장</span>
+        <span style="padding: 4px 8px; border-radius: 8px; background: rgb(36 31 27 / 0.55)">framelet 서버로</span>
+      </div>
+    </li>
+
+    <li style="padding: 16px; border-radius: 18px; background: rgb(30 26 22 / 0.74); border: 1.5px solid rgb(255 255 255 / 0.18); display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="width: 40px; height: 40px; border-radius: 9999px; background: rgb(255 255 255 / 0.1); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">장</span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 16px; font-weight: 600">장면 기록</span>
+          <span style="font-size: 13px; color: #cfc3b4">두 번째 앱 · 같은 조각을 더 작게</span>
+        </div>
+        <a href="Consent.dc.html" style="height: 44px; padding: 0 16px; border: 1.5px solid rgb(255 255 255 / 0.18); border-radius: 9999px; color: #ffffff; font-size: 14px; font-weight: 500; display: flex; align-items: center">연결</a>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #cfc3b4">
+        <span style="padding: 4px 8px; border-radius: 8px; background: rgb(36 31 27 / 0.55)">음식 앞에서만</span>
+        <span style="padding: 4px 8px; border-radius: 8px; background: rgb(36 31 27 / 0.55)">긴 변 64px</span>
+        <span style="padding: 4px 8px; border-radius: 8px; background: rgb(36 31 27 / 0.55)">분당 6장</span>
+        <span style="padding: 4px 8px; border-radius: 8px; background: rgb(36 31 27 / 0.55)">밖으로 안 보냄</span>
+      </div>
+    </li>
+
+    <li style="padding: 16px; border-radius: 18px; background: rgb(30 26 22 / 0.74); border: 1.5px solid rgb(255 255 255 / 0.18); display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <span style="width: 40px; height: 40px; border-radius: 9999px; background: rgb(255 255 255 / 0.1); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600">변</span>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px">변조 시험 <span style="padding: 2px 8px; border: 1.5px solid rgb(255 255 255 / 0.18); border-radius: 9999px; font-size: 11px; font-weight: 500; color: #cfc3b4">시험용</span></span>
+          <span style="font-size: 13px; color: #cfc3b4">차단이 되는지 확인하는 앱</span>
+        </div>
+        <a href="Consent.dc.html" style="height: 44px; padding: 0 16px; border: 1.5px solid rgb(255 255 255 / 0.18); border-radius: 9999px; color: #ffffff; font-size: 14px; font-weight: 500; display: flex; align-items: center">연결</a>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #cfc3b4">
+        <span style="padding: 4px 8px; border-radius: 8px; background: rgb(36 31 27 / 0.55)">음식 앞에서만</span>
+        <span style="padding: 4px 8px; border-radius: 8px; background: rgb(36 31 27 / 0.55)">긴 변 256px</span>
+        <span style="padding: 4px 8px; border-radius: 8px; background: rgb(36 31 27 / 0.55)">밖으로 안 보냄</span>
+      </div>
+    </li>
+  </ul>
+
+  <div style="flex: 1"></div>
+
+  <nav aria-label="탭" style="height: 76px; box-sizing: border-box; padding: 8px 16px 16px; background: rgb(30 26 22 / 0.74); display: flex; justify-content: space-around; align-items: center">
+    <a href="Main.dc.html" style="min-width: 72px; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; color: #cfc3b4">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+      보기
+    </a>
+    <a href="Apps.dc.html" aria-current="page" style="min-width: 72px; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; color: #ffffff">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2"></rect><rect x="13" y="4" width="7" height="7" rx="2"></rect><rect x="4" y="13" width="7" height="7" rx="2"></rect><rect x="13" y="13" width="7" height="7" rx="2"></rect></svg>
+      앱
+    </a>
+    <a href="Activity.dc.html" style="min-width: 72px; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; color: #cfc3b4">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+      기록
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

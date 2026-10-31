@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>S1 보기</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face{font-family:'Pretendard Variable';src:url(../../../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2) format('woff2-variations'),url(../../../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2) format('woff2');font-weight:45 920;font-style:normal;font-display:swap}
+body{margin:0}
+a{color:#ffffff;text-decoration:none}a:hover{color:#cfc3b4}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0c0b0a; color: #ffffff; font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <header style="height: 64px; box-sizing: border-box; padding: 12px 16px 8px; display: flex; align-items: center; justify-content: space-between">
+    <span style="height: 40px; padding: 0 16px; border-radius: 9999px; background: rgb(30 26 22 / 0.74); border: 1.5px solid rgb(255 255 255 / 0.18); display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; letter-spacing: -0.2px"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 9999px; background: #71bfff"></span>framelet</span>
+    <button type="button" style="height: 44px; padding: 0 16px; border: 1.5px solid rgb(255 255 255 / 0.18); border-radius: 9999px; background: rgb(30 26 22 / 0.74); color: #ffffff; font: inherit; font-size: 14px; display: flex; align-items: center; gap: 8px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="9" y1="5" x2="9" y2="19"></line><line x1="15" y1="5" x2="15" y2="19"></line></svg>
+      전달 일시 정지
+    </button>
+  </header>
+
+  <section aria-label="카메라 화면" style="position: relative; margin: 0 16px; height: 440px; border-radius: 28px; background: #1e1a16; overflow: hidden">
+    <img src="assets/camera.jpg" alt="카메라에 비친 카페 테이블 위 피자" style="position: absolute; left: 0; top: 0; width: 358px; height: 440px; object-fit: cover">
+
+    <div style="position: absolute; left: 12px; right: 12px; top: 12px; padding: 12px 16px; border-radius: 18px; background: rgb(30 26 22 / 0.74); border: 1.5px solid rgb(255 255 255 / 0.18); backdrop-filter: blur(22px); display: flex; align-items: center; gap: 12px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 14px; font-weight: 600">framelet → 칼로리</span>
+        <span style="font-size: 12px; color: #cfc3b4; font-family: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace">사진 1장 · 11.2KB · 가릴 사람 없음 · 방금</span>
+      </div>
+    </div>
+
+    <div aria-label="앱에 넘길 흰 틀" style="position: absolute; left: 22px; top: 262px; width: 318px; height: 178px; box-sizing: border-box; border: 2px solid #ffffff; border-radius: 14px"></div>
+    <span style="position: absolute; left: 16px; top: 256px; width: 12px; height: 12px; border-radius: 4px; background: #ffffff"></span>
+    <span style="position: absolute; left: 334px; top: 256px; width: 12px; height: 12px; border-radius: 4px; background: #ffffff"></span>
+    <span style="position: absolute; left: 16px; top: 428px; width: 12px; height: 12px; border-radius: 4px; background: #ffffff"></span>
+    <span style="position: absolute; left: 334px; top: 428px; width: 12px; height: 12px; border-radius: 4px; background: #ffffff"></span>
+    <span style="position: absolute; left: 32px; top: 272px; padding: 4px 12px; border-radius: 9999px; background: #ffffff; color: #0c0b0a; font-size: 12px; font-weight: 500">음식 앞 · 피자</span>
+
+    <div style="position: absolute; left: 12px; top: 218px; padding: 8px 12px; border-radius: 9999px; background: rgb(30 26 22 / 0.74); border: 1.5px solid rgb(255 255 255 / 0.18); backdrop-filter: blur(22px); display: flex; align-items: center; gap: 8px; font-size: 13px">
+      <span style="width: 8px; height: 8px; border-radius: 9999px; background: #4ade80"></span>
+      앱에 반영된 사람 0명 · 보호됨
+    </div>
+  </section>
+
+  <section aria-label="앱 결과" style="margin: 16px 16px 0; padding: 12px; border-radius: 28px; background: rgb(30 26 22 / 0.74); border: 1.5px solid rgb(255 255 255 / 0.18); display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 4px">
+      <span style="font-size: 13px; color: #cfc3b4">앱 결과</span>
+      <a href="AppDetail.dc.html" style="font-size: 13px; color: #cfc3b4; display: flex; align-items: center; gap: 4px; min-height: 32px">
+        이 앱이 받은 것
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </a>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 0 4px">
+      <span style="width: 32px; height: 32px; border-radius: 9999px; background: rgb(255 255 255 / 0.1); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600">칼</span>
+      <span style="font-size: 15px; font-weight: 600">칼로리</span>
+      <span style="padding: 2px 8px; border: 1.5px solid rgb(255 255 255 / 0.18); border-radius: 9999px; font-size: 12px; color: #cfc3b4">앱이 보낸 결과</span>
+    </div>
+    <div style="padding: 16px; border-radius: 18px; background: #ffffff; color: #0c0b0a; display: flex; align-items: center; justify-content: space-between">
+      <span style="font-size: 22px; font-weight: 600; letter-spacing: -0.3px">피자 약 285kcal</span>
+      <span style="padding: 4px 8px; border-radius: 8px; background: rgb(12 11 10 / 0.12); font-size: 12px; color: #0c0b0a">고정표</span>
+    </div>
+  </section>
+
+  <div style="flex: 1"></div>
+
+  <nav aria-label="탭" style="height: 76px; box-sizing: border-box; padding: 8px 16px 16px; background: rgb(30 26 22 / 0.74); display: flex; justify-content: space-around; align-items: center">
+    <a href="Main.dc.html" aria-current="page" style="min-width: 72px; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; color: #ffffff">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+      보기
+    </a>
+    <a href="Apps.dc.html" style="min-width: 72px; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; color: #cfc3b4">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2"></rect><rect x="13" y="4" width="7" height="7" rx="2"></rect><rect x="4" y="13" width="7" height="7" rx="2"></rect><rect x="13" y="13" width="7" height="7" rx="2"></rect></svg>
+      앱
+    </a>
+    <a href="Activity.dc.html" style="min-width: 72px; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; color: #cfc3b4">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+      기록
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

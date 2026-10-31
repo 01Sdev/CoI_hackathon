@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>S6 기록 상세</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+@font-face{font-family:'Pretendard Variable';src:url(../../../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2) format('woff2-variations'),url(../../../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2) format('woff2');font-weight:45 920;font-style:normal;font-display:swap}
+body{margin:0}
+a{color:#ffffff;text-decoration:none}a:hover{color:#cfc3b4}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0c0b0a; color: #ffffff; font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Apple SD Gothic Neo', sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <div style="height: 56px; box-sizing: border-box; padding: 8px 8px 0; display: flex; align-items: center">
+    <a href="Activity.dc.html" aria-label="기록으로" style="width: 44px; height: 44px; border-radius: 9999px; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+    </a>
+    <span style="font-size: 15px; font-weight: 500">기록 상세</span>
+  </div>
+
+  <header style="padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 4px">
+    <h1 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.3px">framelet → 칼로리</h1>
+    <span style="font-size: 14px; color: #cfc3b4">11:42:25 · 사진 1장</span>
+  </header>
+
+  <figure style="margin: 0 16px; display: flex; flex-direction: column; gap: 8px">
+    <div style="position: relative; height: 200px; border-radius: 18px; background: #000000; overflow: hidden">
+      <img src="assets/piece1.jpg" alt="칼로리에 보낸 피자 조각" style="position: absolute; left: 0; top: 0; width: 358px; height: 200px; object-fit: contain">
+    </div>
+    <figcaption style="font-size: 12px; color: #cfc3b4">칼로리가 받은 그대로예요. 흰 틀 밖은 보내지 않았어요.</figcaption>
+  </figure>
+
+  <dl style="margin: 16px 16px 0; padding: 4px 16px; border-radius: 18px; background: rgb(30 26 22 / 0.74); border: 1.5px solid rgb(255 255 255 / 0.18); display: grid; grid-template-columns: 112px 1fr; font-size: 14px">
+    <dt style="padding: 10px 0; color: #cfc3b4">받은 앱</dt><dd style="margin: 0; padding: 10px 0">칼로리</dd>
+    <dt style="padding: 10px 0; color: #cfc3b4">보낸 크기</dt><dd style="margin: 0; padding: 10px 0">11.2KB · 원본의 7.9%</dd>
+    <dt style="padding: 10px 0; color: #cfc3b4">흰 틀</dt><dd style="margin: 0; padding: 10px 0">432×768 안에서 자름</dd>
+    <dt style="padding: 10px 0; color: #cfc3b4">가림</dt><dd style="margin: 0; padding: 10px 0">가릴 사람이 없었어요</dd>
+    <dt style="padding: 10px 0; color: #cfc3b4">나가기 전 검사</dt><dd style="margin: 0; padding: 10px 0; display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 9999px; background: #4ade80"></span>남은 얼굴 0개</dd>
+    <dt style="padding: 10px 0; color: #cfc3b4">앱 수신</dt><dd style="margin: 0; padding: 10px 0">확인됨 · 같은 해시로 받음</dd>
+  </dl>
+
+  <details style="margin: 8px 16px 0; padding: 0 16px; border-radius: 12px; background: rgb(30 26 22 / 0.74); border: 1.5px solid rgb(255 255 255 / 0.18); font-size: 13px">
+    <summary style="min-height: 44px; display: flex; align-items: center; color: #cfc3b4; cursor: pointer">증명 값 보기</summary>
+    <p style="margin: 0 0 12px; font-family: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace; font-size: 12px; color: #cfc3b4; word-break: break-all">sha-256 [보낸 조각의 해시]</p>
+  </details>
+
+  <section aria-label="앱이 보낸 결과" style="margin: 16px 16px 0; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cfc3b4">
+      <span>칼로리가 보낸 결과</span>
+    </div>
+    <div style="padding: 16px; border-radius: 18px; background: #ffffff; color: #0c0b0a; display: flex; align-items: center; justify-content: space-between">
+      <span style="font-size: 18px; font-weight: 600">피자 약 285kcal</span>
+      <span style="padding: 4px 8px; border-radius: 8px; background: rgb(12 11 10 / 0.12); font-size: 12px; color: #0c0b0a">고정표</span>
+    </div>
+  </section>
+
+  <div style="flex: 1"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

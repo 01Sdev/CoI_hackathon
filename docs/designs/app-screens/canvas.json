@@ -1,0 +1,59 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-31T16:55:00Z" },
+  "title": "framelet 앱 화면 설계",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Apps.dc.html": { "x": 0, "y": 0, "w": 390, "h": 844, "title": "P2 앱 목록", "is_interactive": true },
+    "Consent.dc.html": { "x": 470, "y": 0, "w": 390, "h": 844, "title": "P4 연결 요청(시각 데이터 규약)", "is_interactive": true },
+    "Main.dc.html": { "x": 940, "y": 0, "w": 390, "h": 844, "title": "P1 보기", "is_interactive": true },
+    "Activity.dc.html": { "x": 1410, "y": 0, "w": 390, "h": 844, "title": "P5 전체 기록", "is_interactive": true },
+    "ActivityDetail.dc.html": { "x": 1880, "y": 0, "w": 390, "h": 844, "title": "P6 기록 상세", "is_interactive": true },
+    "AppDetail.dc.html": { "x": 2350, "y": 0, "w": 390, "h": 844, "title": "P3 앱 상세", "is_interactive": true }
+  },
+  "order": [
+    "Main.dc.html",
+    "Apps.dc.html",
+    "Consent.dc.html",
+    "Activity.dc.html",
+    "ActivityDetail.dc.html",
+    "AppDetail.dc.html"
+  ],
+  "notes": {
+    "flowtitle": { "x": 0, "y": -300, "text": "framelet 휴대폰 앱 · 보기 · 앱 · 기록", "kind": "title1", "maxW": 2740 },
+    "rule": {
+      "x": 0,
+      "y": 920,
+      "w": 560,
+      "size": "m",
+      "fill": "gray",
+      "text": "시각 규칙: framelet 기존 디자인 시스템(docs/designs/design-system.md, src/ui/theme.css)을 따른다. 글꼴 Pretendard, 판독값 고정폭, 바탕 #0C0B0A, 유리 패널 74%와 1.5px 외곽선, 의미색 초록·주황·빨강, 브랜드 점 Lens 파랑, 모서리 캡슐·카드 18·흰 틀 14·패널 28. 나누는 규칙: 구별은 색이 아니라 위치와 구조로 한다. 앱이 보낸 결과는 카메라 아래 '앱 결과' 칸의 안쪽 카드에만 나오고, 그 위 머리줄(글자 아이콘, 이름, '앱이 보낸 결과')은 framelet이 그린다. 앱 문자열은 그림 문자·방향 문자·framelet 문구를 걸러서 넣는다. 전달 신호는 'framelet → 앱' 방향으로 쓴다."
+    },
+    "story": {
+      "x": 640,
+      "y": 920,
+      "w": 560,
+      "size": "m",
+      "fill": "blue",
+      "text": "시연 순서: 앱 목록에서 칼로리를 켠다 → 연결 요청(바꿀 수 없는 보장 + 요청/허용 두 칸) → 허용 → 보기에서 피자를 흰 틀 안에 → 'framelet → 칼로리' 전달, 앱 카드에 결과 → 기록 → 기록 상세 → 앱 상세(이 앱이 받은 것)."
+    },
+    "decision": {
+      "x": 1280,
+      "y": 920,
+      "w": 560,
+      "size": "m",
+      "fill": "green",
+      "text": "결정(2026-11-01): 안 B. 결정 N12('승인 화면 없음')를 유지한다. 실제 앱의 P4는 허용/거절 버튼 없이 닫기만 있는 '규약 보기'이고, 앱은 지금처럼 스위치로 켠다. 이 캔버스의 P4(연결 요청)는 시연 영상에서 '다음 단계'로만 쓴다. 마감 전 구현(트랙 C): 앱 결과 분리, 전달 신호 문구, 앱 문자열 거르기, 규약 보기."
+    }
+  },
+  "designSystems": [
+    {
+      "title": "framelet",
+      "namespace": "framelet",
+      "artifact": "https://claude.ai/artifact/UEd8UF2Fy9C82zmymMrqxz",
+      "version": "1793471356-ff8c",
+      "copiedAt": "2026-10-31T18:31:00Z"
+    }
+  ]
+}
