@@ -26,18 +26,22 @@ details[open]>summary [data-chev]{transform:rotate(90deg)}
     </button>
   </header>
 
-  <section aria-label="스마트 글래스 화면" style="position: relative; margin: 0 16px; height: 588px; border-radius: 28px; background: #1e1a16; overflow: hidden">
+  <section aria-label="스마트 글래스 화면" style="position: relative; margin: 0 16px; height: 588px; border-radius: 10px; background: #1e1a16; overflow: hidden">
     <img src="assets/camera.jpg" alt="카메라에 비친 카페 테이블 위 피자" style="position: absolute; left: 0; top: 0; width: 358px; height: 588px; object-fit: cover">
 
-    <!-- framelet(플랫폼): 흰 프레임 하나와 그 오른쪽 위 가장자리의 사람 아이콘·숫자뿐 -->
-    <div aria-label="앱에 넘길 흰 틀" style="position: absolute; left: 10px; top: 392px; width: 338px; height: 186px; box-sizing: border-box; border: 2px solid #ffffff; border-radius: 14px"></div>
-    <span style="position: absolute; left: 4px; top: 386px; width: 12px; height: 12px; border-radius: 4px; background: #ffffff"></span>
-    <span style="position: absolute; left: 342px; top: 386px; width: 12px; height: 12px; border-radius: 4px; background: #ffffff"></span>
-    <span style="position: absolute; left: 4px; top: 572px; width: 12px; height: 12px; border-radius: 4px; background: #ffffff"></span>
-    <span style="position: absolute; left: 342px; top: 572px; width: 12px; height: 12px; border-radius: 4px; background: #ffffff"></span>
-    <div role="status" aria-label="앱에 반영된 사람 0명" style="position: absolute; right: 14px; top: 364px; height: 20px; display: flex; align-items: center; gap: 4px; color: #ffffff; font-family: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px rgb(0 0 0 / 0.6)">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"></path></svg>
-      0
+    <!-- framelet(플랫폼): #44 SelectionFrame. 흰 1px 틀, 네 모서리 ㄱ자·네 변 가운데 막대 손잡이, 틀 안 오른쪽 위 사람 아이콘·숫자뿐 -->
+    <div aria-label="앱에 넘길 흰 틀" style="position: absolute; left: 14px; top: 388px; width: 330px; height: 182px; box-sizing: border-box; border: 1px solid rgb(255 255 255 / 0.9); background: rgb(116 150 182 / 0.08); box-shadow: 0 0 1px rgb(0 0 0 / 0.4)"></div>
+    <span aria-hidden="true" style="position: absolute; left: 12px; top: 386px; width: 28px; height: 28px; box-sizing: border-box; border-style: solid; border-color: #ffffff; border-width: 4px 0 0 4px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6))"></span>
+    <span aria-hidden="true" style="position: absolute; left: 318px; top: 386px; width: 28px; height: 28px; box-sizing: border-box; border-style: solid; border-color: #ffffff; border-width: 4px 4px 0 0; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6))"></span>
+    <span aria-hidden="true" style="position: absolute; left: 12px; top: 544px; width: 28px; height: 28px; box-sizing: border-box; border-style: solid; border-color: #ffffff; border-width: 0 0 4px 4px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6))"></span>
+    <span aria-hidden="true" style="position: absolute; left: 318px; top: 544px; width: 28px; height: 28px; box-sizing: border-box; border-style: solid; border-color: #ffffff; border-width: 0 4px 4px 0; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6))"></span>
+    <span aria-hidden="true" style="position: absolute; left: 155px; top: 387px; width: 48px; height: 4px; background: #ffffff; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6))"></span>
+    <span aria-hidden="true" style="position: absolute; left: 155px; top: 567px; width: 48px; height: 4px; background: #ffffff; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6))"></span>
+    <span aria-hidden="true" style="position: absolute; left: 13px; top: 455px; width: 4px; height: 48px; background: #ffffff; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6))"></span>
+    <span aria-hidden="true" style="position: absolute; left: 341px; top: 455px; width: 4px; height: 48px; background: #ffffff; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.6))"></span>
+    <div role="status" aria-label="앱에 반영된 사람 0명" style="position: absolute; right: 22px; top: 396px; height: 24px; display: flex; align-items: center; gap: 5px; color: #111111">
+      <svg width="16" height="16" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true" style="display: block; overflow: visible; stroke: rgb(255 255 255 / 0.96); stroke-width: 3.5; stroke-linejoin: round; paint-order: stroke fill; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.4))"><circle cx="16" cy="8" r="8"></circle><path d="M0 32v-1c0-7.7 6.3-14 14-14h4c7.7 0 14 6.3 14 14v1Z"></path></svg>
+      <span style="font-size: 18px; line-height: 24px; font-weight: 600; font-variant-numeric: tabular-nums; transform: translateY(-1px); -webkit-text-stroke: 1px rgb(255 255 255 / 0.96); paint-order: stroke fill; text-shadow: 0 1px 1px rgb(0 0 0 / 0.4)">0</span>
     </div>
 
     <!-- 칼로리 플러그인: #41 FoodStatusPanel(금빛 상태창 + 금빛 연결선). 플랫폼은 선을 그리지 않는다 -->
