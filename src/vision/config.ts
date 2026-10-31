@@ -1,0 +1,87 @@
+// 트랙 A 판정·가림 설정값. 근거: docs/specs/03-SRS.md FR-006~018·FR-051, §4.1·§4.2, 05-코드-전-결정사항 리허설 튜닝 표.
+// 기준값은 리허설에서 이 파일만 고쳐 바꾼다(FR-051). 코드 안에 숫자를 다시 쓰지 않는다.
+
+/**
+ * 모델 파일 위치. 파일은 사용자가 직접 골라 public/models/에 둔다(PROGRESS.md "모델 파일").
+ * 다른 파일을 쓰려면 이 두 경로만 바꾼다. 파일이 없으면 판정이 멈추고 상태가 'missing'이 된다.
+ */
+export const MODEL_PATHS = {
+  /** MediaPipe ObjectDetector용 .tflite(메타데이터 포함, COCO pizza·person 클래스). 명세 기준 EfficientDet-Lite0. */
+  object: '/models/efficientdet_lite0.tflite',
+  /** MediaPipe FaceDetector용 .tflite. 명세 기준 BlazeFace short-range. */
+  face: '/models/blaze_face_short_range.tflite',
+} as const;
+
+/** public/wasm/ (postinstall이 node_modules/@mediapipe/tasks-vision/wasm/을 복사한다). CDN은 쓰지 않는다. */
+export const WASM_BASE = '/wasm';
+
+/**
+ * COCO 음식 라벨 12종. 10종은 고정 칼로리표(02-SSRD IF-08)와 같고 bowl·cup은 음식 맥락(PRD 위험 표).
+ * 05 결정 21의 "AGENTS.md 원문"은 레포 AGENTS.md에 없어 이 두 출처로 만들었다.
+ */
+export const FOOD_LABELS: readonly string[] = [
+  'banana',
+  'apple',
+  'sandwich',
+  'orange',
+  'broccoli',
+  'carrot',
+  'hot dog',
+  'pizza',
+  'donut',
+  'cake',
+  'bowl',
+  'cup',
+];
+
+export const VISION_CONFIG = {
+  // ── 0단계(FR-006~009) ──
+  /** 0단계 입력의 긴 변(px). 비율 유지(K-10). */
+  stage0LongSide: 640,
+  /** 0단계 목표 간격(ms). 5fps. */
+  stage0IntervalMs: 200,
+  /** ObjectDetector가 돌려주는 최소 점수. 아래 단계별 기준은 이보다 높거나 같아야 한다. */
+  detectorScoreFloor: 0.3,
+  /** 0단계에서 음식·사람 후보로 보는 최소 점수. */
+  stage0ScoreMin: 0.4,
+  /** 판정 영역: 화면 가운데, 가로·세로 각각 이 비율(K-09). 박스 중심이 이 안에 있어야 후보. */
+  centerRegion: 0.6,
+  /** 사람 대상 하한: 프레임 면적 대비(장면 선택에만 쓴다). */
+  personMinArea: 0.05,
+  /** 같은 라벨이 이만큼 이어지면 장면 확정(ms). */
+  confirmMs: 1000,
+
+  // ── 1단계 포착(FR-011·013) ──
+  /** 대상 박스를 변마다 넓히는 비율. */
+  targetExpand: 0.1,
+  /** 포착 프레임 재검출에서 사람으로 보는 최소 점수(안전 검사라 0단계보다 낮게, 필터 없음). */
+  safetyPersonScoreMin: 0.3,
+  /** 포착 프레임 재검출에서 대상(같은 라벨)으로 보는 최소 점수. */
+  recheckTargetScoreMin: 0.3,
+
+  // ── 2단계 가림·분기(FR-013~017, §4.2) ──
+  /** O: 사람 박스 ∩ 조각 > 조각 면적의 이 비율. */
+  overlapMin: 0.05,
+  /** P(보류): 사람 박스 ∩ 조각 ≥ 조각 면적의 이 비율. */
+  holdOverlap: 0.5,
+  /** F: BlazeFace 신뢰도. */
+  faceScoreMin: 0.5,
+  /** 얼굴 검출 전에 조각의 긴 변이 이보다 작으면 이 크기로 키운다. */
+  faceMinSide: 256,
+  /** 2b: 얼굴 박스를 변마다 넓히는 비율. */
+  faceExpand: 0.15,
+  /** 2c: 사람 박스 위쪽 비율. */
+  headTop: 0.4,
+  /** 2c: 머리 영역 좌우 여유(사람 박스 폭 대비, 변마다). */
+  headSide: 0.1,
+  /** 픽셀화 격자(가로·세로 칸 수). */
+  pixelGrid: 6,
+
+  // ── 비교 모드(F17) ──
+  /** raw 전달의 긴 변. 명세 "축소 여부 미정"이라 0단계와 같은 640으로 둔다. */
+  rawLongSide: 640,
+  /** raw JPEG 품질. */
+  rawQuality: 0.8,
+} as const;
+
+export type VisionConfig = typeof VISION_CONFIG;

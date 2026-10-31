@@ -6,3 +6,5 @@ dist/
 !.env.example
 .DS_Store
 *.log
+# postinstall이 node_modules에서 복사한다(scripts/copy-wasm.mjs)
+public/wasm/

@@ -7,8 +7,10 @@
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
+    "postinstall": "node scripts/copy-wasm.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
-    "check:core": "tsx scripts/check-core.ts"
+    "check:core": "tsx scripts/check-core.ts",
+    "check:runtime": "tsx scripts/check-runtime.ts"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.2.0",
