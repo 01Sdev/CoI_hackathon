@@ -101,6 +101,16 @@ export function formatBytes(n: number): string {
   return `${(kb / 1024).toFixed(1)}MB`;
 }
 
+/**
+ * 판정 모델 진행 한 토막: 전체 크기를 알면 "12.1MB / 13.4MB", 받은 양만 알면 "13.4MB 받음 · 21초", 아무것도 모르면 "21초".
+ * A는 두 파일의 크기를 다 알 때만 totalBytes를 채운다.
+ */
+export function modelProgressText(loaded: number | null, total: number | null, sec: number): string {
+  if (loaded !== null && total !== null && total > 0) return `${formatBytes(loaded)} / ${formatBytes(total)}`;
+  if (loaded) return `${formatBytes(loaded)} 받음 · ${sec}초`;
+  return `${sec}초`;
+}
+
 /** 받침에 맞춘 조사. josa('웹캠', '을/를') → '웹캠을', josa('후면 카메라', '으로/로') → '후면 카메라로'. */
 export function josa(word: string, pair: '을/를' | '으로/로' | '이/가'): string {
   const code = word.charCodeAt(word.length - 1) - 0xac00;

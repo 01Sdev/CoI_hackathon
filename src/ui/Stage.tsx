@@ -18,10 +18,10 @@ export function Stage({ children, className = '' }: { children?: ReactNode; clas
   );
 }
 
-/** 엔진이 준비되기 전에는 로딩, 실패하면 전달 정지 안내, 준비되면 ready(HUD). */
-export function EngineGate({ ready }: { ready: ReactNode }) {
+/** 엔진이 준비되기 전에는 로딩, 실패하면 전달 정지 안내, 준비되면 ready(HUD). 글래스 흐름은 loading·failed를 따로 넘긴다. */
+export function EngineGate({ ready, loading, failed }: { ready: ReactNode; loading?: ReactNode; failed?: ReactNode }) {
   const engine = useEngineView();
-  if (engine === 'failed') return <EngineFailPanel />;
-  if (engine !== 'ready') return <LoadingPanel />;
+  if (engine === 'failed') return <>{failed ?? <EngineFailPanel />}</>;
+  if (engine !== 'ready') return <>{loading ?? <LoadingPanel />}</>;
   return <>{ready}</>;
 }

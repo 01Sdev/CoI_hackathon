@@ -268,6 +268,77 @@
   outline-offset: 3px;
 }
 
+/* ── 글래스 흐름의 로딩·엔진 실패: 카드 없이 카메라 위 작은 글자(사용자 결정: 앱 같은 화면을 걷어 냄) ── */
+.fm-glassload {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  translate: -50% -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  inline-size: min(360px, calc(100% - 48px));
+  padding: 14px 18px;
+  /* 밝은 장면에서도 읽히게 글자 뒤만 옅게 어둡게(카드 테두리는 없음) */
+  background: radial-gradient(closest-side, rgb(0 0 0 / 0.6), rgb(0 0 0 / 0.4) 65%, transparent);
+  color: #fff;
+  text-align: center;
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.75),
+    0 0 10px rgb(0 0 0 / 0.45);
+  animation: fm-ar-in 240ms ease-out both;
+}
+.fm-glassload__spin {
+  --p: 30%;
+  inline-size: 22px;
+  block-size: 22px;
+  border-radius: 50%;
+  background: conic-gradient(#fff var(--p), rgb(255 255 255 / 0.22) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.6));
+}
+.fm-glassload__spin[data-known='false'] {
+  animation: fm-glassload-spin 0.9s linear infinite;
+}
+.fm-glassload__line {
+  font-size: 15px;
+  line-height: 21px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fm-glassload__sub {
+  font-size: 12px;
+  line-height: 17px;
+  color: rgb(255 255 255 / 0.78);
+}
+.fm-glassload__retry {
+  min-block-size: 44px;
+  margin-top: 4px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #000;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-shadow: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.fm-glassload__retry:focus-visible {
+  outline: 2px solid #19ae9f;
+  outline-offset: 3px;
+}
+@keyframes fm-glassload-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+
 @keyframes fm-ar-in {
   from {
     opacity: 0;
@@ -283,7 +354,9 @@
 @media (prefers-reduced-motion: reduce) {
   .fm-ar,
   .fm-launcher,
-  .fm-glasshome__toast {
+  .fm-glasshome__toast,
+  .fm-glassload,
+  .fm-glassload__spin {
     animation: none;
   }
   .fm-ar__icon {
