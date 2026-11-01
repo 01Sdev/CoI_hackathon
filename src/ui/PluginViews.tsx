@@ -4,13 +4,13 @@
 // 장면 기록 = 작은 글자 카드. 변조 시험 = framelet이 막은 횟수와 마지막 사유 카드(차단 시연. 글래스 흐름에는 기록 화면이 없다).
 // 앱 문자열은 sanitizeAppText를 거쳐 textContent로만 들어간다.
 
-import type { ComponentType } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useLensStore } from '../core/store';
 import type { PluginKind, ResultLine } from '../core/types';
 import { FoodStatusPanel } from './FoodStatusPanel';
 import { boxCenter, type Size } from './geometry';
-import { calorieView } from './labels';
+import { CALORIE_PANEL_HOLD_MS, caloriePanelHidden, calorieView } from './labels';
 import { logReason } from '../proof/format';
 import { sanitizeAppText } from './sanitize';
 
@@ -64,8 +64,22 @@ function CalorieView({ pluginId, line, size }: PluginViewProps) {
       };
     }),
   );
+  // 음식이 판정 영역에서 안 보이게 되면 CALORIE_PANEL_HOLD_MS 뒤 상태창을 내린다. 다시 보이면 바로 다시 띄운다(새 음식이면 새 창).
+  const foodSeen = v.box !== null;
+  const [goneAt, setGoneAt] = useState<number | null>(() => (foodSeen ? null : Date.now()));
+  const [, rerender] = useState(0);
+  useEffect(() => {
+    if (foodSeen) {
+      setGoneAt(null);
+      return;
+    }
+    setGoneAt(Date.now());
+    const t = window.setTimeout(() => rerender((n) => n + 1), CALORIE_PANEL_HOLD_MS);
+    return () => window.clearTimeout(t);
+  }, [foodSeen]);
   const result = calorieView(line, v.latestId ? { id: v.latestId, objectLabel: v.latestLabel } : null);
   const anchor = boxCenter(v.box, v.srcW > 0 ? { w: v.srcW, h: v.srcH } : null, size);
+  if (caloriePanelHidden(goneAt, Date.now())) return null;
   return <FoodStatusPanel result={result} anchor={anchor} />;
 }
 
