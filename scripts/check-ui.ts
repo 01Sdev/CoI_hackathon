@@ -26,7 +26,7 @@ import { cameraFor, cameraUnavailable, enabledKind, glassReduce, HOME_CENTER, HO
 import { isGlassButtonKey } from '../src/ui/glassKeys';
 import { closedOnEnter, micOpen, outfitPanelOpen, TALK_MAX_MS, talkArmed } from '../src/ui/outfitView';
 import { joinScribe, scribeFinalText, STT_NOTICE } from '../src/ui/scribe';
-import { calorieView, formatBytes, josa, parseCalorieLine } from '../src/ui/labels';
+import { calorieView, formatBytes, josa, modelProgressText, parseCalorieLine } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 import { ANSWER_TEXT_MAX, APP_TEXT_MAX, sanitizeAnswerText, sanitizeAppText } from '../src/ui/sanitize';
 import { joinSpeech, transcriptOf } from '../src/ui/useSpeechInput';
@@ -416,6 +416,14 @@ check('cameraUnavailable: 녹화 영상으로 바뀜(fallbackFrom)이나 카메�
   assert.equal(cameraUnavailable({ fallbackFrom: 'rear' }, null), true, '카메라 실패 → 녹화 영상');
   // 권한은 허용됐는데 카메라와 대체 영상이 모두 실패: input은 null, inputError만 있다(#59)
   assert.equal(cameraUnavailable(null, { kind: 'video', fallbackFrom: 'rear', at: 1 }), true);
+});
+
+check('modelProgressText: 전체 크기를 알면 받은/전체, 받은 양만 알면 받음·초, 모르면 초', () => {
+  assert.equal(modelProgressText(12_686_131, 14_051_000, 9), '12.1MB / 13.4MB');
+  assert.equal(modelProgressText(14_051_000, null, 21), '13.4MB 받음 · 21초');
+  assert.equal(modelProgressText(null, null, 3), '3초');
+  assert.equal(modelProgressText(0, null, 3), '3초');
+  assert.equal(modelProgressText(5, 0, 4), '5B 받음 · 4초', '전체 0은 모르는 것으로 본다');
 });
 
 check('homeApps·homeRows: 4/5/4 열세 칸, 정가운데(둘째 줄 3번째)가 framelet', () => {

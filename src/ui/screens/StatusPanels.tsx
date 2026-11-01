@@ -1,11 +1,11 @@
 // 로딩·엔진 실패·카메라 자동 전환. 배치도 /dev/screens.html 휴대폰 2·5·6.
 // 숫자는 모두 실제 값이다: 카메라 해상도는 session.input, 진행은 engine 바이트(모르면 경과 초), 전달 수는 Counter.
 
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useLensStore } from '../../core/store';
 import type { InputSource } from '../../core/types';
-import { formatBytes, INPUT_LABEL, josa } from '../labels';
+import { INPUT_LABEL, josa, modelProgressText } from '../labels';
 import { OrbStack } from '../OrbStack';
 import { useElapsedSeconds, useTotalDeliveries } from '../useEngineView';
 
@@ -32,15 +32,7 @@ export function LoadingPanel() {
         <div className="fm-check">
           <span className="fm-readout">··</span>
           <span>물체·얼굴 판정 모델</span>
-          <span className="fm-readout">
-            {known
-              ? `${formatBytes(engine.loadedBytes!)} / ${formatBytes(engine.totalBytes!)}`
-              : engine.status === 'idle'
-                ? '대기'
-                : engine.loadedBytes
-                  ? `${formatBytes(engine.loadedBytes)} 받음 · ${sec}초` // A는 두 파일의 크기를 다 알 때만 totalBytes를 채운다
-                  : `${sec}초`}
-          </span>
+          <span className="fm-readout">{engine.status === 'idle' && !known ? '대기' : modelProgressText(engine.loadedBytes, engine.totalBytes, sec)}</span>
         </div>
         <div className={known ? 'fm-bar' : 'fm-bar fm-bar--indeterminate'}>
           <i style={known ? { width: `${pct}%` } : undefined} />
@@ -75,6 +67,39 @@ export function EngineFailPanel() {
         <OrbStack value="–" tone="hold" caption="전달 멈춤" />
       </div>
     </>
+  );
+}
+
+/**
+ * 글래스 흐름(/)의 로딩. 휴대폰 웹은 글래스 시야를 흉내 내므로 카드·어둡게·큰 원 카운터 없이 카메라 위 작은 글자 한 줄만 둔다
+ * (사용자 결정 2026-11-01: 앱 같은 화면을 걷어 냄). 같은 사실을 말한다: 모델 진행, 준비될 때까지 아무것도 보내지 않음.
+ */
+export function GlassLoading() {
+  const engine = useLensStore(useShallow((s) => s.engine));
+  const sec = useElapsedSeconds();
+  const known = engine.loadedBytes !== null && engine.totalBytes !== null && engine.totalBytes > 0;
+  const pct = known ? Math.round(Math.min(100, (100 * engine.loadedBytes!) / engine.totalBytes!)) : null;
+  const progress = engine.status === 'idle' ? '대기' : modelProgressText(engine.loadedBytes, engine.totalBytes, sec);
+  return (
+    <section className="fm-glassload" role="status" aria-live="polite">
+      <span className="fm-glassload__spin" aria-hidden="true" style={pct !== null ? ({ '--p': `${pct}%` } as CSSProperties) : undefined} data-known={pct !== null} />
+      <span className="fm-glassload__line">판정 모델 받는 중 · {progress}</span>
+      <span className="fm-glassload__sub">준비될 때까지 아무것도 보내지 않아요</span>
+    </section>
+  );
+}
+
+/** 글래스 흐름의 엔진 실패. 같은 톤의 글자 두 줄과 다시 불러오기 버튼 하나. */
+export function GlassEngineFail() {
+  const detail = useLensStore((s) => s.engine.detail);
+  return (
+    <section className="fm-glassload" role="alert">
+      <span className="fm-glassload__line">판정 엔진을 불러오지 못했어요</span>
+      <span className="fm-glassload__sub">무엇이 찍혔는지 알 수 없어 아무것도 보내지 않아요{detail ? ` · ${detail}` : ''}</span>
+      <button type="button" className="fm-glassload__retry" onClick={() => location.reload()}>
+        다시 불러오기
+      </button>
+    </section>
   );
 }
 

@@ -12,6 +12,7 @@ import type { InputKind } from '../core/types';
 import { FrameletMark, HOME_ICON_BG, HomeIcon, LAUNCHER_BG, LauncherIcon } from './GlassIcons';
 import { cameraFor, cameraUnavailable, enabledKind, glassReduce, homeApps, homeRows, type GlassScreen, type LauncherApp } from './glassHome';
 import { Hud } from './Hud';
+import { GlassEngineFail, GlassLoading } from './screens/StatusPanels';
 import { PreviewMountContext } from './Preview';
 import { unlockAudio } from './signal';
 import { EngineGate, Stage } from './Stage';
@@ -85,7 +86,7 @@ export function GlassFlow({ layout, autostart = false }: { layout: LayoutMode; a
         {screen.name === 'launcher' && (
           <Launcher origin={origin} onOpen={(app) => dispatch({ type: 'open-app', app })} onAdd={() => say('앱 추가는 다음 단계예요')} />
         )}
-        {screen.name === 'app' && <EngineGate ready={<Hud variant="phone" />} />}
+        {screen.name === 'app' && <EngineGate ready={<Hud variant="phone" />} loading={<GlassLoading />} failed={<GlassEngineFail />} />}
         <div className="fm-glasshome__lens" aria-hidden="true" />
         {toast && (
           <p key={toast.n} className="fm-glasshome__toast" role="status">
