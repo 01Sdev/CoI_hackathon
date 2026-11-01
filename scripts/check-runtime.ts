@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { VISION_CONFIG } from '../src/vision/config';
-import { area, clampToFrame, classifyScene, expand, fitLongSide, inCenterRegion, intersect, matchTarget, scaleBox, type Found } from '../src/vision/geometry';
+import { area, clampToFrame, classifyScene, expand, withConsentedPerson, fitLongSide, inCenterRegion, intersect, matchTarget, scaleBox, type Found } from '../src/vision/geometry';
 import { containsBox, cropToFramePx, frameToPx } from '../src/core/frame';
 import { CAPTURE_FRAME_DEFAULT } from '../src/core/constants';
 import { SCENE_NONE, stepScene, type SceneState } from '../src/vision/scene';
@@ -17,7 +17,7 @@ import { SCRIBE, WIDE_WARP } from '../src/input/config';
 import { openWithFallback, type OpenIo } from '../src/input/adapter';
 import { runScribe, scribeUrl, type MicPipe, type ScribeDeps, type ScribeError, type SocketLike } from '../src/input/scribe';
 import { applyCpuMap, buildCpuMap, sourceBoxToWarped, sourceUv, warpedBoxToSource, warpedXY, warpOutputSize, warpParams, type WarpSettings } from '../src/input/warp';
-import { gazeHeld, matchBoxes, matchByCenter, pickConsent, pickGazeTarget, stepGaze, stepTracks, type Track } from '../src/vision/track';
+import { gazeHeld, matchBoxes, matchByCenter, pickConsent, pickGazeTarget, stepGaze, stepTracks, trackablePeople, type GazeDwell, type Track } from '../src/vision/track';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
@@ -949,7 +949,7 @@ check('응시 이어 가기: 0.18 원에서 시작한 사람은 0.4 원 안이�
   assert.equal(pickGazeTarget([at(320 + 140, 'a'), at(330, 'b')], full, 640, 360, 0.18, keep)?.id, 'b'); // 다른 사람이 가운데
   assert.equal(pickGazeTarget([at(320 + 150, 'a')], full, 640, 360, 0.18, keep), null); // 0.4 원 밖
   assert.equal(pickGazeTarget([at(320 + 140, 'a')], b(0, 0, 0.5, 1), 640, 360, 0.18, keep), null); // 흰 틀과 안 겹침
-  assert.equal(VISION_CONFIG.gazeGraceMs, 800);
+  assert.equal(VISION_CONFIG.gazeGraceMs, 1500);
 });
 
 check('추적 이음 완화: IoU 0.3 미만으로 빨리 움직인 사람도 중심 거리(큰 변 × 0.6)·넓이 비 안이고 짝이 하나면 같은 trackId', () => {
@@ -965,6 +965,51 @@ check('추적 이음 완화: IoU 0.3 미만으로 빨리 움직인 사람도 중
   // 근처에 이전 사람이 둘이면 잇지 않는다(동의가 옮겨 가지 않게)
   const two = [b(0.3, 0.2, 0.3, 0.6), b(0.62, 0.2, 0.3, 0.6)];
   assert.equal(matchByCenter([b(0.46, 0.2, 0.3, 0.6)], two, 0.6, new Set(), new Set()).size, 0);
+});
+
+check('추적 점수 기준 0.3(trackScoreMin): 장면 기준 0.4 아래 사람도 추적·응시·동의에는 들어간다, 0.3 미만은 아니다', () => {
+  assert.equal(VISION_CONFIG.trackScoreMin, 0.3);
+  assert.equal(VISION_CONFIG.stage0ScoreMin, 0.4); // 장면 판정 기준은 그대로
+  const got = trackablePeople([f('person', 64, 36, 64, 180, 0.35), f('person', 300, 36, 64, 180, 0.29), f('pizza', 10, 10, 10, 10, 0.9)], 640, 360);
+  assert.deepEqual(got, [{ box: { x: 0.1, y: 0.1, w: 0.1, h: 0.5 }, score: 0.35 }]);
+});
+
+check('점수가 0.4 근처에서 오르내리는 가운데 사람(400ms 틱): 추적 기준 0.3이면 3초 응시가 이어지고, 0.4였다면 1.6초 빈틈에서 다시 시작된다', () => {
+  // 점수: 0.45, 0.35×4(1.6초), 0.45, 0.35×4 … 상자는 가운데에 고정.
+  const scores = Array.from({ length: 12 }, (_, i) => (i % 5 === 0 ? 0.45 : 0.35));
+  const simulate = (min: number) => {
+    let tracks: Track[] = [];
+    let dwell: GazeDwell | null = null;
+    let n = 0;
+    for (let i = 0; i < scores.length; i++) {
+      const t = i * 400;
+      const found = [f('person', 288, 108, 64, 144, scores[i])].filter((x) => x.score >= min);
+      // found를 min으로 먼저 거르므로 trackablePeople(기본 0.3)은 그대로 넘긴다.
+      const step = stepTracks(tracks, trackablePeople(found, 640, 360), t, () => `p${++n}`);
+      tracks = step.tracks;
+      const keep = dwell ? { trackId: dwell.trackId, radius: VISION_CONFIG.gazeKeepRadius } : undefined;
+      dwell = stepGaze(dwell, pickGazeTarget(step.visible, b(0, 0, 1, 1), 640, 360, 0.18, keep), t, VISION_CONFIG.gazeGraceMs);
+      const cur = dwell; // gazeHeld는 타입 가드라 dwell 자체를 좁히지 않게 따로 둔다
+      if (gazeHeld(cur, t, 3000)) return t;
+    }
+    return null;
+  };
+  assert.equal(simulate(VISION_CONFIG.trackScoreMin), 3200);
+  assert.equal(simulate(0.4), null);
+});
+
+check('동의한 사람 이어 보기: 장면이 none이면 동의한 사람(가장 가운데)을 person 대상으로, 음식·이미 잡힌 사람·person을 받는 앱이 없으면 그대로', () => {
+  const none = { label: 'none' as const, target: null, peopleCount: 1 };
+  const near = f('person', 300, 100, 40, 120, 0.33);
+  const far = f('person', 20, 100, 40, 120, 0.36);
+  const v = withConsentedPerson(none, [far, near], 640, 360);
+  assert.equal(v.label, 'person');
+  assert.equal(v.target, near);
+  assert.equal(v.peopleCount, 1);
+  assert.equal(withConsentedPerson(none, [], 640, 360), none);
+  const food = { label: 'food' as const, target: f('pizza', 300, 160, 40, 40), peopleCount: 1 };
+  assert.equal(withConsentedPerson(food, [near], 640, 360), food);
+  assert.equal(withConsentedPerson(none, [near], 640, 360, new Set(['food'])), none);
 });
 
 console.log(`\n${passed}개 통과`);

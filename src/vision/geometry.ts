@@ -107,6 +107,28 @@ export function classifyScene(
   return { label: 'none', target: null, peopleCount: people.length };
 }
 
+/**
+ * 동의한 사람 이어 보기(코디 스캔). 이번 틱 장면이 none이고 person 장면을 받는 앱이 켜져 있으면, 살아 있는 동의의 사람이
+ * 보일 때 그 사람(가장 가운데)을 person 대상으로 둔다. 사람 점수가 장면 기준(0.4) 근처에서 오르내리면 person 장면이 1초를
+ * 잇지 못해, 동의를 받고도 코디 스캔에 조각이 가지 않았다("아직 보낼 사진이 없어요"). 음식 장면과 이미 잡힌 person 대상은 그대로다.
+ * consented 박스는 view와 같은 px. 동의 없이 보내는 길은 없다(포착이 동의를 다시 본다).
+ */
+export function withConsentedPerson(
+  view: SceneView,
+  consented: readonly Found[],
+  width: number,
+  height: number,
+  wanted: ReadonlySet<SceneLabel> | null = null,
+): SceneView {
+  if (view.label !== 'none' || consented.length === 0 || (wanted && !wanted.has('person'))) return view;
+  const d = (f: Found) => {
+    const { cx, cy } = center(f.box);
+    return (cx - width / 2) ** 2 + (cy - height / 2) ** 2;
+  };
+  const target = consented.reduce((best, f) => (d(f) < d(best) ? f : best));
+  return { label: 'person', target, peopleCount: view.peopleCount };
+}
+
 /** 포착 프레임 재검출 결과에서 0단계 대상과 같은 물체를 고른다. 같은 라벨 중 hint(같은 단위)와 가장 많이 겹치거나 중심이 가까운 것. */
 export function matchTarget(found: readonly Found[], objectLabel: string, hint: Box, minScore: number): Found | null {
   const same = found.filter((f) => f.label === objectLabel && f.score >= minScore);
