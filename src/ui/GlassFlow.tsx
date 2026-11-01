@@ -10,7 +10,7 @@ import { APP_NAME } from '../core/constants';
 import { lensStore, useLensStore } from '../core/store';
 import type { InputKind } from '../core/types';
 import { FrameletMark, HOME_ICON_BG, HomeIcon, LAUNCHER_BG, LauncherIcon } from './GlassIcons';
-import { cameraFor, enabledKind, glassReduce, homeApps, homeRows, type GlassScreen, type LauncherApp } from './glassHome';
+import { cameraFor, cameraUnavailable, enabledKind, glassReduce, homeApps, homeRows, type GlassScreen, type LauncherApp } from './glassHome';
 import { Hud } from './Hud';
 import { PreviewMountContext } from './Preview';
 import { unlockAudio } from './signal';
@@ -31,8 +31,9 @@ export function GlassFlow({ layout, autostart = false }: { layout: LayoutMode; a
   // framelet 아이콘 자리에서 런처가 커지며 열리게, 누른 아이콘의 중심(화면 비율)을 둔다.
   const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
   usePluginsFor(screen);
-  // 권한 창 거부·카메라 오류: A가 녹화 영상으로 바꾸며 fallbackFrom을 남긴다. 이 흐름에서는 안내 화면으로 간다.
-  const cameraFailed = useLensStore((s) => s.session.input?.fallbackFrom != null);
+  // 권한 창 거부·카메라 오류: A가 녹화 영상으로 바꾸며 fallbackFrom을 남기거나, 대체 영상까지 실패하면 inputError를 남긴다.
+  // 이 흐름에서는 둘 다 안내 화면으로 간다(cameraUnavailable).
+  const cameraFailed = useLensStore((s) => cameraUnavailable(s.session.input, s.session.inputError));
   useEffect(() => {
     if (cameraFailed) dispatch({ type: 'camera-off' });
   }, [cameraFailed]);

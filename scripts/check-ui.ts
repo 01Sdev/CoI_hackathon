@@ -22,7 +22,7 @@ import {
   sourceToView,
   viewToSource,
 } from '../src/ui/geometry';
-import { cameraFor, enabledKind, glassReduce, HOME_CENTER, HOME_ROWS, homeApps, homeRows, type GlassScreen } from '../src/ui/glassHome';
+import { cameraFor, cameraUnavailable, enabledKind, glassReduce, HOME_CENTER, HOME_ROWS, homeApps, homeRows, type GlassScreen } from '../src/ui/glassHome';
 import { isGlassButtonKey } from '../src/ui/glassKeys';
 import { closedOnEnter, micOpen, outfitPanelOpen, TALK_MAX_MS, talkArmed } from '../src/ui/outfitView';
 import { joinScribe, scribeFinalText, STT_NOTICE } from '../src/ui/scribe';
@@ -408,6 +408,14 @@ check('enabledKind·cameraFor: 플러그인은 앱 화면에서 그 하나만, �
   assert.equal(cameraFor('desktop', true), 'rear', '아이폰 가로 874px는 폭으로는 데스크톱');
   assert.equal(cameraFor('phone', false), 'rear');
   assert.equal(cameraFor('desktop', false), 'webcam');
+});
+
+check('cameraUnavailable: 녹화 영상으로 바뀜(fallbackFrom)이나 카메라·대체 영상 모두 실패(inputError)면 안내', () => {
+  assert.equal(cameraUnavailable(null, null), false, '아직 여는 중');
+  assert.equal(cameraUnavailable({ fallbackFrom: null }, null), false, '카메라가 열림');
+  assert.equal(cameraUnavailable({ fallbackFrom: 'rear' }, null), true, '카메라 실패 → 녹화 영상');
+  // 권한은 허용됐는데 카메라와 대체 영상이 모두 실패: input은 null, inputError만 있다(#59)
+  assert.equal(cameraUnavailable(null, { kind: 'video', fallbackFrom: 'rear', at: 1 }), true);
 });
 
 check('homeApps·homeRows: 4/5/4 열세 칸, 정가운데(둘째 줄 3번째)가 framelet', () => {
