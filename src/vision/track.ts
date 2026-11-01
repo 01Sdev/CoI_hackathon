@@ -72,6 +72,18 @@ export function matchByCenter(
   return out;
 }
 
+/** 0단계 검출 중 추적·응시·동의에 넣을 사람(trackScoreMin 이상). 박스는 프레임 0~1로 바꾼다. */
+export function trackablePeople(
+  found: readonly { label: string; score: number; box: Box }[],
+  width: number,
+  height: number,
+  cfg: VisionConfig = VISION_CONFIG,
+): { box: Box; score: number }[] {
+  return found
+    .filter((f) => f.label === 'person' && f.score >= cfg.trackScoreMin)
+    .map((f) => ({ box: { x: f.box.x / width, y: f.box.y / height, w: f.box.w / width, h: f.box.h / height }, score: f.score }));
+}
+
 export interface Track {
   id: string;
   /** 마지막으로 본 상자. */

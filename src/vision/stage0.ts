@@ -6,11 +6,12 @@ import { lensStore } from '../core/store';
 import type { Box, SceneDecision, SceneLabel } from '../core/types';
 import { getInputEpoch, getVideo, grabFrame } from '../input/adapter';
 import { VISION_CONFIG } from './config';
-import { classifyScene, fitLongSide, scaleBox, type Found } from './geometry';
+import { classifyScene, fitLongSide, scaleBox, withConsentedPerson, type Found } from './geometry';
 import { observePeople, resetPeople } from './gaze';
 import { detectObjects, getModels, reportEngine } from './models';
 import { loadSegmenter } from './segmenter';
 import { SCENE_NONE, stepScene, type SceneState } from './scene';
+import { trackablePeople } from './track';
 
 /** 0단계 틱 하나의 결과. 포착 게이트가 틱마다 받는다. */
 export interface Stage0Tick {
@@ -166,15 +167,19 @@ function runTick(v: HTMLVideoElement) {
     }
     store.recordRuns({ stage0Runs: 1, sourceFrames: takeSourceFrames(v) });
 
-    const view = classifyScene(found, width, height, VISION_CONFIG, wantedScenes(store));
+    // 추적·응시·동의는 장면 기준(0.4)보다 낮은 trackScoreMin(0.3)으로 본다. 동의한 사람이 보이면 장면도 이어 본다.
+    let consented: Found[] = [];
     try {
-      const people = found
-        .filter((f) => f.label === 'person' && f.score >= VISION_CONFIG.stage0ScoreMin)
-        .map((f) => ({ box: scaleBox(f.box, 1 / width, 1 / height), score: f.score }));
-      observePeople(people, width, height, now);
+      consented = observePeople(trackablePeople(found, width, height), width, height, now).map((t) => ({
+        label: 'person',
+        score: t.score,
+        box: scaleBox(t.box, width, height),
+      }));
     } catch (e) {
       console.error('[vision] 응시·동의 갱신 오류', e);
     }
+    const wanted = wantedScenes(store);
+    const view = withConsentedPerson(classifyScene(found, width, height, VISION_CONFIG, wanted), consented, width, height, wanted);
     const step = stepScene(scene, view.label, now, VISION_CONFIG.confirmMs);
     scene = step.next;
     const targetBox = view.target ? scaleBox(view.target.box, 1 / width, 1 / height) : null;
