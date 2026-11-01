@@ -14,7 +14,7 @@
 ## 파이프라인 1: 응시 동의
 
 1. A가 0단계 틱마다 사람 상자(EfficientDet person)를 IoU로 이어 붙여 `trackId`를 단다.
-2. 상자 중심이 시야 가운데 원(짧은 변의 `GAZE_CENTER_RADIUS` 배) 안에 있고 흰 틀(F24)과 겹치는 사람 중 가장 가운데 사람이 응시 대상이다. 그 상태가 `GAZE_DWELL_MS`(3초) 이어지면 `setGazeCandidate`.
+2. 상자 중심이 시야 가운데 원(짧은 변의 `GAZE_CENTER_RADIUS` 배) 안에 있고 흰 틀(F24)과 겹치는 사람 중 가장 가운데 사람이 응시 대상이다. 그 상태가 `GAZE_DWELL_MS`(1초) 이어지면 `setGazeCandidate`.
    - 정면 얼굴(눈 마주침) 판정은 선택이다. 시간이 남으면 BlazeFace 눈 두 점이 코를 기준으로 대칭인지로 더한다.
 3. C가 그 사람 상자 위쪽에 작은 칩 "마스크 해제"를 띄운다. 착용자가 칩을 누르거나 Enter(글래스 물리 버튼 대용)를 누르면 `grantConsent(trackId)`.
 4. 동의는 `CONSENT_MAX_MS`(60초)가 지나거나, 그 사람이 `CONSENT_LOST_MS`(2초) 넘게 안 보이거나, 착용자가 사람 수를 눌러 끄면 사라진다(`revokeConsent`).

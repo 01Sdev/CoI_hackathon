@@ -46,8 +46,8 @@ export const PLUGIN_MESSAGE_LIMITS = {
 } as const;
 
 // ── 코디 스캔(docs/designs/outfit-pipelines.md) ──
-/** 이만큼 시야 가운데 원에 머문 사람을 응시 대상으로 본다. */
-export const GAZE_DWELL_MS = 3_000;
+/** 이만큼 시야 가운데 원에 머문 사람을 응시 대상으로 본다. 2026-11-01 사용자 요청으로 3초 → 1초. */
+export const GAZE_DWELL_MS = 1_000;
 /** 시야 가운데 원의 반지름 = 프레임 짧은 변 × 이 값. */
 export const GAZE_CENTER_RADIUS = 0.18;
 /** 동의는 허락한 뒤 이 시간이 지나면 끝난다. */
