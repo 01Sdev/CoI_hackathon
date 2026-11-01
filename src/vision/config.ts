@@ -18,7 +18,8 @@ export const MODEL_PATHS = {
 export const WASM_BASE = '/wasm';
 
 /**
- * COCO 음식 라벨 12종. 10종은 고정 칼로리표(02-SSRD IF-08)와 같고 bowl·cup은 음식 맥락(PRD 위험 표).
+ * COCO 음식·음료 라벨 14종. 10종은 고정 칼로리표(02-SSRD IF-08)와 같고 bowl·cup은 음식 맥락(PRD 위험 표).
+ * bottle·wine glass는 음료(2026-11-01 사용자: 물병·커피캔·콜라병에 반응이 없었다). COCO에는 캔이 없어 캔은 bottle·cup으로 잡힐 때만 된다.
  * 05 결정 21의 "AGENTS.md 원문"은 레포 AGENTS.md에 없어 이 두 출처로 만들었다.
  */
 export const FOOD_LABELS: readonly string[] = [
@@ -34,6 +35,8 @@ export const FOOD_LABELS: readonly string[] = [
   'cake',
   'bowl',
   'cup',
+  'bottle',
+  'wine glass',
 ];
 
 export const VISION_CONFIG = {

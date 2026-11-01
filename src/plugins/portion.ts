@@ -34,7 +34,7 @@ export const PORTION_TABLE: Readonly<Record<string, Portion>> = {
  * 기기 안 모델 값 → 표시할 kcal. 계산할 수 없으면 null(호출하는 쪽이 API로 넘긴다).
  * 표에 있는 라벨: 반올림((minG + maxG) / 2 × clamp(kcal / mass, densMin, densMax)). 모델의 mass는 비율에만 쓴다.
  * 표 밖 라벨: 모델 kcal 그대로(반올림).
- * kcal이 5~5000 밖이면 단위·정규화가 어긋난 출력으로 보고 null. 결과는 서버와 같은 표시 범위 10~3000으로 자른다.
+ * kcal이 5~5000 밖이면 단위·정규화가 어긋난 출력으로 보고 null. 결과는 10~3000으로 자른다(이 모델은 접시 음식만 받아 0이 나올 일이 없다).
  */
 export function portionKcal(portion: Portion | undefined, modelKcal: number | null, modelMassG: number | null): number | null {
   if (modelKcal === null || !(modelKcal >= 5 && modelKcal <= 5000)) return null;

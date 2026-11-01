@@ -97,6 +97,19 @@ check('음식 라벨이 아닌 물체는 none', () => {
   assert.equal(classifyScene([f('laptop', 280, 160, 80, 60)], 640, 360).label, 'none');
 });
 
+check('음료(bottle·wine glass)는 food', () => {
+  assert.equal(classifyScene([f('bottle', 300, 120, 30, 90)], 640, 360).label, 'food');
+  assert.equal(classifyScene([f('wine glass', 300, 140, 30, 60)], 640, 360).target?.label, 'wine glass');
+});
+
+check('켜진 앱이 받는 장면만: 사람 앱만 켜지면 가운데 병·컵이 있어도 person, 음식 앱만 켜지면 사람은 none', () => {
+  const scene = [f('person', 200, 50, 240, 300), f('bottle', 300, 160, 30, 90), f('cup', 260, 200, 30, 30)];
+  assert.equal(classifyScene(scene, 640, 360, VISION_CONFIG, new Set(['person'])).label, 'person');
+  assert.equal(classifyScene(scene, 640, 360, VISION_CONFIG, new Set(['food'])).target?.label, 'bottle');
+  assert.equal(classifyScene([f('person', 200, 50, 240, 300)], 640, 360, VISION_CONFIG, new Set(['food'])).label, 'none');
+  assert.equal(classifyScene(scene, 640, 360, VISION_CONFIG, null).label, 'food');
+});
+
 // ── 장면 상태기계(§4.1) ──
 const run = (labels: Array<'food' | 'person' | 'none'>, dt: number) => {
   let s: SceneState = SCENE_NONE;

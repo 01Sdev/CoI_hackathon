@@ -32,7 +32,7 @@ export function fallbackText(objectLabel: string): string {
 export type Portion = '한 조각' | '1인분' | '한 판' | '알 수 없음';
 
 /**
- * 모델 답의 kcal 보정(서버 응답 처리 6단계). 순서: 고정표 비율 비교 → 10~3000 자르기.
+ * 모델 답의 kcal 보정(서버 응답 처리 6단계). 순서: 고정표 비율 비교 → 0~3000 자르기(물·탄산수는 0).
  * 비율이 [0.25, 4]×기준을 벗어나면 고정표 값과 이름으로 바꾸고 clamped = true. 기준은 한 판이면 8조각.
  */
 export function adjustKcal(
@@ -53,5 +53,5 @@ export function adjustKcal(
       clamped = true;
     }
   }
-  return { kcal: Math.min(3000, Math.max(10, Math.round(k))), name: n, clamped };
+  return { kcal: Math.min(3000, Math.max(0, Math.round(k))), name: n, clamped };
 }

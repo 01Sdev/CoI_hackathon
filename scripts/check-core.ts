@@ -151,9 +151,10 @@ check('kcal 보정: 한 조각인데 터무니없으면 표 값과 표 이름으
   assert.deepEqual(adjustKcal(30, '피자', '한 조각', 'pizza'), { kcal: 285, name: '피자', clamped: true });
 });
 
-check('kcal 보정: 비율 비교 뒤에 10~3000으로 자른다', () => {
+check('kcal 보정: 비율 비교 뒤에 0~3000으로 자른다', () => {
   assert.deepEqual(adjustKcal(5, '당근', '한 조각', 'carrot'), { kcal: 25, name: '당근', clamped: true });
-  assert.deepEqual(adjustKcal(5, '이상한 것', '알 수 없음', null), { kcal: 10, name: '이상한 것', clamped: false });
+  assert.deepEqual(adjustKcal(5, '이상한 것', '알 수 없음', null), { kcal: 5, name: '이상한 것', clamped: false });
+  assert.deepEqual(adjustKcal(0, '생수', '1인분', 'bottle'), { kcal: 0, name: '생수', clamped: false });
   assert.deepEqual(adjustKcal(9000, '음식', '알 수 없음', 'bowl'), { kcal: 3000, name: '음식', clamped: false });
 });
 
