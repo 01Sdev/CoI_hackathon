@@ -101,14 +101,14 @@ export const VISION_CONFIG = {
   /** 2c(머리 영역) 안에서 모양으로 가린다. V2·V3에서 사각형보다 덜 가린 사례가 나오면 false(사각형 전체 = 사각형 ∪ Selfie). */
   selfieShapeHead: true,
 
-  // ── 코디 스캔 응시 동의(docs/designs/outfit-pipelines.md). 3초·원 반지름·동의 수명은 core 상수(GAZE_*·CONSENT_*) ──
+  // ── 코디 스캔 응시 동의(docs/designs/outfit-pipelines.md). 응시 시간(1초)·원 반지름·동의 수명은 core 상수(GAZE_*·CONSENT_*) ──
   /** 틱 사이 사람 상자를 같은 사람으로 잇는 최소 IoU. */
   trackIouMin: 0.3,
   /** IoU로 못 이으면 중심 거리 ≤ 이 값 × 큰 변(넓이 비 0.5~2배, 짝이 하나뿐)일 때 잇는다(2026-11-01, 빠른 움직임·느린 0단계). */
   trackCenterGate: 0.6,
   /** 안 보인 추적을 남겨 두는 시간(ms). CONSENT_LOST_MS와 같게 두어 짧게 가려진 사람의 동의가 이어지게 한다. */
   trackKeepMs: 2000,
-  /** 응시 대상이 이만큼 안 비면 3초를 이어 센다(ms). 검출이 몇 틱 빠지거나 잠깐 원을 벗어나는 정도(2026-11-01 400 → 800 → 1500). */
+  /** 응시 대상이 이만큼 안 비면 응시 시간을 이어 센다(ms). 검출이 몇 틱 빠지거나 잠깐 원을 벗어나는 정도(2026-11-01 400 → 800 → 1500). */
   gazeGraceMs: 1500,
   /**
    * 추적·응시·동의 유지에 넣는 사람의 최소 점수(= detectorScoreFloor). 장면 판정(stage0ScoreMin 0.4)과 따로 둔다.
