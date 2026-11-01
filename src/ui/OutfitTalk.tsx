@@ -2,8 +2,10 @@
 // 휴대폰 웹은 스마트 글래스 시야를 휴대폰 브라우저로 흉내 내는 화면이라(사용자 2026-11-01), #42의 폰 모양 창 대신
 // 글래스 화면에 뜨는 HUD 패널로 그린다. 말풍선 모양은 #42(outfit-assistant.css), 겉 글로우·테두리는 사용자가 준 zip 값이다.
 // 막대: 동의가 살아 있고 코디 스캔이 켜져 있으면 시야 아래에 뜬다. 받아쓰기는 세 단계로 넘어간다(사용자 요청 2026-11-01).
+//   누를 때만 듣는다(사용자 결정 2026-11-01): 막대가 떠도 마이크·토큰·연결은 닫혀 있고, 막대(말하기 버튼)·Enter·Space를 누르면 연다.
+//   다시 누르면 멈추고 묻는다. 보냄·다시 누름·앱을 떠남·동의 0·15초(TALK_MAX_MS)면 바로 닫는다. "듣는 중"은 듣는 동안만 보인다.
 //   1) 실시간 받아쓰기 ElevenLabs Scribe(useScribeInput, A의 startScribe): 말하는 동안 글자가 막대에 실시간으로 보이고,
-//      막대를 탭하거나 Enter·Space(글래스 버튼 대용)로 멈추면 확정 글자로 묻는다. 막대 위에 받아쓰기 서비스 고지를 둔다.
+//      멈추면 확정 글자로 묻는다. 막대 위에 받아쓰기 서비스 고지를 둔다.
 //   2) 그게 실패(토큰 없음·연결 오류)하거나 A의 모듈이 없으면 브라우저 음성 인식(useSpeechInput). 보이는 모양과 조작은 같다.
 //   3) 그것도 없으면 입력창. 묻기는 모두 askPlugin(코디 스캔 id, 질문).
 // 패널: 시야 오른쪽 가장자리. outfitTurns의 질문과 답(묻는 중, 실패 사유, 대체 답변)을 보인다. 답은 플러그인 문자열이라
@@ -18,7 +20,7 @@ import { useLensStore } from '../core/store';
 import type { OutfitTurn } from '../core/types';
 import { sourceToView, talkPanelPlacement, type Size } from './geometry';
 import { isGlassButtonKey } from './glassKeys';
-import { closedOnEnter, outfitPanelOpen } from './outfitView';
+import { closedOnEnter, micOpen, outfitPanelOpen, TALK_MAX_MS, talkArmed } from './outfitView';
 import { fitSelection, selectionLimits } from './selection-frame';
 import { sanitizeAnswerText } from './sanitize';
 import { STT_NOTICE } from './scribe';
@@ -52,8 +54,12 @@ export function OutfitTalk({ size }: { size: Size }) {
   const ask = useLensStore((s) => s.askPlugin);
   const live = v.pluginId !== null && v.enabled && v.consents > 0;
   const [engine, setEngine] = useState<SttEngine>(scribeAvailable ? 'scribe' : 'browser');
-  const scribe = useScribeInput(live && engine === 'scribe');
-  const speech = useSpeechInput(live && engine === 'browser');
+  // 누를 때만 듣기. 앱을 떠나거나 동의가 0이 되면(live 꺼짐) 렌더 중에 바로 끈다.
+  const [armed, setArmed] = useState(false);
+  if (!live && armed) setArmed(talkArmed(armed, 'left'));
+  const listen = micOpen(live, armed);
+  const scribe = useScribeInput(listen && engine === 'scribe');
+  const speech = useSpeechInput(listen && engine === 'browser');
   const typing = engine === 'type' || (engine === 'browser' && (speech.state === 'unsupported' || speech.state === 'error'));
   const [draft, setDraft] = useState('');
   const [hint, setHint] = useState('');
@@ -92,26 +98,58 @@ export function OutfitTalk({ size }: { size: Size }) {
     setHint('');
     return true;
   }
-  function submit() {
+  /** 듣기를 끝낸다: 받아쓴 글자가 있으면 묻고, 마이크·연결은 닫는다. 다시 누름과 15초가 같다. */
+  function stopListening(why: 'press' | 'timeout') {
+    const empty = why === 'timeout' ? '15초가 지나 마이크를 껐어요 · 다시 눌러 말해 주세요' : '못 알아들었어요 · 다시 눌러 말해 주세요';
     if (engine === 'scribe') {
-      // 멈추고 확정 글자로 묻는다. 받아쓰기는 바로 다시 듣는다.
-      if (scribe.state !== 'listening' && scribe.state !== 'paused') return;
-      void scribe.finish().then((t) => (t ? send(t) : setHint('못 알아들었어요 · 다시 말해 주세요')));
+      if (scribe.state === 'finishing') return;
+      if (scribe.state === 'listening' || scribe.state === 'paused') {
+        void scribe.finish().then((t) => {
+          setArmed((a) => talkArmed(a, 'sent'));
+          if (t) send(t);
+          else setHint(empty);
+        });
+        return;
+      }
+      setArmed((a) => talkArmed(a, 'sent'));
       return;
     }
-    if (!send(question)) return;
-    setDraft('');
-    speech.clear();
+    const q = speech.text.trim().slice(0, QUESTION_MAX);
+    setArmed((a) => talkArmed(a, 'sent'));
+    if (q) send(q);
+    else setHint(empty);
   }
-  const submitRef = useRef(submit);
-  submitRef.current = submit;
+  /** 말하기 버튼: 꺼져 있으면 켜고(이때 토큰·마이크·연결을 연다), 듣는 중이면 멈추고 묻는다. 입력창이면 보낸다. */
+  function press() {
+    if (typing) {
+      if (send(question)) setDraft('');
+      return;
+    }
+    if (!armed) {
+      setHint('');
+      setArmed((a) => talkArmed(a, 'press'));
+      return;
+    }
+    stopListening('press');
+  }
+  const pressRef = useRef(press);
+  pressRef.current = press;
+  const stopRef = useRef(stopListening);
+  stopRef.current = stopListening;
+
+  // 15초가 지나면 닫는다.
+  useEffect(() => {
+    if (!listen) return;
+    const t = window.setTimeout(() => stopRef.current('timeout'), TALK_MAX_MS);
+    return () => window.clearTimeout(t);
+  }, [listen]);
 
   useEffect(() => {
     if (!live) return;
     const onKey = (e: KeyboardEvent) => {
       if (!isGlassButtonKey(e, ['Enter', ' '])) return;
       e.preventDefault();
-      submitRef.current();
+      pressRef.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -132,8 +170,13 @@ export function OutfitTalk({ size }: { size: Size }) {
   const place = talkPanelPlacement({ top: view.y * size.h, right: (view.x + view.w) * size.w }, size);
   const shown = question.length > BAR_TAIL ? `…${question.slice(-BAR_TAIL)}` : question;
   const note = hint || (live && engine === 'browser' && speech.state === 'error' ? speech.error : '');
-  const liveState = engine === 'scribe' ? scribe.state : speech.state;
+  const liveState = !armed ? 'off' : engine === 'scribe' ? scribe.state : speech.state;
   const finishing = engine === 'scribe' && scribe.state === 'finishing';
+  const barLabel = !armed
+    ? '눌러서 말하기'
+    : finishing
+      ? '받아쓰는 중…'
+      : shown || (liveState === 'listening' ? '듣는 중 · 다시 누르면 보내요' : liveState === 'paused' ? '멈췄어요 · 누르면 보내요' : '마이크 켜는 중…');
 
   return (
     <>
@@ -167,7 +210,7 @@ export function OutfitTalk({ size }: { size: Size }) {
                   className="fm-talkbar__form"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    submit();
+                    press();
                   }}
                 >
                   <input
@@ -188,13 +231,14 @@ export function OutfitTalk({ size }: { size: Size }) {
                 <button
                   type="button"
                   className="fm-talkbar__speech"
-                  aria-label={finishing ? '받아쓰는 중' : question ? `질문 보내기: ${question}` : '듣는 중 · 말한 뒤 탭하거나 Enter'}
+                  aria-label={!armed ? '말하기 시작' : finishing ? '받아쓰는 중' : question ? `말하기 끝내고 보내기: ${question}` : '말하기 끝내기'}
+                  aria-pressed={armed}
                   aria-busy={finishing}
-                  onClick={submit}
+                  onClick={press}
                 >
                   <span className="fm-talkbar__dot" data-state={finishing ? 'transcribing' : liveState} aria-hidden="true" />
-                  <span className="fm-talkbar__text" data-empty={!question || finishing}>
-                    {finishing ? '받아쓰는 중…' : shown || (liveState === 'listening' ? '듣는 중 · 말한 뒤 탭하세요' : liveState === 'paused' ? '멈췄어요 · 탭하면 보내요' : '마이크 켜는 중…')}
+                  <span className="fm-talkbar__text" data-empty={!armed || !question || finishing}>
+                    {barLabel}
                   </span>
                 </button>
               )}
