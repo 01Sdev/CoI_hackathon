@@ -14,7 +14,9 @@
     "check:api": "tsx scripts/check-api.ts",
     "check:ui": "tsx scripts/check-ui.ts",
     "check:runtime": "tsx scripts/check-runtime.ts",
-    "check:boot": "tsx scripts/check-boot.ts"
+    "check:boot": "tsx scripts/check-boot.ts",
+    "check:outfit": "tsx scripts/check-outfit-contract.ts",
+    "check:selection-frame": "tsx scripts/check-selection-frame.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.135.0",
