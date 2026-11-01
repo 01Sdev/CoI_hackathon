@@ -26,7 +26,7 @@ import { cameraFor, cameraUnavailable, enabledKind, glassReduce, HOME_CENTER, HO
 import { isGlassButtonKey } from '../src/ui/glassKeys';
 import { closedOnEnter, micOpen, outfitPanelOpen, TALK_MAX_MS, talkArmed } from '../src/ui/outfitView';
 import { joinScribe, scribeFinalText, STT_NOTICE } from '../src/ui/scribe';
-import { calorieView, formatBytes, josa, modelProgressText, parseCalorieLine } from '../src/ui/labels';
+import { CALORIE_PANEL_HOLD_MS, caloriePanelHidden, calorieView, formatBytes, josa, modelProgressText, parseCalorieLine } from '../src/ui/labels';
 import { OUTWARD_STALE_MS, outwardView, parseOutwardMessage } from '../src/ui/outward';
 import { ANSWER_TEXT_MAX, APP_TEXT_MAX, sanitizeAnswerText, sanitizeAppText } from '../src/ui/sanitize';
 import { joinSpeech, transcriptOf } from '../src/ui/useSpeechInput';
@@ -480,6 +480,15 @@ check('micOpen·talkArmed: live만으로는 받아쓰기가 켜지지 않고, �
   // 꺼진 상태에서 보냄·15초·떠남은 켜지 않는다
   for (const e of ['sent', 'timeout', 'left'] as const) assert.equal(talkArmed(false, e), false, e);
   assert.equal(TALK_MAX_MS, 15_000);
+});
+
+check('caloriePanelHidden: 음식이 보이는 동안은 숨기지 않고, 안 보인 뒤 2.5초가 지나면 숨긴다', () => {
+  assert.equal(CALORIE_PANEL_HOLD_MS, 2_500);
+  assert.equal(caloriePanelHidden(null, 10_000), false);
+  assert.equal(caloriePanelHidden(1_000, 1_000), false);
+  assert.equal(caloriePanelHidden(1_000, 3_499), false);
+  assert.equal(caloriePanelHidden(1_000, 3_500), true);
+  assert.equal(caloriePanelHidden(1_000, 60_000), true);
 });
 
 console.log(`\n${passed}개 통과`);

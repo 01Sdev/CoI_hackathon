@@ -58,6 +58,14 @@ export function calorieView(
   return { id: line.deliveryId, name: line.source === 'fallback' ? `${name} (고정표)` : name, kcal: parsed.kcal };
 }
 
+/** 음식이 판정 영역에서 안 보인 뒤 칼로리 상태창을 남겨 두는 시간(ms). 사용자 요청(2026-11-01): 안 보이면 2~3초 뒤 사라진다. */
+export const CALORIE_PANEL_HOLD_MS = 2_500;
+
+/** goneAt = 음식이 마지막으로 안 보이게 된 시각(보이는 중이면 null). 그 뒤 holdMs가 지났으면 상태창을 숨긴다. */
+export function caloriePanelHidden(goneAt: number | null, now: number, holdMs = CALORIE_PANEL_HOLD_MS): boolean {
+  return goneAt !== null && now - goneAt >= holdMs;
+}
+
 /** 플러그인 상태 글자와 톤. 전환 중 = 적용 중, stopped = 멈춤(사용자가 다시 켜야 함). */
 export const PLUGIN_STATUS: Record<PluginStatus, [string, 'safe' | 'hold']> = {
   loading: ['적용 중', 'hold'],
