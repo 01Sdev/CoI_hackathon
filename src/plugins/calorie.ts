@@ -104,7 +104,9 @@ export function caloriePlugin(
   const onDeviceKcal = (blob: Blob, label: string): Promise<number | null> => {
     // 한 실행이 제한의 2배를 넘게 끝나지 않으면 멈춘 것으로 보고 끈다.
     if (onDevice && busy && Date.now() - busySince > 2 * onDevice.timeoutMs) stopModel('실행이 끝나지 않음');
-    if (!onDevice || model === null || !modelReady || busy) return Promise.resolve(null);
+    // 양 표에 없는 라벨(음료·컵·그릇 등)은 접시 음식용 모델의 숫자를 쓸 수 없어 바로 API로 간다.
+    const portion = portionOf(label);
+    if (!portion || !onDevice || model === null || !modelReady || busy) return Promise.resolve(null);
     const worker = model;
     const id = (seq += 1);
     busy = true;
@@ -115,7 +117,7 @@ export function caloriePlugin(
         resolve(null);
         fail('시간 초과');
       }, onDevice.timeoutMs);
-      waiting.set(id, { timer, portion: portionOf(label), resolve });
+      waiting.set(id, { timer, portion, resolve });
       worker.postMessage({ type: 'run', id, blob });
     });
   };

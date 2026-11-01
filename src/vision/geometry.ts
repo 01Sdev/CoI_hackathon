@@ -75,8 +75,15 @@ export interface SceneView {
 /**
  * FR-007: 가운데 60% 안에서 음식이 사람보다 우선, 같은 종류끼리는 중심에 가까운 쪽.
  * 사람은 프레임 면적 personMinArea 이상일 때만 대상. 이 필터는 장면 선택에만 쓴다(안전 검사 아님).
+ * wanted가 있으면 그 장면만 고른다(켜진 앱이 받는 장면). 코디 스캔만 켜져 있을 때 가운데 컵·병이 사람 장면을 막지 않게 한다.
  */
-export function classifyScene(found: readonly Found[], width: number, height: number, cfg: VisionConfig = VISION_CONFIG): SceneView {
+export function classifyScene(
+  found: readonly Found[],
+  width: number,
+  height: number,
+  cfg: VisionConfig = VISION_CONFIG,
+  wanted: ReadonlySet<SceneLabel> | null = null,
+): SceneView {
   const frameArea = width * height;
   const fx = width / 2;
   const fy = height / 2;
@@ -90,9 +97,12 @@ export function classifyScene(found: readonly Found[], width: number, height: nu
   const people = strong.filter((f) => f.label === 'person');
   const inRegion = strong.filter((f) => inCenterRegion(f.box, width, height, cfg.centerRegion));
 
-  const food = closest(inRegion.filter((f) => FOOD_LABELS.includes(f.label)));
+  const food = !wanted || wanted.has('food') ? closest(inRegion.filter((f) => FOOD_LABELS.includes(f.label))) : null;
   if (food) return { label: 'food', target: food, peopleCount: people.length };
-  const person = closest(inRegion.filter((f) => f.label === 'person' && area(f.box) >= cfg.personMinArea * frameArea));
+  const person =
+    !wanted || wanted.has('person')
+      ? closest(inRegion.filter((f) => f.label === 'person' && area(f.box) >= cfg.personMinArea * frameArea))
+      : null;
   if (person) return { label: 'person', target: person, peopleCount: people.length };
   return { label: 'none', target: null, peopleCount: people.length };
 }

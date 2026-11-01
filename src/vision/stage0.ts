@@ -3,7 +3,7 @@
 // 프레임 콜백(requestVideoFrameCallback)이 있으면 그것으로, 없으면 setInterval로 돈다.
 
 import { lensStore } from '../core/store';
-import type { Box, SceneDecision } from '../core/types';
+import type { Box, SceneDecision, SceneLabel } from '../core/types';
 import { getInputEpoch, getVideo, grabFrame } from '../input/adapter';
 import { VISION_CONFIG } from './config';
 import { classifyScene, fitLongSide, scaleBox, type Found } from './geometry';
@@ -101,6 +101,16 @@ function takeSourceFrames(v: HTMLVideoElement): number {
   return total - prev;
 }
 
+/** 켜진 앱들이 매니페스트로 받는 장면. 켜진 앱이 없으면 null(음식·사람 둘 다 본다). */
+function wantedScenes(s: ReturnType<typeof lensStore.getState>): ReadonlySet<SceneLabel> | null {
+  const out = new Set<SceneLabel>();
+  for (const id of s.pluginOrder) {
+    const p = s.plugins[id];
+    if (p?.enabled) for (const sc of p.manifest.scenes) out.add(sc);
+  }
+  return out.size > 0 ? out : null;
+}
+
 function runTick(v: HTMLVideoElement) {
   const m = getModels();
   if (!m || inFlight) return;
@@ -156,7 +166,7 @@ function runTick(v: HTMLVideoElement) {
     }
     store.recordRuns({ stage0Runs: 1, sourceFrames: takeSourceFrames(v) });
 
-    const view = classifyScene(found, width, height);
+    const view = classifyScene(found, width, height, VISION_CONFIG, wantedScenes(store));
     try {
       const people = found
         .filter((f) => f.label === 'person' && f.score >= VISION_CONFIG.stage0ScoreMin)

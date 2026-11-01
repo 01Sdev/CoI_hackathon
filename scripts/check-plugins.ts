@@ -526,13 +526,17 @@ await check('기기 안: 준비되면 on-device(피자 728.9kcal·216.2g → "�
   assert.deepEqual(r.results(), [{ type: 'result', deliveryId: 'd1', text: '피자 약 1365kcal', source: 'on-device' }]);
   assert.equal(r.calls.length, 0);
 });
-await check('기기 안: 준비 전 → API, 이름은 0단계 라벨, 표 밖 라벨은 모델 kcal 그대로("음식")', async () => {
+await check('기기 안: 준비 전 → API, 이름은 0단계 라벨, 양 표 밖 라벨(그릇·병)은 모델을 건너뛰고 API', async () => {
   const r = await onDeviceWorker('https://h.example');
   await r.send('d1');
   assert.deepEqual(r.results()[0], { type: 'result', deliveryId: 'd1', text: '피자 약 300kcal', source: 'api' });
   assert.equal(r.model!.runs().length, 0);
   r.model!.emit({ type: 'loaded', ep: 'wasm' });
-  assert.deepEqual(await ask(r, 'd2', 'bowl', 412.4, null), { type: 'result', deliveryId: 'd2', text: '음식 약 412kcal', source: 'on-device' });
+  for (const [i, label] of ['bowl', 'bottle', 'wine glass'].entries()) {
+    await r.send(`b${i}`, label);
+    assert.equal(r.model!.runs().length, 0, label);
+    assert.deepEqual(r.results().at(-1), { type: 'result', deliveryId: `b${i}`, text: '피자 약 300kcal', source: 'api' }, label);
+  }
   assert.equal((await ask(r, 'd3', 'hot dog', 350, 100)).text, '핫도그 약 432kcal');
   assert.equal((await ask(r, 'd4', 'pizza', 1.5 * 216.2, 216.2)).text, '피자 약 1001kcal');
 });
@@ -570,6 +574,7 @@ await check('기기 안: API 숫자도 같은 표 범위로(피자 5000 → 2400
     ['피자 약 1365kcal', 'pizza', '피자 약 1365kcal'],
     ['음식 아님', 'pizza', '음식 아님'],
     ['음식 약 9000kcal', 'bowl', '음식 약 9000kcal'],
+    ['생수 약 0kcal', 'bottle', '생수 약 0kcal'],
   ] as const) {
     const r = await onDeviceWorker('https://h.example', async () => new Response(body, { status: 200 }));
     await r.send('d1', label);

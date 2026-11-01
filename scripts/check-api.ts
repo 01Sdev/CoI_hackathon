@@ -251,12 +251,14 @@ await check('502: 서버 환경 변수에 키가 없으면 상류 요청 없이 
   }
 });
 
-await check('응답 처리 4~7: 음식 아님, 이름 공백 정리·12자, 빈 이름, 고정표 비율 [0.25, 4]×기준(한 판 ×8)과 이름 교체, 10~3000', async () => {
+await check('응답 처리 4~7: 음식 아님, 이름 공백 정리·12자, 빈 이름, 고정표 비율 [0.25, 4]×기준(한 판 ×8)과 이름 교체, 0~3000', async () => {
   const cases: [Record<string, unknown>, string | undefined, string, boolean][] = [
     [{ is_food: false, food_ko: '', portion: '알 수 없음', kcal: 0 }, 'pizza', '음식 아님', false],
     [{ is_food: true, food_ko: '  아주   긴\t음식이름입니다요요  ', portion: '1인분', kcal: 500 }, undefined, '아주 긴 음식이름입니다 약 500kcal', false],
     [{ is_food: true, food_ko: ' \n ', portion: '1인분', kcal: 500 }, undefined, '음식 약 500kcal', false],
-    [{ is_food: true, food_ko: '사탕', portion: '1인분', kcal: 5 }, undefined, '사탕 약 10kcal', false],
+    [{ is_food: true, food_ko: '사탕', portion: '1인분', kcal: 5 }, undefined, '사탕 약 5kcal', false],
+    [{ is_food: true, food_ko: '생수', portion: '1인분', kcal: 0 }, 'bottle', '생수 약 0kcal', false],
+    [{ is_food: true, food_ko: '콜라', portion: '1인분', kcal: -3 }, 'bottle', '콜라 약 0kcal', false],
     [{ is_food: true, food_ko: '사탕', portion: '1인분', kcal: 9_999 }, undefined, '사탕 약 3000kcal', false],
     [{ is_food: true, food_ko: '피자', portion: '한 판', kcal: 2_000 }, 'pizza', '피자 약 2000kcal', false],
     [{ is_food: true, food_ko: '피자', portion: '한 판', kcal: 10_000 }, 'pizza', '피자 약 2280kcal', true],
